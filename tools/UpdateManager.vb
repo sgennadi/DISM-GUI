@@ -280,8 +280,8 @@ Public NotInheritable Class UpdateManager
             Me.BackColor = ModernTheme.Backdrop
             Me.Font = ModernTheme.UiFont(10)
             Me.AutoScaleMode = AutoScaleMode.Font
-            Me.ClientSize = New Size(760, 485)
-            Me.MinimumSize = New Size(680, 440)
+            Me.ClientSize = New Size(815, 525)
+            Me.MinimumSize = New Size(785, 495)
             Me.ShowIcon = True
             Try
                 Me.Icon = ModernTheme.MakeAppIcon()
@@ -294,7 +294,7 @@ Public NotInheritable Class UpdateManager
                 .BackColor = ModernTheme.Backdrop
             }
             root.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-            root.RowStyles.Add(New RowStyle(SizeType.Absolute, 105))
+            root.RowStyles.Add(New RowStyle(SizeType.Absolute, 125))
             root.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
             root.RowStyles.Add(New RowStyle(SizeType.Absolute, 45))
             root.RowStyles.Add(New RowStyle(SizeType.Absolute, 73))
@@ -303,7 +303,7 @@ Public NotInheritable Class UpdateManager
             Dim header As New TableLayoutPanel With {
                 .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 1,
                 .BackColor = ModernTheme.Blue, .Margin = New Padding(0, 0, 0, 10),
-                .Padding = New Padding(17, 11, 14, 11)
+                .Padding = New Padding(18, 14, 17, 14)
             }
             header.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 76))
             header.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
@@ -325,11 +325,11 @@ Public NotInheritable Class UpdateManager
                 .Margin = Padding.Empty, .BackColor = Color.Transparent
             }
             heroText.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-            heroText.RowStyles.Add(New RowStyle(SizeType.Percent, 57))
-            heroText.RowStyles.Add(New RowStyle(SizeType.Percent, 43))
+            heroText.RowStyles.Add(New RowStyle(SizeType.Percent, 60))
+            heroText.RowStyles.Add(New RowStyle(SizeType.Percent, 40))
             header.Controls.Add(heroText, 1, 0)
-            heroText.Controls.Add(MakeLabel("UPDATE CENTER", 21, True, Color.White), 0, 0)
-            heroText.Controls.Add(MakeLabel("Stable releases  ·  verified downloads  ·  one-click install",
+            heroText.Controls.Add(MakeLabel("UPDATES", 18, True, Color.White), 0, 0)
+            heroText.Controls.Add(MakeLabel("Stable releases  ·  SHA-256 verified",
                                            10, False, Color.FromArgb(231, 246, 255)), 0, 1)
 
             Dim info As New TableLayoutPanel With {
@@ -396,7 +396,7 @@ Public NotInheritable Class UpdateManager
             actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 107))
             root.Controls.Add(actions, 0, 3)
 
-            check = New Button With {.Text = "Check for updates", .Dock = DockStyle.Fill,
+            check = New Button With {.Text = "Check", .Dock = DockStyle.Fill,
                                      .Margin = New Padding(0, 0, 12, 0)}
             ModernTheme.StyleButton(check, "browse")
             AddHandler check.Click, AddressOf CheckClicked
@@ -408,7 +408,7 @@ Public NotInheritable Class UpdateManager
             AddHandler install.Click, AddressOf InstallClicked
             actions.Controls.Add(install, 1, 0)
 
-            Dim releases As New Button With {.Text = "View releases", .Dock = DockStyle.Fill,
+            Dim releases As New Button With {.Text = "Releases", .Dock = DockStyle.Fill,
                                              .Margin = New Padding(0, 0, 12, 0)}
             ModernTheme.StyleButton(releases, "neutral")
             AddHandler releases.Click, Sub(sender, e)
