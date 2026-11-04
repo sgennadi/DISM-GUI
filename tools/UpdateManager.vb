@@ -238,66 +238,67 @@ Public NotInheritable Class UpdateManager
             Me.MinimizeBox = False
             Me.ShowInTaskbar = False
             Me.BackColor = ModernTheme.Backdrop
-            Me.ClientSize = New Size(590, 353)
-            Me.Font = ModernTheme.UiFont(9)
+            Me.ClientSize = New Size(690, 405)
+            Me.AutoScaleMode = AutoScaleMode.Font
+            Me.Font = ModernTheme.UiFont(10)
             Try
                 Me.Icon = ModernTheme.MakeAppIcon()
             Catch
             End Try
 
-            Dim header As New Panel With {.Dock = DockStyle.Top, .Height = 92,
-                                          .BackColor = ModernTheme.Navy}
+            Dim header As New Panel With {.Dock = DockStyle.Top, .Height = 102,
+                                          .BackColor = ModernTheme.Blue}
             Me.Controls.Add(header)
             Dim name As New Label With {.Text = "UPDATE CENTER",
                                         .ForeColor = Color.White, .BackColor = Color.Transparent,
-                                        .Font = ModernTheme.UiFont(19, True),
-                                        .Location = New Point(24, 16), .Size = New Size(480, 41)}
+                                        .Font = ModernTheme.UiFont(20, True),
+                                        .Location = New Point(26, 16), .Size = New Size(610, 48)}
             header.Controls.Add(name)
             Dim caption As New Label With {
                 .Text = "Official GitHub Releases · Secure SHA-256 verification",
                 .ForeColor = Color.LightCyan, .BackColor = Color.Transparent,
                 .Font = ModernTheme.UiFont(9),
-                .Location = New Point(26, 60), .Size = New Size(530, 24)
+                .Location = New Point(26, 65), .Size = New Size(635, 28)
             }
             header.Controls.Add(caption)
 
             Dim installed As New Label With {
                 .Text = "Installed: " & CurrentVersion().ToString() & "  |  " & CurrentArchitecture(),
-                .Location = New Point(24, 109), .Size = New Size(535, 27),
+                .Location = New Point(26, 123), .Size = New Size(632, 31),
                 .Font = ModernTheme.UiFont(10, True), .ForeColor = ModernTheme.TextInk
             }
             Me.Controls.Add(installed)
             status = New Label With {.Text = "Select Check Updates to query published releases.",
-                                     .Location = New Point(24, 148), .Size = New Size(542, 26),
+                                     .Location = New Point(26, 167), .Size = New Size(633, 33),
                                      .ForeColor = ModernTheme.Blue, .Font = ModernTheme.UiFont(10, True)}
             Me.Controls.Add(status)
             detail = New Label With {.Text = "No background download. Nothing is installed without approval.",
-                                     .Location = New Point(24, 181), .Size = New Size(545, 49),
-                                     .ForeColor = ModernTheme.Muted, .Font = ModernTheme.UiFont(8.8F)}
+                                     .Location = New Point(26, 213), .Size = New Size(630, 71),
+                                     .ForeColor = ModernTheme.Muted, .Font = ModernTheme.UiFont(10.0F)}
             Me.Controls.Add(detail)
-            progressBar = New ProgressBar With {.Location = New Point(24, 244),
-                                                 .Size = New Size(540, 13), .Visible = False}
+            progressBar = New ProgressBar With {.Location = New Point(26, 298),
+                                                 .Size = New Size(636, 15), .Visible = False}
             Me.Controls.Add(progressBar)
-            check = New Button With {.Text = "Check Updates", .Location = New Point(24, 281),
-                                     .Size = New Size(139, 43)}
+            check = New Button With {.Text = "Check Updates", .Location = New Point(26, 335),
+                                     .Size = New Size(162, 46)}
             ModernTheme.StyleButton(check, "browse")
             AddHandler check.Click, AddressOf CheckClicked
             Me.Controls.Add(check)
-            install = New Button With {.Text = "Download & Install", .Location = New Point(177, 281),
-                                       .Size = New Size(177, 43), .Enabled = False}
+            install = New Button With {.Text = "Download & Install", .Location = New Point(204, 335),
+                                       .Size = New Size(190, 46), .Enabled = False}
             ModernTheme.StyleButton(install, "primary")
             AddHandler install.Click, AddressOf InstallClicked
             Me.Controls.Add(install)
-            Dim releases As New Button With {.Text = "Releases", .Location = New Point(367, 281),
-                                             .Size = New Size(100, 43)}
+            Dim releases As New Button With {.Text = "Releases", .Location = New Point(410, 335),
+                                             .Size = New Size(110, 46)}
             ModernTheme.StyleButton(releases)
             AddHandler releases.Click, Sub(sender, e)
                 Process.Start(New ProcessStartInfo(ProjectUrl & "/releases") With
                               {.UseShellExecute = True})
             End Sub
             Me.Controls.Add(releases)
-            closeButton = New Button With {.Text = "Close", .Location = New Point(481, 281),
-                                     .Size = New Size(84, 43)}
+            closeButton = New Button With {.Text = "Close", .Location = New Point(538, 335),
+                                     .Size = New Size(124, 46)}
             ModernTheme.StyleButton(closeButton)
             AddHandler closeButton.Click, Sub(sender, e) Me.Close()
             Me.Controls.Add(closeButton)
