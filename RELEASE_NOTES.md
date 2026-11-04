@@ -1,23 +1,25 @@
-# DISM GUI v4.2.3
+# DISM GUI v4.2.4
 
-Windows Image Toolkit — interface and update-notification improvements.
+## Resizable DISM Output
 
-## Interface
-- Rebuilt the main header using a responsive three-column layout: icon, title/subtitle and a real **Tools** dropdown button. The original menu commands remain available.
-- Replaced alarming red Dismount/Remove actions with restrained blue-and-white controls. Red is reserved for actual error messages.
-- Rebuilt the **Mount & Inspect** workspace using separate cells for the WIM file, mount folder, image index, and full-width operations. Controls no longer share overlapping absolute coordinates.
-- Replaced the legacy blue-selected WIM image-index ComboBox with a numeric selector. The underlying DISM index value is synchronized with the original control.
-- Fixed the output panel buttons with dedicated layout columns and proper padding.
-- Improved About and Update Center headings, button spacing, and text readability.
+- Replaced the fixed-height output panel with a **native horizontal splitter**. Drag the divider up or down to give DISM's text output more space while keeping the workspace usable.
+- Added a clear **Expand / Restore** button alongside Copy log, Clear and Exit. The expansion remembers the prior panel height, and dragging remembers the selected height for next launch under `HKCU\Software\DISMGUI\UserInterface\OutputHeight`.
+- Enlarged the output-toolbar row and separated its buttons into dedicated columns, preventing the prior overlap/clipping with the text area at Windows display scaling.
 
-## Updates
-- **Tools** quietly checks the latest stable release once on startup. If a newer verified version exists for the current architecture, it shows a green indicator and an "Update available" menu item.
-- **Update** means install a newer release; **Reinstall** means repair the current release. Update Center continues to verify the GitHub ZIP's SHA-256 before replacement.
-- No recurring background monitoring, PowerShell, CMD, or surprise installation.
+## Update notification
 
-## Build and testing
-- Portable self-contained Windows x86, x64 and ARM64 packages, with multi-resolution native EXE icon and no PDB / legacy DISM GUI.dll.config files.
-- Windows CI compiles all three platforms and runs a **live WinForms layout smoke test** on x64. Layout captures include main window, About and Update Center.
-- Functional DISM mount/apply tests and actual high-DPI checks on the user's Windows systems remain to be performed. Use disposable WIM files for initial testing.
+- **Tools** now contains an explicit, quiet update-status row and a manual **Check for updates...** command.
+- When a newer *verified* GitHub stable release exists for the current CPU architecture, Tools gains a subtle green indicator and the dropdown displays the new version. No unsolicited popup, automatic download or repeated checks.
+- Offline / API errors never block image servicing. Use the Update Center to see explicit check errors.
 
-Originally based on Mike Celone's DISMGUI project (mikecel79/DISMGUI); attribution preserved. Confirm upstream redistribution permissions before broad public distribution.
+## Other improvements retained
+
+- Responsive WIM Mount/Index navigation, light Nipkg Creator-inspired palette, native EXE icon and updated About/Update Center.
+- .NET 10 WinForms portable x86/x64/ARM64 builds. Archives omit PDB and legacy DISM GUI.dll.config files.
+
+## Verification
+
+- GitHub Windows CI builds three architectures and smoke-tests the live UI on x64, including divider expansion/restoration and non-overlapping toolbar controls at multiple sizes.
+- Mounting, servicing and actual Windows DPI behavior still need testing on a real workstation and disposable WIM images.
+
+Original DISM GUI by Mike Celone (mikecel79/DISMGUI); attribution retained. Confirm upstream redistribution rights for broad public distribution.
