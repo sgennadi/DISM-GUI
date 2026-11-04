@@ -322,6 +322,7 @@ Public NotInheritable Class ModernTheme
         toolsButton.FlatAppearance.BorderColor = Color.FromArgb(202, 228, 247)
         toolsButton.BackColor = Color.White
         toolsButton.ForeColor = Color.FromArgb(27, 78, 132)
+        toolsButton.ContextMenuStrip = toolsMenu
         AddHandler toolsButton.Click, Sub(sender, e)
             toolsMenu.Show(toolsButton, New Point(0, toolsButton.Height))
         End Sub
