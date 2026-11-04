@@ -30,6 +30,34 @@ internal static class LayoutSmoke
         Require(!a.IntersectsWith(b), description + ": " + a + " intersects " + b);
     }
 
+    private static void Snapshot(Form window, string name)
+    {
+        try
+        {
+            var folder = System.IO.Path.Combine(Environment.CurrentDirectory, "ui-screenshots");
+            System.IO.Directory.CreateDirectory(folder);
+            using var snapshot = new Bitmap(window.Width, window.Height);
+            window.DrawToBitmap(snapshot, new Rectangle(Point.Empty, window.Size));
+            snapshot.Save(System.IO.Path.Combine(folder, name + ".png"),
+                          System.Drawing.Imaging.ImageFormat.Png);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Optional screenshot unavailable: " + ex.Message);
+        }
+    }
+
+    private static Label? FindLabel(Control parent, string text)
+    {
+        if (parent is Label label && label.Text == text) return label;
+        foreach (Control child in parent.Controls)
+        {
+            var match = FindLabel(child, text);
+            if (match is not null) return match;
+        }
+        return null;
+    }
+
     [STAThread]
     private static int Main()
     {
@@ -66,7 +94,10 @@ internal static class LayoutSmoke
 
             foreach (var size in new[] { new Size(900, 650), new Size(1180, 760) })
             {
-                form.ClientSize = size;
+                var allowed = Screen.PrimaryScreen!.WorkingArea;
+                var effective = new Size(Math.Min(size.Width, allowed.Width - 40),
+                                         Math.Min(size.Height, allowed.Height - 60));
+                form.ClientSize = effective;
                 form.PerformLayout();
                 Application.DoEvents();
                 Require(index!.Width >= 75, $"Image index too narrow at {size}");
@@ -82,25 +113,43 @@ internal static class LayoutSmoke
                         form.RectangleToScreen(form.ClientRectangle).Right,
                         "Tools button extends off-window");
                 Console.WriteLine($"PASS {size}: header, Tools, Index, Mount and Dismount are non-overlapping");
-                try
-                {
-                    var folder = System.IO.Path.Combine(System.Environment.CurrentDirectory, "ui-screenshots");
-                    System.IO.Directory.CreateDirectory(folder);
-                    using var snapshot = new Bitmap(form.Width, form.Height);
-                    form.DrawToBitmap(snapshot, new Rectangle(Point.Empty, form.Size));
-                    snapshot.Save(System.IO.Path.Combine(folder,
-                        $"DISM-GUI-{size.Width}x{size.Height}.png"),
-                        System.Drawing.Imaging.ImageFormat.Png);
-                }
-                catch (Exception imageError)
-                {
-                    // Some hosted Windows sessions restrict GUI screenshotting.
-                    Console.WriteLine("Screenshot unavailable: " + imageError.Message);
-                }
+                Snapshot(form, $"DISM-GUI-{form.ClientSize.Width}x{form.ClientSize.Height}");
             }
 
             form.Hide();
             form.Dispose();
+
+            using (var about = new frmAbout())
+            {
+                about.Show();
+                Application.DoEvents();
+                var aboutTitle = FindLabel(about, "DISM GUI");
+                var aboutSub = FindLabel(about, "Windows Image Toolkit");
+                Require(aboutTitle is not null && aboutSub is not null,
+                        "About heading labels missing");
+                NoOverlap(aboutTitle!, aboutSub!, "About title and subtitle");
+                Snapshot(about, "DISM-GUI-About");
+                about.Hide();
+            }
+
+            var updateType = typeof(UpdateManager).GetNestedType("UpdateWindow",
+                System.Reflection.BindingFlags.NonPublic);
+            Require(updateType is not null, "Update center form type missing");
+            using (var updateForm = (Form)Activator.CreateInstance(updateType!, nonPublic: true)!)
+            {
+                updateForm.Show();
+                Application.DoEvents();
+                var updatesTitle = FindLabel(updateForm, "UPDATES");
+                var updatesSub = FindLabel(updateForm,
+                    "Stable releases  ·  SHA-256 verified");
+                Require(updatesTitle is not null && updatesSub is not null,
+                        "Update Center heading labels missing");
+                NoOverlap(updatesTitle!, updatesSub!, "Update Center title and subtitle");
+                Snapshot(updateForm, "DISM-GUI-Update-Center");
+                updateForm.Hide();
+            }
+
+            Console.WriteLine("PASS About and Update Center heading layout");
             return 0;
         }
         catch (Exception ex)
