@@ -239,7 +239,7 @@ Public NotInheritable Class ModernTheme
         Dim split As New SplitContainer With {
             .Name = "mainOutputSplitter", .Orientation = Orientation.Horizontal,
             .Dock = DockStyle.Fill, .Margin = Padding.Empty, .Padding = Padding.Empty,
-            .SplitterWidth = 9, .Panel1MinSize = 215, .Panel2MinSize = 145,
+            .SplitterWidth = 9,
             .FixedPanel = FixedPanel.Panel2,
             .BackColor = Color.FromArgb(207, 225, 243),
             .BorderStyle = BorderStyle.None,
@@ -264,6 +264,11 @@ Public NotInheritable Class ModernTheme
             If split.IsDisposed Then Return
             split.BeginInvoke(New MethodInvoker(Sub()
                 If split.IsDisposed Then Return
+                ' Set min sizes after Dock layout. Setting them in the constructor
+                ' can fail because an unattached SplitContainer is initially tiny.
+                If split.Height <= 385 Then Return
+                split.Panel1MinSize = 215
+                split.Panel2MinSize = 145
                 Dim maxDistance = split.Height - split.SplitterWidth - split.Panel2MinSize
                 If maxDistance <= split.Panel1MinSize Then Return
                 Dim wantedDistance = split.Height - split.SplitterWidth - savedOutputHeight
