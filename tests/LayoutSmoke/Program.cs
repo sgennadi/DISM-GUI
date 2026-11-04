@@ -357,7 +357,7 @@ internal static class LayoutSmoke
                     "WIM 360 dashboard controls must exist in the main window");
             var wimPathField = Find(dashboard!, "txt360Path") as TextBox;
             Require(wimPathField is not null, "WIM 360 file chooser missing");
-            wimPathField!.Text = @"C:	estoot.wim";
+            wimPathField!.Text = @"C:\test\boot.wim";
             dashboard!.PreviewMetadataForTest(WIM_METADATA_FIXTURE);
             var indexGrid = Find(dashboard, "grid360Indexes") as DataGridView;
             Require(indexGrid!.Rows.Count == 2,
@@ -391,7 +391,7 @@ internal static class LayoutSmoke
             selectedWimButton.PerformClick();
             Application.DoEvents();
             Require(tabs.SelectedIndex == 0 &&
-                    ((TextBox)Find(tabs.TabPages[0], "txtWIM")!).Text == @"C:	estoot.wim" &&
+                    ((TextBox)Find(tabs.TabPages[0], "txtWIM")!).Text == @"C:\test\boot.wim" &&
                     ((ComboBox)Find(tabs.TabPages[0], "cmbIndex")!).Text == "2",
                     "WIM 360 selected index must populate existing Mount controls without mounting");
             ((TextBox)Find(tabs.TabPages[0], "txtWIM")!).Text = "";
@@ -503,7 +503,7 @@ internal static class LayoutSmoke
             }
             tabs.SelectedIndex = 9;
             Application.DoEvents();
-            wimPathField.Text = @"C:	estoot.wim";
+            wimPathField.Text = @"C:\test\boot.wim";
             dashboard.PreviewMetadataForTest(WIM_METADATA_FIXTURE);
             Snapshot(form, "DISM-GUI-WIM-360");
             tabs.SelectedIndex = 0;
