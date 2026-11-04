@@ -258,6 +258,71 @@ internal static class LayoutSmoke
         Console.WriteLine("PASS WIM 360 metadata, architecture, report and XML safety tests");
     }
 
+    private static void VerifyNativeWimReader()
+    {
+        var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+            "DISMGUI-WIM360-" + Guid.NewGuid().ToString("N"));
+        var source = System.IO.Path.Combine(root, "source");
+        System.IO.Directory.CreateDirectory(source);
+        try
+        {
+            System.IO.File.WriteAllText(
+                System.IO.Path.Combine(source, "smoke.txt"),
+                "DISM GUI WIM 360 read-only catalog smoke test");
+            var image = System.IO.Path.Combine(root, "tiny.wim");
+            var start = new System.Diagnostics.ProcessStartInfo("dism.exe")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            start.ArgumentList.Add("/Capture-Image");
+            start.ArgumentList.Add("/ImageFile:" + image);
+            start.ArgumentList.Add("/CaptureDir:" + source);
+            start.ArgumentList.Add("/Name:WIM360 CI");
+            start.ArgumentList.Add("/Compress:fast");
+
+            using var capture = new System.Diagnostics.Process { StartInfo = start };
+            Require(capture.Start(), "Could not launch Windows DISM to create the fixture");
+            var output = capture.StandardOutput.ReadToEndAsync();
+            var errors = capture.StandardError.ReadToEndAsync();
+            if (!capture.WaitForExit(120000))
+            {
+                capture.Kill(entireProcessTree: true);
+                throw new InvalidOperationException("DISM WIM capture timed out");
+            }
+            var capturedOutput = output.GetAwaiter().GetResult();
+            var capturedError = errors.GetAwaiter().GetResult();
+            Require(capture.ExitCode == 0 && System.IO.File.Exists(image),
+                "Windows DISM could not create a one-file WIM fixture: " +
+                capturedOutput[^Math.Min(1800, capturedOutput.Length)..] +
+                " " + capturedError);
+
+            var inventory = Wim360Reader.Inspect(image);
+            Require(inventory.ImageCount == 1 &&
+                    inventory.Images[0].Name == "WIM360 CI",
+                    "WIMGAPI metadata-query did not retrieve the actual WIM index");
+            Require(inventory.FileSizeBytes > 512 &&
+                    inventory.Images[0].Index == 1,
+                    "WIM 360 returned incorrect catalog dimensions");
+            Require(inventory.Images[0].MountStatus is "Not mounted" or "Not checked",
+                    "WIM 360 should not mount or modify the inspected WIM");
+            Require(System.IO.File.ReadAllText(System.IO.Path.Combine(
+                    source, "smoke.txt")).Contains("read-only catalog"),
+                    "WIM metadata inspection modified the source fixture");
+            Console.WriteLine("PASS native WIMGAPI read-only WIM catalog: " +
+                inventory.Images[0].Name + ", " + inventory.FileSizeBytes + " bytes");
+        }
+        finally
+        {
+            try { System.IO.Directory.Delete(root, recursive: true); }
+            catch (Exception e) {
+                Console.WriteLine("Nonfatal test cleanup warning: " + e.Message);
+            }
+        }
+    }
+
     [STAThread]
     private static int Main()
     {
@@ -278,6 +343,7 @@ internal static class LayoutSmoke
             tabs!.SelectedIndex = 0;
             Application.DoEvents();
             VerifyWimMetadata();
+            VerifyNativeWimReader();
             Require(tabs.TabPages.Count == 10 &&
                     tabs.TabPages[9].Name == "TabPageWim360",
                     "WIM 360 must be a separate embedded 10th workspace");
