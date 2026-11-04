@@ -431,13 +431,13 @@ Public NotInheritable Class UpdateManager
                 .Enabled = False, .TabStop = True
             }
             AddHandler releaseLink.LinkClicked, Sub(sender, e)
-                Dim version = latestValue.Text.Replace("Latest stable: ", "").Trim()
-                If version.Length > 1 AndAlso
-                   version.StartsWith("v", StringComparison.OrdinalIgnoreCase) Then
-                    Dim releaseVersion As Version = Nothing
-                    If Version.TryParse(version.Substring(1), releaseVersion) Then
+                Dim releaseTag = latestValue.Text.Replace("Latest stable: ", "").Trim()
+                If releaseTag.Length > 1 AndAlso
+                   releaseTag.StartsWith("v", StringComparison.OrdinalIgnoreCase) Then
+                    Dim releaseVersion As System.Version = Nothing
+                    If System.Version.TryParse(releaseTag.Substring(1), releaseVersion) Then
                         Process.Start(New ProcessStartInfo(
-                            ProjectUrl & "/releases/tag/" & Uri.EscapeDataString(version)) With
+                            ProjectUrl & "/releases/tag/" & Uri.EscapeDataString(releaseTag)) With
                             {.UseShellExecute = True})
                     End If
                 End If
