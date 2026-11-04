@@ -43,7 +43,7 @@ if "Private Function ChooseFolderModern(" not in main.read_text(encoding="utf-8-
     subprocess.run([sys.executable, str(root / "tools" / "apply_fix.py"), str(root)], check=True)
 
 s = project.read_text(encoding="utf-8-sig")
-s = s.replace("<TargetFramework>net9.0-windows</TargetFramework>", "<TargetFramework>net10.0-windows</TargetFramework>")
+s = s.replace("<TargetFramework>net9.0-windows</TargetFramework>", "<TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>")
 s = s.replace('<Platform Condition=" \'$(Platform)\' == \'\' ">x86</Platform>', '<Platform Condition=" \'$(Platform)\' == \'\' ">AnyCPU</Platform>')
 project.write_text(s, encoding="utf-8-sig")
 assert "<TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>" in s, "TargetFramework not updated"
