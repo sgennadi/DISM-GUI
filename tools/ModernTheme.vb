@@ -377,9 +377,13 @@ Public NotInheritable Class ModernTheme
         End Sub
         heroGrid.Controls.Add(toolsButton, 2, 0)
 
+        Dim updatesStatus As New ToolStripMenuItem("Updates: checking...") With {
+            .Enabled = False, .ForeColor = Muted
+        }
         Dim updatesMenuItem As New ToolStripMenuItem("Check for updates...")
         AddHandler updatesMenuItem.Click, Sub(sender, e) UpdateManager.ShowUpdateDialog(frm)
         toolsMenu.Items.Add(New ToolStripSeparator())
+        toolsMenu.Items.Add(updatesStatus)
         toolsMenu.Items.Add(updatesMenuItem)
 
         ' Quiet one-shot check: no popup, no repeated MFA or background polling.
@@ -394,7 +398,7 @@ Public NotInheritable Class ModernTheme
                 selector.SelectionStart = selector.Text.Length
                 selector.SelectionLength = 0
             End If
-            NotifyUpdateInMenuAsync(toolsButton, updatesMenuItem)
+            NotifyUpdateInMenuAsync(toolsButton, updatesMenuItem, updatesStatus)
         End Sub
 
         Dim workspace As New TableLayoutPanel With {
@@ -602,21 +606,32 @@ Public NotInheritable Class ModernTheme
     End Sub
 
     Private Shared Async Sub NotifyUpdateInMenuAsync(toolsButton As Button,
-                                                       menuItem As ToolStripMenuItem)
+                                                       menuItem As ToolStripMenuItem,
+                                                       statusItem As ToolStripMenuItem)
         Try
             Dim available = Await UpdateManager.CheckForUpdatesAsync()
-            If String.IsNullOrWhiteSpace(available) OrElse toolsButton.IsDisposed Then Return
-            toolsButton.Text = "Tools  " & ChrW(&H2022)
+            If toolsButton.IsDisposed OrElse statusItem.IsDisposed Then Return
+            If String.IsNullOrWhiteSpace(available) Then
+                statusItem.Text = "No newer verified release detected"
+                statusItem.ForeColor = Muted
+                Return
+            End If
+            toolsButton.Text = "Tools  " & ChrW(&H2022) & " " & ChrW(&H25BE)
             toolsButton.ForeColor = Color.FromArgb(12, 110, 67)
             toolsButton.BackColor = Color.FromArgb(233, 250, 240)
-            menuItem.Text = "Update available: v" & available & "..."
+            statusItem.Text = "New stable release: v" & available
+            statusItem.ForeColor = Color.FromArgb(12, 124, 75)
+            menuItem.Text = "Update to v" & available & "..."
             menuItem.ForeColor = Color.FromArgb(12, 124, 75)
             menuItem.Font = UiFont(10, True)
             Dim tips As New ToolTip()
-            tips.SetToolTip(toolsButton, "A new DISM GUI version v" & available &
-                                          " is available under Tools.")
+            tips.SetToolTip(toolsButton, "DISM GUI v" & available &
+                                          " is available. Open Tools > Update.")
         Catch
-            ' Update notification must never interrupt local DISM work.
+            If Not statusItem.IsDisposed Then
+                statusItem.Text = "Update status unavailable"
+                statusItem.ForeColor = Muted
+            End If
         End Try
     End Sub
 
