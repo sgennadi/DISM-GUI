@@ -303,12 +303,12 @@ Public NotInheritable Class Wim360Reader
         End Try
     End Sub
 
-    Public Shared Function ReadImage(path As String) As WimReport
-        If String.IsNullOrWhiteSpace(path) Then
+    Public Shared Function ReadImage(wimFilePath As String) As WimReport
+        If String.IsNullOrWhiteSpace(wimFilePath) Then
             Throw New ArgumentException("Choose a .wim or .esd image.")
         End If
-        Dim full = Path.GetFullPath(path)
-        Dim ext = Path.GetExtension(full)
+        Dim full = IO.Path.GetFullPath(wimFilePath)
+        Dim ext = IO.Path.GetExtension(full)
         If Not String.Equals(ext, ".wim", StringComparison.OrdinalIgnoreCase) AndAlso
            Not String.Equals(ext, ".esd", StringComparison.OrdinalIgnoreCase) Then
             Throw New NotSupportedException(
