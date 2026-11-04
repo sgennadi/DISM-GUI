@@ -66,7 +66,6 @@ Public NotInheritable Class Wim360Reader
 
     <DllImport("wimgapi.dll", EntryPoint:="WIMGetImageInformation",
                SetLastError:=True)>
-    <return: MarshalAs(UnmanagedType.Bool)>
     Private Shared Function WIMGetImageInformation(handle As IntPtr,
             ByRef xmlBuffer As IntPtr, ByRef byteCount As UInteger) As Boolean
     End Function
@@ -76,12 +75,10 @@ Public NotInheritable Class Wim360Reader
     End Function
 
     <DllImport("wimgapi.dll", EntryPoint:="WIMCloseHandle", SetLastError:=True)>
-    <return: MarshalAs(UnmanagedType.Bool)>
     Private Shared Function WIMCloseHandle(handle As IntPtr) As Boolean
     End Function
 
     <DllImport("wimgapi.dll", EntryPoint:="WIMGetMountedImageInfo", SetLastError:=True)>
-    <return: MarshalAs(UnmanagedType.Bool)>
     Private Shared Function WIMGetMountedImageInfo(level As Integer,
             ByRef count As UInteger, buffer As IntPtr, bufferLength As UInteger,
             ByRef required As UInteger) As Boolean
