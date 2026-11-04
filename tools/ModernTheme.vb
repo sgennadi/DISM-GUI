@@ -133,6 +133,31 @@ Public NotInheritable Class ModernTheme
         End If
     End Sub
 
+    ' Keep the original editable WIM index control and its existing location.
+    ' Native dropdown text selection can appear as an ugly blue block when the
+    ' legacy 30px-wide box receives focus; clear selection without disabling typing.
+    Private Shared Sub StyleIndexSelector(index As ComboBox, tips As ToolTip)
+        index.FlatStyle = FlatStyle.Standard
+        index.BackColor = Color.White
+        index.ForeColor = TextInk
+        index.Font = UiFont(11.0F, True)
+        index.DropDownWidth = 104
+        index.MaxDropDownItems = 10
+        index.IntegralHeight = False
+        tips.SetToolTip(index, "WIM image index. Choose from the list or type an index.")
+
+        Dim clearHighlight As EventHandler = Sub(sender, e)
+            If index.IsDisposed OrElse index.DropDownStyle = ComboBoxStyle.DropDownList Then Return
+            If index.SelectionLength <> 0 Then
+                index.SelectionStart = index.Text.Length
+                index.SelectionLength = 0
+            End If
+        End Sub
+        AddHandler index.Enter, clearHighlight
+        AddHandler index.SelectionChangeCommitted, clearHighlight
+        AddHandler index.DropDownClosed, clearHighlight
+    End Sub
+
     Private Shared Sub StyleControls(parent As Control, tips As ToolTip)
         For Each c As Control In parent.Controls
             If TypeOf c Is Button Then
@@ -153,6 +178,9 @@ Public NotInheritable Class ModernTheme
                 c.BackColor = Color.White
                 c.Font = UiFont(10)
                 DirectCast(c, ComboBox).FlatStyle = FlatStyle.Flat
+                If String.Equals(c.Name, "cmbIndex", StringComparison.OrdinalIgnoreCase) Then
+                    StyleIndexSelector(DirectCast(c, ComboBox), tips)
+                End If
             ElseIf TypeOf c Is Label Then
                 c.ForeColor = Muted
                 c.Font = UiFont(9.7F)
