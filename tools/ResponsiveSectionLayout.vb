@@ -216,7 +216,8 @@ Public NotInheritable Class ResponsiveSectionLayout
     Public Shared Sub Install(tabs As TabControl)
         Pages.Clear()
         For Each page As TabPage In tabs.TabPages
-            If page.Name = "TabPageWim360" Then Continue For
+            If page.Name = "TabPageWim360" OrElse
+               page.Name = "TabPageDriverStudio" Then Continue For
             If page.Name = "TabPage1" Then
                 BuildMountPage(page)
             Else

@@ -323,6 +323,104 @@ internal static class LayoutSmoke
         }
     }
 
+    private static (DriverStudioEngine.DriverPackage Source,
+                    DriverStudioEngine.DriverPackage Installed) VerifyDriverStudioEngine()
+    {
+        var temp = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+            "DriverStudioSmoke-" + Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(temp);
+        try
+        {
+            var driver = System.IO.Path.Combine(temp, "contoso.inf");
+            System.IO.File.WriteAllText(driver, string.Join("\r\n", new[] {
+                "[Version]",
+                "Signature=\"$Windows NT$\"",
+                "Class=Net",
+                "Provider=%Contoso%",
+                "DriverVer=11/03/2026,2.1.4.0",
+                "CatalogFile=contoso.cat",
+                "",
+                "[Manufacturer]",
+                "%Contoso%=ContosoModels,NTamd64",
+                "[ContosoModels.NTamd64]",
+                "%Device%=Install,PCI\\VEN_1234&DEV_4567",
+                "",
+                "[Strings]",
+                "Contoso=\"Contoso Corporation\"",
+                "Device=\"Contoso Ethernet\"",
+                ""
+            }));
+            var source = DriverStudioEngine.ReadInf(driver);
+            Require(source.InfName == "contoso.inf" &&
+                    source.Version == "2.1.4.0" &&
+                    source.Provider == "Contoso Corporation" &&
+                    source.ClassName == "Net" &&
+                    source.DriverDate == "11/03/2026" &&
+                    source.HardwareIds.Any(x => x.Contains("VEN_1234")) &&
+                    source.Sha256.Length == 64 &&
+                    string.IsNullOrEmpty(source.ValidationError),
+                    "INF parser lost DriverVer, strings, provider, class, hardware IDs or hash");
+
+            var json = "[{\"InfName\":\"contoso.inf\",\"PublishedName\":\"oem8.inf\"," +
+                "\"Provider\":\"Contoso Corporation\",\"ClassName\":\"Net\"," +
+                "\"Version\":\"2.1.4.0\",\"Date\":\"2026-11-03\",\"Inbox\":false}]";
+            var inventory = DriverStudioInventory.ParseInventoryJson(json);
+            Require(inventory.Count == 1 &&
+                    inventory[0].PublishedName == "oem8.inf" &&
+                    !inventory[0].IsInbox,
+                    "Driver Studio structured installed-driver inventory parse failed");
+            var same = DriverStudioEngine.CompareCandidates(new[] { source }, inventory, true);
+            Require(same[0].Status == "Same version" && !same[0].Selected,
+                    "Same version and date must be recognized and skipped by default");
+            var unverified = DriverStudioEngine.CompareCandidates(
+                new[] { source }, Array.Empty<DriverStudioEngine.DriverPackage>(), false);
+            Require(unverified[0].Status == "Not checked" && !unverified[0].Selected,
+                    "Missing mount inventory must NOT be treated as no installed driver");
+            var duplicate = DriverStudioEngine.CompareCandidates(
+                new[] { source, source }, inventory, true);
+            Require(duplicate[1].Status == "Duplicate source" && !duplicate[1].Selected,
+                    "Duplicate source INF should be skipped");
+            var newer = new DriverStudioEngine.DriverPackage {
+                InfName=source.InfName, FilePath=source.FilePath,
+                Provider=source.Provider, ClassName=source.ClassName,
+                Version="2.2.0.0", DriverDate="11/04/2026" };
+            var comparisonNewer = DriverStudioEngine.CompareCandidates(
+                new[] { newer }, inventory, true);
+            Require(comparisonNewer[0].Status == "Newer" && comparisonNewer[0].Selected,
+                    "Newer driver should be selected by default");
+            var older = new DriverStudioEngine.DriverPackage {
+                InfName=source.InfName, FilePath=source.FilePath,
+                Provider=source.Provider, ClassName=source.ClassName,
+                Version="2.0.1.0", DriverDate="10/01/2026" };
+            var comparisonOlder = DriverStudioEngine.CompareCandidates(
+                new[] { older }, inventory, true);
+            Require(comparisonOlder[0].Status == "Older" && !comparisonOlder[0].Selected,
+                    "Older driver should not be selected");
+            var fresh = new DriverStudioEngine.DriverPackage {
+                InfName="different.inf", Provider="Contoso", ClassName="Display",
+                Version="1.0.0.0", DriverDate="11/04/2026" };
+            var comparisonNew = DriverStudioEngine.CompareCandidates(
+                new[] { fresh }, inventory, true);
+            Require(comparisonNew[0].Status == "New" && comparisonNew[0].Selected,
+                    "Missing driver identity in verified image must be shown as New");
+            var invalid = new DriverStudioEngine.DriverPackage {
+                InfName="missing.inf", ValidationError="No DriverVer" };
+            Require(DriverStudioEngine.CompareCandidates(
+                new[] { invalid }, inventory, true)[0].Status == "Review",
+                "Incomplete INF metadata must not silently count as New");
+            var scanned = DriverStudioEngine.ScanSource(temp, true);
+            Require(scanned.Count == 1 && scanned[0].InfName == "contoso.inf",
+                    "Recursive driver-folder scanner failed");
+            Console.WriteLine("PASS Driver Studio INF parsing, duplicates, versions and inventory safety");
+            return (source, inventory[0]);
+        }
+        finally
+        {
+            try { System.IO.Directory.Delete(temp, true); }
+            catch { /* Optional test cleanup */ }
+        }
+    }
+
     [STAThread]
     private static int Main()
     {
@@ -344,9 +442,11 @@ internal static class LayoutSmoke
             Application.DoEvents();
             VerifyWimMetadata();
             VerifyNativeWimReader();
-            Require(tabs.TabPages.Count == 10 &&
-                    tabs.TabPages[9].Name == "TabPageWim360",
-                    "WIM 360 must be a separate embedded 10th workspace");
+            var driverFixture = VerifyDriverStudioEngine();
+            Require(tabs.TabPages.Count == 11 &&
+                    tabs.TabPages[9].Name == "TabPageWim360" &&
+                    tabs.TabPages[10].Name == "TabPageDriverStudio",
+                    "Original nine tabs plus WIM 360 and Driver Studio workspaces must remain intact");
             var wimNav = Find(form, "navWim360") as Button;
             Require(wimNav is not null && wimNav.Text.Contains("WIM 360"),
                     "WIM 360 entry must be visible in top navigation");
@@ -399,6 +499,32 @@ internal static class LayoutSmoke
             tabs.SelectedIndex = 0;
             Application.DoEvents();
             Console.WriteLine("PASS WIM 360 embedded UI, two indexes and safe Mount handoff");
+
+            var studioNav = Find(form, "navDriverStudio") as Button;
+            var studioPanel = Find(tabs.TabPages[10], "DriverStudioPanel") as DriverStudioPanel;
+            Require(studioNav is not null && studioPanel is not null &&
+                    Find(studioPanel, "gridStudioDrivers") is DataGridView &&
+                    Find(studioPanel, "btnStudioCompare") is Button &&
+                    Find(studioPanel, "btnStudioScan") is Button &&
+                    Find(studioPanel, "btnStudioCopyPlan") is Button,
+                    "Driver Studio navigation and scan/compare preview must exist");
+            tabs.SelectedIndex = 10;
+            Application.DoEvents();
+            var studioPreview = DriverStudioEngine.CompareCandidates(
+                new[] { driverFixture.Source }, new[] { driverFixture.Installed }, true);
+            studioPanel!.PreviewForTest(studioPreview);
+            Application.DoEvents();
+            var studioGrid = (DataGridView)Find(studioPanel, "gridStudioDrivers")!;
+            Require(studioGrid.Rows.Count == 1 &&
+                    Convert.ToString(studioGrid.Rows[0].Cells[4].Value) == "Same version" &&
+                    (bool)studioGrid.Rows[0].Cells[0].Value! == false,
+                    "Driver Studio preview must show existing driver version not pre-selected");
+            Require(((Button)Find(studioPanel, "btnStudioCopyPlan")!).Enabled,
+                    "Driver Studio preview should offer Copy comparison");
+            Snapshot(form, "DISM-GUI-Driver-Studio");
+            tabs.SelectedIndex = 0;
+            Application.DoEvents();
+            Console.WriteLine("PASS embedded Driver Studio preview and safe comparison UI");
             var page = tabs.TabPages[0];
             Require(Find(page, "MountResponsiveRoot") is TableLayoutPanel,
                 "Mount page is not using the responsive grid");
