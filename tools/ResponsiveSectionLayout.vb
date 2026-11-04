@@ -180,16 +180,22 @@ Public NotInheritable Class ResponsiveSectionLayout
                 Next
             Next
 
-            ' Mount and apply pages need an index selector next to WIM actions;
-            ' keep the index in a dedicated 66px slot before the main buttons.
+            ' Do not rearrange the WIM file / Choose WIM row. Only give the
+            ' original index selector a legible edit area and breathing room
+            ' between its value, arrow and neighbouring action buttons.
             If page.Name = "TabPage1" Then
-                Dim indexLabel = page.Controls("Label3")
-                Dim indexCombo = page.Controls("cmbIndex")
+                Dim indexLabel = TryCast(page.Controls("Label3"), Label)
+                Dim indexCombo = TryCast(page.Controls("cmbIndex"), ComboBox)
+                Dim labelX = If(compact, Math.Max(148, width - 166), rightX - 149)
+                Dim comboX = If(compact, Math.Max(207, width - 107), rightX - 91)
                 If indexLabel IsNot Nothing Then
-                    MoveResize(indexLabel, If(compact, 374, rightX - 101), 59, 53, 24)
+                    indexLabel.AutoSize = False
+                    indexLabel.TextAlign = ContentAlignment.MiddleLeft
+                    indexLabel.ForeColor = ModernTheme.TextInk
+                    MoveResize(indexLabel, labelX, 57, 49, 28)
                 End If
                 If indexCombo IsNot Nothing Then
-                    MoveResize(indexCombo, If(compact, 428, rightX - 52), 57, 48, 27)
+                    MoveResize(indexCombo, comboX, 56, 78, 30)
                 End If
             End If
 
