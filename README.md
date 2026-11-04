@@ -9,6 +9,21 @@ Modernized from [mikecel79/DISMGUI](https://github.com/mikecel79/DISMGUI). Origi
 
 **Download**: [Actions -> latest successful build -> Artifacts](https://github.com/sgennadi/DISM-GUI/actions/workflows/build.yml). Each archive contains a portable self-contained application.
 
+## WIM 360 — Image Studio
+
+Select **WIM 360** at the top of the left navigation. Choose a `.wim` or
+`.esd` file, or select one in **Mount & Inspect** first. Click **Inspect** to
+read all image-index metadata through the Windows WIMGAPI in read-only mode.
+Select an index to view architecture, build, edition, languages and
+mount state. **Use index in Mount** transfers the selected WIM path and
+index to the original Mount form but **never mounts or modifies the image**.
+Use **Copy report** to share the read-only inventory.
+
+WIM 360 currently does not inspect split `.swm` sets and cannot count drivers
+or installed packages until further work. The first stage does not perform
+any destructive operation. For actual image servicing, use the existing
+DISM sections only after verifying image backups.
+
 ## Changes
 - Modern Windows dialog for selecting mount, apply, driver, package and capture folders; matching file picker for WIM images.
 - Last used paths stored per category in `HKCU\Software\DISMGUI\RecentPaths`.
