@@ -84,6 +84,19 @@ internal static class LayoutSmoke
                     tools.ContextMenuStrip.Items.Cast<ToolStripItem>()
                          .Any(item => item.Text == "About"),
                     "Tools button must contain the original About and DISM commands");
+            var splitter = Find(form, "mainOutputSplitter") as SplitContainer;
+            var copyLog = Find(form, "btnCopyOutput") as Button;
+            var clearLog = Find(form, "btnClearOutput") as Button;
+            var expandLog = Find(form, "btnExpandOutput") as Button;
+            var exitApp = Find(form, "btnExit") as Button;
+            var logText = Find(form, "txtOutput") as TextBox;
+            Require(splitter is not null && copyLog is not null && clearLog is not null &&
+                    expandLog is not null && exitApp is not null && logText is not null,
+                    "Resizable DISM console and toolbar are missing");
+            Require(splitter!.Orientation == Orientation.Horizontal &&
+                    splitter.FixedPanel == FixedPanel.Panel2 &&
+                    splitter.Panel2MinSize >= 130,
+                    "Output pane must have a horizontal draggable splitter with a usable minimum");
             var wim = Find(page, "txtWIM")!;
             var browseWim = Find(page, "btnOpenWIM")!;
             var mount = Find(page, "txtMount")!;
@@ -112,12 +125,33 @@ internal static class LayoutSmoke
                 NoOverlap(mountAction, dismountAction, "Mount / Dismount");
                 NoOverlap(dismountAction, info, "Dismount / Image info");
                 NoOverlap(index, browseWim, "Numeric image index / Choose WIM");
+                NoOverlap(copyLog!, clearLog!, "Copy log / Clear");
+                NoOverlap(clearLog!, exitApp!, "Clear / Exit");
+                NoOverlap(expandLog!, copyLog!, "Expand / Copy log");
+                Require(logText!.Height >= 45 && copyLog!.Height >= 24,
+                    $"Output textbox or toolbar clipped at {effective}");
+                Require(splitter!.Panel2.Height >= splitter.Panel2MinSize,
+                    "DISM output pane below minimum height");
                 var heading = form.Controls.Find("btnToolsMenu", true).First();
                 Require(heading.RectangleToScreen(heading.ClientRectangle).Right <=
                         form.RectangleToScreen(form.ClientRectangle).Right,
                         "Tools button extends off-window");
                 Console.WriteLine($"PASS {size}: header, Tools, Index, Mount and Dismount are non-overlapping");
                 Snapshot(form, $"DISM-GUI-{form.ClientSize.Width}x{form.ClientSize.Height}");
+                if (size.Width == 900)
+                {
+                    var prior = splitter!.Panel2.Height;
+                    expandLog!.PerformClick();
+                    Application.DoEvents();
+                    Require(splitter.Panel2.Height > prior + 25,
+                        "Expand button did not grow DISM output");
+                    Snapshot(form, "DISM-GUI-Output-Expanded");
+                    expandLog.PerformClick();
+                    Application.DoEvents();
+                    Require(Math.Abs(splitter.Panel2.Height - prior) <= 7,
+                        "Restore button did not restore previous DISM output height");
+                    Console.WriteLine("PASS resizable output: Expand and Restore");
+                }
             }
 
             form.Hide();
