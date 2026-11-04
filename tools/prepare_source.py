@@ -42,9 +42,24 @@ if "Private Function ChooseFolderModern(" not in main.read_text(encoding="utf-8-
     print("Applying modern dialogs and safe WIM unmount patch...")
     subprocess.run([sys.executable, str(root / "tools" / "apply_fix.py"), str(root)], check=True)
 
+print("Installing modern UI, About and update manager...")
+subprocess.run([sys.executable, str(root / "tools" / "apply_modern.py"), str(root)], check=True)
+
 s = project.read_text(encoding="utf-8-sig")
 s = s.replace("<TargetFramework>net9.0-windows</TargetFramework>", "<TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>")
 s = s.replace('<Platform Condition=" \'$(Platform)\' == \'\' ">x86</Platform>', '<Platform Condition=" \'$(Platform)\' == \'\' ">AnyCPU</Platform>')
+s = s.replace("<AssemblyVersion>4.0.0.0</AssemblyVersion>", "<AssemblyVersion>4.1.0.0</AssemblyVersion>")
+s = s.replace("<FileVersion>4.0.0.0</FileVersion>", "<FileVersion>4.1.0.0</FileVersion>")
+if "<DebugType>none</DebugType>" not in s:
+    s = s.replace("</Project>", """  <PropertyGroup>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <PublishSingleFile>true</PublishSingleFile>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+</Project>""")
 project.write_text(s, encoding="utf-8-sig")
 assert "<TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>" in s, "TargetFramework not updated"
 print("Ready:", project)
