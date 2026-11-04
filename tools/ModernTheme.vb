@@ -471,6 +471,43 @@ Public NotInheritable Class ModernTheme
         tabs.TabPages.Add(wimPage)
         Dim wimPageIndex = tabs.TabPages.Count - 1
 
+        ' Driver Studio previews source INF packages against a VERIFIED
+        ' already-mounted index. It never adds or removes drivers automatically.
+        Dim studioPage As New TabPage("Driver Studio") With {
+            .Name = "TabPageDriverStudio", .BackColor = Color.White,
+            .UseVisualStyleBackColor = False
+        }
+        Dim driverStudio = New DriverStudioPanel(
+            Function()
+                Dim source = TryCast(tabs.TabPages(1).Controls.Find(
+                    "txtDriverLocation", True).FirstOrDefault(), TextBox)
+                Return If(source Is Nothing, "", source.Text)
+            End Function,
+            Function()
+                Dim wimPath = TryCast(tabs.TabPages(0).Controls.Find(
+                    "txtWIM", True).FirstOrDefault(), TextBox)
+                Return If(wimPath Is Nothing, "", wimPath.Text)
+            End Function,
+            Function()
+                Dim spinner = TryCast(tabs.TabPages(0).Controls.Find(
+                    "nudImageIndex", True).FirstOrDefault(), NumericUpDown)
+                Return If(spinner Is Nothing, 1, CInt(spinner.Value))
+            End Function,
+            Function()
+                Dim mount = TryCast(tabs.TabPages(0).Controls.Find(
+                    "txtMount", True).FirstOrDefault(), TextBox)
+                Return If(mount Is Nothing, "", mount.Text)
+            End Function,
+            Sub(folderPath)
+                Dim source = TryCast(tabs.TabPages(1).Controls.Find(
+                    "txtDriverLocation", True).FirstOrDefault(), TextBox)
+                If source IsNot Nothing Then source.Text = folderPath
+                tabs.SelectedIndex = 1
+            End Sub)
+        studioPage.Controls.Add(driverStudio)
+        tabs.TabPages.Add(studioPage)
+        Dim studioPageIndex = tabs.TabPages.Count - 1
+
         Dim wimNav As New Button With {
             .Name = "navWim360", .Text = "  WIM 360   |   Image Studio",
             .Size = New Size(211, 45), .Margin = New Padding(2, 0, 2, 13),
@@ -483,6 +520,20 @@ Public NotInheritable Class ModernTheme
         wimNav.FlatAppearance.BorderColor = Color.FromArgb(198, 215, 234)
         AddHandler wimNav.Click, Sub(sender, e) tabs.SelectedIndex = wimPageIndex
         side.Controls.Add(wimNav)
+
+        Dim studioNav As New Button With {
+            .Name = "navDriverStudio", .Text = "  Driver Studio   |   Smart Detection",
+            .Size = New Size(211, 45), .Margin = New Padding(2, 0, 2, 14),
+            .FlatStyle = FlatStyle.Flat, .TextAlign = ContentAlignment.MiddleLeft,
+            .Font = UiFont(9.7F, True), .BackColor = Color.White,
+            .ForeColor = TextInk, .Cursor = Cursors.Hand,
+            .UseVisualStyleBackColor = False
+        }
+        studioNav.FlatAppearance.BorderColor = Color.FromArgb(198, 215, 234)
+        AddHandler studioNav.Click, Sub(sender, e)
+            tabs.SelectedIndex = studioPageIndex
+        End Sub
+        side.Controls.Add(studioNav)
 
         Dim sectionNames As String() = {"Mount & Inspect", "Drivers", "Packages",
             "Windows Features", "Editions", "Unattend XML",
@@ -504,11 +555,18 @@ Public NotInheritable Class ModernTheme
                        Color.FromArgb(12, 70, 180), Color.FromArgb(211, 230, 254))
             Next
             Dim onWim = index = wimPageIndex
+            Dim onStudio = index = studioPageIndex
             wimNav.BackColor = If(onWim, Blue, Color.White)
             wimNav.ForeColor = If(onWim, Color.White, TextInk)
             wimNav.FlatAppearance.BorderColor = If(onWim, Blue,
                                                      Color.FromArgb(198, 215, 234))
-            pageHeading.Text = If(onWim, "WIM 360", sectionNames(Math.Min(index, 8)).ToUpperInvariant())
+            studioNav.BackColor = If(onStudio, Blue, Color.White)
+            studioNav.ForeColor = If(onStudio, Color.White, TextInk)
+            studioNav.FlatAppearance.BorderColor = If(onStudio, Blue,
+                                                        Color.FromArgb(198, 215, 234))
+            pageHeading.Text = If(onWim, "WIM 360",
+                                  If(onStudio, "DRIVER STUDIO",
+                                     sectionNames(Math.Min(index, 8)).ToUpperInvariant()))
         End Sub
 
         For i As Integer = 0 To sectionNames.Length - 1
@@ -532,6 +590,7 @@ Public NotInheritable Class ModernTheme
         AddHandler side.SizeChanged, Sub(sender, e)
             wimNav.Width = Math.Max(176, side.ClientSize.Width -
                                    side.Padding.Left - side.Padding.Right - 13)
+            studioNav.Width = wimNav.Width
             For Each b In navButtons
                 b.Width = Math.Max(176, side.ClientSize.Width - side.Padding.Left -
                                    side.Padding.Right - 13)
@@ -540,6 +599,9 @@ Public NotInheritable Class ModernTheme
         AddHandler tabs.SelectedIndexChanged, Sub(sender, e)
             setActive(Math.Max(0, tabs.SelectedIndex))
             If tabs.SelectedIndex = wimPageIndex Then wim360.ActivateFromMount()
+            If tabs.SelectedIndex = studioPageIndex Then
+                driverStudio.ActivateFromDrivers()
+            End If
         End Sub
         setActive(0)
 
@@ -578,7 +640,8 @@ Public NotInheritable Class ModernTheme
         Dim tips As New ToolTip With {.AutoPopDelay = 14000, .InitialDelay = 600,
                                      .ReshowDelay = 200}
         For Each page As TabPage In tabs.TabPages
-            If page.Name = "TabPageWim360" Then Continue For
+            If page.Name = "TabPageWim360" OrElse
+               page.Name = "TabPageDriverStudio" Then Continue For
             page.BackColor = Color.White
             page.UseVisualStyleBackColor = False
             page.AutoScroll = True
