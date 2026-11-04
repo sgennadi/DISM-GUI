@@ -92,7 +92,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view "v${RELEASE_VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+          current_head="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+          if [[ "$current_head" != "$GITHUB_SHA" ]]; then
+            echo "A newer commit is on main. Publishing from latest successful source only."
+            echo "SKIP_RELEASE=true" >> "$GITHUB_ENV"
+          elif gh release view "v${RELEASE_VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             echo "Release v${RELEASE_VERSION} already exists; leaving its assets unchanged."
             echo "SKIP_RELEASE=true" >> "$GITHUB_ENV"
           fi
