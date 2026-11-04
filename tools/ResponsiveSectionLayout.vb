@@ -114,13 +114,12 @@ Public NotInheritable Class ResponsiveSectionLayout
         fileRow.Controls.Add(chooseWim, 1, 0)
 
         Dim indexRow As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 4, .RowCount = 1,
+            .Dock = DockStyle.Fill, .ColumnCount = 3, .RowCount = 1,
             .Margin = Padding.Empty, .BackColor = Color.White
         }
-        indexRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 116))
-        indexRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 100))
+        indexRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 124))
+        indexRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 108))
         indexRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        indexRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 185))
         indexRow.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         left.Controls.Add(indexRow, 0, 2)
         AddLabel(indexRow, "Image index", 0, 0)
@@ -129,8 +128,8 @@ Public NotInheritable Class ResponsiveSectionLayout
         imageIndex.Font = ModernTheme.UiFont(10, True)
         imageIndex.FlatStyle = FlatStyle.Flat
         indexRow.Controls.Add(imageIndex, 1, 0)
-        info.Margin = New Padding(6, 9, 0, 12)
-        indexRow.Controls.Add(info, 3, 0)
+        ' Image information is in the right actions column, so Index has
+        ' its own readable row even on smaller laptops and at 200% DPI.
 
         AddLabel(left, "Mount folder", 0, 3)
         Dim mountRow As New TableLayoutPanel With {
@@ -149,12 +148,12 @@ Public NotInheritable Class ResponsiveSectionLayout
         left.Controls.Add(readOnly, 0, 5)
 
         Dim actions As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 4,
+            .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 5,
             .Margin = New Padding(0, 25, 0, 0), .Padding = Padding.Empty,
             .BackColor = Color.White
         }
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        For Each size In {61, 61, 61}
+        For Each size In {61, 61, 61, 61}
             actions.RowStyles.Add(New RowStyle(SizeType.Absolute, size))
         Next
         actions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
@@ -175,6 +174,11 @@ Public NotInheritable Class ResponsiveSectionLayout
         openMounted.Dock = DockStyle.Fill
         openMounted.Margin = New Padding(0, 4, 0, 8)
         actions.Controls.Add(openMounted, 0, 2)
+        info.Text = "Display WIM info"
+        ModernTheme.StyleButton(DirectCast(info, Button), "neutral")
+        info.Dock = DockStyle.Fill
+        info.Margin = New Padding(0, 4, 0, 8)
+        actions.Controls.Add(info, 0, 3)
 
         page.ResumeLayout(True)
     End Sub
