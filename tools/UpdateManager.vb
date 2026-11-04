@@ -216,162 +216,303 @@ Public NotInheritable Class UpdateManager
         End Try
     End Function
 
+    ' Responsive, informative update center. No installation action until a verified
+    ' stable GitHub Release for the current architecture has been found.
     Private NotInheritable Class UpdateWindow
         Inherits Form
 
+        Private ReadOnly installedValue As Label
+        Private ReadOnly latestValue As Label
         Private ReadOnly status As Label
         Private ReadOnly detail As Label
         Private ReadOnly install As Button
         Private ReadOnly check As Button
         Private ReadOnly closeButton As Button
         Private ReadOnly progressBar As ProgressBar
+        Private ReadOnly progressText As Label
         Private assetDownload As String
         Private assetDigest As String
         Private assetSize As Long
         Private busy As Boolean
 
         Public Sub New()
-            Me.Text = "DISM GUI - Update Center"
+            Me.Text = "DISM GUI - Updates"
             Me.StartPosition = FormStartPosition.CenterParent
             Me.FormBorderStyle = FormBorderStyle.FixedDialog
             Me.MaximizeBox = False
             Me.MinimizeBox = False
             Me.ShowInTaskbar = False
             Me.BackColor = ModernTheme.Backdrop
-            Me.ClientSize = New Size(690, 405)
-            Me.AutoScaleMode = AutoScaleMode.Font
             Me.Font = ModernTheme.UiFont(10)
+            Me.AutoScaleMode = AutoScaleMode.Font
+            Me.ClientSize = New Size(760, 485)
+            Me.MinimumSize = New Size(680, 440)
+            Me.ShowIcon = True
             Try
                 Me.Icon = ModernTheme.MakeAppIcon()
             Catch
             End Try
 
-            Dim header As New Panel With {.Dock = DockStyle.Top, .Height = 102,
-                                          .BackColor = ModernTheme.Blue}
-            Me.Controls.Add(header)
-            Dim name As New Label With {.Text = "UPDATE CENTER",
-                                        .ForeColor = Color.White, .BackColor = Color.Transparent,
-                                        .Font = ModernTheme.UiFont(20, True),
-                                        .Location = New Point(26, 16), .Size = New Size(610, 48)}
-            header.Controls.Add(name)
-            Dim caption As New Label With {
-                .Text = "Official GitHub Releases · Secure SHA-256 verification",
-                .ForeColor = Color.LightCyan, .BackColor = Color.Transparent,
-                .Font = ModernTheme.UiFont(9),
-                .Location = New Point(26, 65), .Size = New Size(635, 28)
+            Dim root As New TableLayoutPanel With {
+                .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 4,
+                .Margin = Padding.Empty, .Padding = New Padding(17, 16, 17, 13),
+                .BackColor = ModernTheme.Backdrop
             }
-            header.Controls.Add(caption)
+            root.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+            root.RowStyles.Add(New RowStyle(SizeType.Absolute, 105))
+            root.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+            root.RowStyles.Add(New RowStyle(SizeType.Absolute, 45))
+            root.RowStyles.Add(New RowStyle(SizeType.Absolute, 73))
+            Me.Controls.Add(root)
 
-            Dim installed As New Label With {
-                .Text = "Installed: " & CurrentVersion().ToString() & "  |  " & CurrentArchitecture(),
-                .Location = New Point(26, 123), .Size = New Size(632, 31),
-                .Font = ModernTheme.UiFont(10, True), .ForeColor = ModernTheme.TextInk
+            Dim header As New TableLayoutPanel With {
+                .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 1,
+                .BackColor = ModernTheme.Blue, .Margin = New Padding(0, 0, 0, 10),
+                .Padding = New Padding(17, 11, 14, 11)
             }
-            Me.Controls.Add(installed)
-            status = New Label With {.Text = "Select Check Updates to query published releases.",
-                                     .Location = New Point(26, 167), .Size = New Size(633, 33),
-                                     .ForeColor = ModernTheme.Blue, .Font = ModernTheme.UiFont(10, True)}
-            Me.Controls.Add(status)
-            detail = New Label With {.Text = "No background download. Nothing is installed without approval.",
-                                     .Location = New Point(26, 213), .Size = New Size(630, 71),
-                                     .ForeColor = ModernTheme.Muted, .Font = ModernTheme.UiFont(10.0F)}
-            Me.Controls.Add(detail)
-            progressBar = New ProgressBar With {.Location = New Point(26, 298),
-                                                 .Size = New Size(636, 15), .Visible = False}
-            Me.Controls.Add(progressBar)
-            check = New Button With {.Text = "Check Updates", .Location = New Point(26, 335),
-                                     .Size = New Size(162, 46)}
+            header.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 76))
+            header.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+            root.Controls.Add(header, 0, 0)
+
+            Dim logo As New PictureBox With {
+                .Dock = DockStyle.Fill, .SizeMode = PictureBoxSizeMode.Zoom,
+                .Margin = New Padding(0, 2, 14, 2), .BackColor = Color.Transparent
+            }
+            Try
+                Using appIcon As Icon = ModernTheme.MakeAppIcon()
+                    logo.Image = appIcon.ToBitmap()
+                End Using
+            Catch
+            End Try
+            header.Controls.Add(logo, 0, 0)
+            Dim heroText As New TableLayoutPanel With {
+                .Dock = DockStyle.Fill, .RowCount = 2, .ColumnCount = 1,
+                .Margin = Padding.Empty, .BackColor = Color.Transparent
+            }
+            heroText.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+            heroText.RowStyles.Add(New RowStyle(SizeType.Percent, 57))
+            heroText.RowStyles.Add(New RowStyle(SizeType.Percent, 43))
+            header.Controls.Add(heroText, 1, 0)
+            heroText.Controls.Add(MakeLabel("UPDATE CENTER", 21, True, Color.White), 0, 0)
+            heroText.Controls.Add(MakeLabel("Stable releases  ·  verified downloads  ·  one-click install",
+                                           10, False, Color.FromArgb(231, 246, 255)), 0, 1)
+
+            Dim info As New TableLayoutPanel With {
+                .Dock = DockStyle.Fill, .RowCount = 4, .ColumnCount = 1,
+                .Margin = Padding.Empty, .Padding = New Padding(18, 12, 18, 8),
+                .BackColor = Color.White
+            }
+            info.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+            info.RowStyles.Add(New RowStyle(SizeType.Absolute, 27))
+            info.RowStyles.Add(New RowStyle(SizeType.Absolute, 53))
+            info.RowStyles.Add(New RowStyle(SizeType.Absolute, 43))
+            info.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+            root.Controls.Add(info, 0, 1)
+            info.Controls.Add(MakeLabel("VERSION STATUS", 9.5F, True, ModernTheme.Muted), 0, 0)
+
+            Dim versions As New TableLayoutPanel With {
+                .Dock = DockStyle.Fill, .RowCount = 1, .ColumnCount = 2,
+                .Margin = Padding.Empty, .BackColor = Color.White
+            }
+            versions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
+            versions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
+            info.Controls.Add(versions, 0, 1)
+            installedValue = MakeLabel("Installed: " & CurrentVersion().ToString(3) &
+                                       " (" & CurrentArchitecture() & ")", 11, True,
+                                       ModernTheme.TextInk)
+            latestValue = MakeLabel("Latest stable: Not checked", 11, True, ModernTheme.Muted)
+            versions.Controls.Add(installedValue, 0, 0)
+            versions.Controls.Add(latestValue, 1, 0)
+
+            status = MakeLabel("Select Check for updates to look for a stable release.",
+                               11, True, ModernTheme.Blue)
+            info.Controls.Add(status, 0, 2)
+            detail = MakeLabel("Updates are downloaded from GitHub Releases. The SHA-256 " &
+                               "checksum is verified before installation. " &
+                               "Your current EXE is backed up.",
+                               10, False, ModernTheme.Muted)
+            info.Controls.Add(detail, 0, 3)
+
+            Dim progressPanel As New TableLayoutPanel With {
+                .Dock = DockStyle.Fill, .RowCount = 2, .ColumnCount = 1,
+                .Margin = Padding.Empty, .BackColor = ModernTheme.Backdrop
+            }
+            progressPanel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+            progressPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 23))
+            progressPanel.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+            progressText = MakeLabel("", 9, False, ModernTheme.TextInk)
+            progressPanel.Controls.Add(progressText, 0, 0)
+            progressBar = New ProgressBar With {
+                .Dock = DockStyle.Fill, .Height = 14, .Margin = New Padding(2, 1, 2, 2),
+                .Visible = False, .Style = ProgressBarStyle.Continuous
+            }
+            progressPanel.Controls.Add(progressBar, 0, 1)
+            root.Controls.Add(progressPanel, 0, 2)
+
+            Dim actions As New TableLayoutPanel With {
+                .Dock = DockStyle.Fill, .ColumnCount = 5, .RowCount = 1,
+                .Margin = Padding.Empty, .Padding = New Padding(0, 13, 0, 5),
+                .BackColor = ModernTheme.Backdrop
+            }
+            actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 183))
+            actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 182))
+            actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+            actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 135))
+            actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 107))
+            root.Controls.Add(actions, 0, 3)
+
+            check = New Button With {.Text = "Check for updates", .Dock = DockStyle.Fill,
+                                     .Margin = New Padding(0, 0, 12, 0)}
             ModernTheme.StyleButton(check, "browse")
             AddHandler check.Click, AddressOf CheckClicked
-            Me.Controls.Add(check)
-            install = New Button With {.Text = "Download & Install", .Location = New Point(204, 335),
-                                       .Size = New Size(190, 46), .Enabled = False}
+            actions.Controls.Add(check, 0, 0)
+
+            install = New Button With {.Text = "Install update", .Dock = DockStyle.Fill,
+                                       .Margin = New Padding(0, 0, 12, 0), .Enabled = False}
             ModernTheme.StyleButton(install, "primary")
             AddHandler install.Click, AddressOf InstallClicked
-            Me.Controls.Add(install)
-            Dim releases As New Button With {.Text = "Releases", .Location = New Point(410, 335),
-                                             .Size = New Size(110, 46)}
-            ModernTheme.StyleButton(releases)
+            actions.Controls.Add(install, 1, 0)
+
+            Dim releases As New Button With {.Text = "View releases", .Dock = DockStyle.Fill,
+                                             .Margin = New Padding(0, 0, 12, 0)}
+            ModernTheme.StyleButton(releases, "neutral")
             AddHandler releases.Click, Sub(sender, e)
                 Process.Start(New ProcessStartInfo(ProjectUrl & "/releases") With
                               {.UseShellExecute = True})
             End Sub
-            Me.Controls.Add(releases)
-            closeButton = New Button With {.Text = "Close", .Location = New Point(538, 335),
-                                     .Size = New Size(124, 46)}
-            ModernTheme.StyleButton(closeButton)
+            actions.Controls.Add(releases, 3, 0)
+
+            closeButton = New Button With {.Text = "Close", .Dock = DockStyle.Fill,
+                                           .Margin = Padding.Empty}
+            ModernTheme.StyleButton(closeButton, "neutral")
             AddHandler closeButton.Click, Sub(sender, e) Me.Close()
-            Me.Controls.Add(closeButton)
             Me.CancelButton = closeButton
+            actions.Controls.Add(closeButton, 4, 0)
+
+            Dim tips As New ToolTip()
+            tips.SetToolTip(check, "Query the latest published stable release on GitHub")
+            tips.SetToolTip(install, "Available after a release and SHA-256 digest are verified")
+            tips.SetToolTip(releases, "Open the download page in your browser")
+            tips.SetToolTip(closeButton, "Close only the Update Center")
         End Sub
+
+        Private Shared Function MakeLabel(value As String, size As Single, bold As Boolean,
+                                          color As Color) As Label
+            Return New Label With {
+                .Text = value, .Font = ModernTheme.UiFont(size, bold),
+                .ForeColor = color, .BackColor = Color.Transparent,
+                .TextAlign = ContentAlignment.MiddleLeft, .AutoEllipsis = False,
+                .Dock = DockStyle.Fill, .Margin = Padding.Empty
+            }
+        End Function
+
+        Private Shared Function NormalizeVersion(value As Version) As Version
+            Return New Version(value.Major, value.Minor,
+                               Math.Max(0, value.Build), Math.Max(0, value.Revision))
+        End Function
 
         Private Async Sub CheckClicked(sender As Object, e As EventArgs)
             If busy Then Return
             busy = True
             check.Enabled = False
             install.Enabled = False
-            status.Text = "Checking official GitHub Releases..."
-            detail.Text = ""
+            install.Text = "Install update"
+            latestValue.Text = "Latest stable: Checking..."
+            status.Text = "Checking GitHub Releases..."
+            detail.Text = "Checking release version and architecture-specific download..."
+            status.ForeColor = ModernTheme.Blue
             assetDownload = Nothing
             assetDigest = Nothing
             assetSize = 0
+
             Try
                 Using response = Await Web.GetAsync(ReleaseApi)
                     If response.StatusCode = HttpStatusCode.NotFound Then
-                        status.Text = "No published stable release yet"
-                        detail.Text = "The Actions build is not a release. Publish a GitHub Release with architecture ZIP assets to enable one-click updates."
+                        latestValue.Text = "Latest stable: Not published"
+                        status.Text = "No stable release has been published."
+                        status.ForeColor = ModernTheme.Muted
+                        detail.Text = "The Actions page contains test builds. " &
+                                      "Stable ZIP packages appear under GitHub Releases " &
+                                      "once a version is published."
                         Return
                     End If
                     response.EnsureSuccessStatusCode()
                     Using document = JsonDocument.Parse(Await response.Content.ReadAsStringAsync())
-                        Dim root = document.RootElement
-                        Dim tag = root.GetProperty("tag_name").GetString()
+                        Dim release = document.RootElement
+                        Dim tag = release.GetProperty("tag_name").GetString()
                         Dim remote As Version = Nothing
                         If String.IsNullOrWhiteSpace(tag) OrElse
                            Not Version.TryParse(tag.TrimStart("v"c, "V"c), remote) Then
-                            Throw New InvalidDataException("Release tag does not contain a valid version")
+                            Throw New InvalidDataException("The stable release has an invalid version tag")
                         End If
+                        latestValue.Text = "Latest stable: " & tag
+                        Dim normalizedRemote = NormalizeVersion(remote)
+                        Dim normalizedCurrent = NormalizeVersion(CurrentVersion())
+
+                        If normalizedRemote < normalizedCurrent Then
+                            status.Text = "You have a newer version than the stable release."
+                            status.ForeColor = ModernTheme.Muted
+                            detail.Text = "No downgrade is recommended. Use View releases " &
+                                          "to inspect older stable packages."
+                            Return
+                        End If
+
                         Dim wantedName = "DISMGUI-VS2026-" & CurrentArchitecture() & ".zip"
                         Dim selected As JsonElement
                         Dim found As Boolean = False
-                        For Each asset In root.GetProperty("assets").EnumerateArray()
-                            Dim name = asset.GetProperty("name").GetString()
-                            If String.Equals(name, wantedName, StringComparison.OrdinalIgnoreCase) Then
+                        For Each asset In release.GetProperty("assets").EnumerateArray()
+                            If String.Equals(asset.GetProperty("name").GetString(),
+                                             wantedName, StringComparison.OrdinalIgnoreCase) Then
                                 selected = asset
                                 found = True
                                 Exit For
                             End If
                         Next
-                        status.Text = "Latest release: " & tag
-                        If remote < CurrentVersion() Then
-                            detail.Text = "Your installed version is newer than the latest stable release."
-                            Return
-                        End If
                         If Not found Then
-                            detail.Text = "Missing " & wantedName & ". Open Releases to download manually."
+                            status.Text = "No download for " & CurrentArchitecture() & "."
+                            status.ForeColor = ModernTheme.Red
+                            detail.Text = "The stable release does not contain " & wantedName &
+                                          ". Select View releases to inspect the files."
                             Return
                         End If
+
                         assetDownload = selected.GetProperty("browser_download_url").GetString()
                         assetSize = selected.GetProperty("size").GetInt64()
-                        Dim digestElement As JsonElement
-                        If selected.TryGetProperty("digest", digestElement) AndAlso
-                           digestElement.ValueKind = JsonValueKind.String Then
-                            assetDigest = digestElement.GetString()
+                        Dim digestJson As JsonElement
+                        If selected.TryGetProperty("digest", digestJson) AndAlso
+                           digestJson.ValueKind = JsonValueKind.String Then
+                            assetDigest = digestJson.GetString()
                         End If
                         If String.IsNullOrWhiteSpace(assetDigest) OrElse
                            Not assetDigest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) Then
-                            detail.Text = "Release has no verified SHA-256 digest; automatic installation is disabled."
+                            status.Text = "Download not verified"
+                            status.ForeColor = ModernTheme.Red
+                            detail.Text = "No SHA-256 digest is available for this ZIP. " &
+                                          "Automatic installation is disabled for safety."
                             Return
                         End If
-                        install.Text = If(remote = CurrentVersion(), "Reinstall", "Download & Install")
-                        detail.Text = If(remote = CurrentVersion(),
-                                         "Same version available; you can reinstall the verified release.",
-                                         "Update available. The installed EXE will be backed up and replaced after this process exits.")
+
+                        If normalizedRemote = normalizedCurrent Then
+                            install.Text = "Reinstall"
+                            status.Text = "You already have the latest stable version."
+                            status.ForeColor = ModernTheme.Green
+                            detail.Text = "The same verified version is available. " &
+                                          "Use Reinstall only if you need a clean copy."
+                        Else
+                            install.Text = "Install update"
+                            status.Text = "A newer stable version is available."
+                            status.ForeColor = ModernTheme.Green
+                            detail.Text = "Select Install update to download the verified " &
+                                          "ZIP, back up your current EXE and install " &
+                                          tag & ". DISM GUI will restart."
+                        End If
                         install.Enabled = True
                     End Using
                 End Using
             Catch ex As Exception
-                status.Text = "Update check failed"
+                latestValue.Text = "Latest stable: Unavailable"
+                status.Text = "Could not check GitHub Releases"
+                status.ForeColor = ModernTheme.Red
                 detail.Text = ex.Message
             Finally
                 busy = False
@@ -384,35 +525,47 @@ Public NotInheritable Class UpdateManager
             For Each openForm As Form In Application.OpenForms
                 Dim main = TryCast(openForm, frmMain)
                 If main IsNot Nothing AndAlso main.HasMountedImage Then
-                    MessageBox.Show(Me, "A WIM is mounted or DISM is still working. Finish and dismount the image before installing an update.",
-                                    "Update unavailable during DISM operations",
+                    MessageBox.Show(Me,
+                                    "A WIM is mounted or DISM is still working." &
+                                    Environment.NewLine &
+                                    "Dismount the image and complete DISM operations first.",
+                                    "Update blocked while DISM is working",
                                     MessageBoxButtons.OK, MessageBoxIcon.Warning)
                     Return
                 End If
             Next
-            If MessageBox.Show(Me, "Download and install the verified DISM GUI release?" &
-                               Environment.NewLine &
-                               "Close any mounted WIM images before proceeding.",
-                               "Install update", MessageBoxButtons.YesNo,
+
+            Dim verb = If(install.Text = "Reinstall", "reinstall this version", "install this update")
+            If MessageBox.Show(Me,
+                               "Download the verified release and " & verb & "?" &
+                               Environment.NewLine & Environment.NewLine &
+                               "The current EXE will be backed up and DISM GUI will restart.",
+                               "DISM GUI - Confirm update", MessageBoxButtons.YesNo,
                                MessageBoxIcon.Question) <> DialogResult.Yes Then Return
+
             busy = True
             check.Enabled = False
             install.Enabled = False
             closeButton.Enabled = False
+            progressText.Text = "Download progress"
             progressBar.Value = 0
             progressBar.Visible = True
-            status.Text = "Downloading and verifying..."
-            detail.Text = "The new EXE is staged before the current one is closed."
+            status.Text = "Downloading and verifying the release..."
+            status.ForeColor = ModernTheme.Blue
+            detail.Text = "Your current EXE remains untouched until verification finishes."
             Try
                 Dim report = New Progress(Of Integer)(Sub(value)
-                    If Not Me.IsDisposed Then progressBar.Value = Math.Max(0, Math.Min(100, value))
+                    If Me.IsDisposed Then Return
+                    progressBar.Value = Math.Max(0, Math.Min(100, value))
+                    progressText.Text = "Download and verification: " & value.ToString() & "%"
                 End Sub)
                 Await StageAndLaunchAsync(assetDownload, assetDigest, assetSize, report)
-                status.Text = "Installing update..."
-                ' The staged copy replaces the installed EXE after this process exits.
+                status.Text = "Applying the update..."
+                detail.Text = "A verified copy was staged. The application will restart."
                 Environment.Exit(0)
             Catch ex As Exception
-                status.Text = "Could not install update"
+                status.Text = "The update was not installed."
+                status.ForeColor = ModernTheme.Red
                 detail.Text = ex.Message
                 install.Enabled = True
             Finally
