@@ -33,7 +33,7 @@ Public NotInheritable Class UpdateManager
     End Sub
 
     Private Shared Function CurrentVersion() As Version
-        Return Assembly.GetEntryAssembly().GetName().Version
+        Return GetType(UpdateManager).Assembly.GetName().Version
     End Function
 
     Private Shared Function CurrentArchitecture() As String
