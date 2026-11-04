@@ -228,13 +228,62 @@ Public NotInheritable Class ModernTheme
 
         Dim root As New TableLayoutPanel With {
             .Dock = DockStyle.Fill, .Padding = Padding.Empty, .Margin = Padding.Empty,
-            .RowCount = 3, .ColumnCount = 1, .BackColor = Backdrop
+            .RowCount = 2, .ColumnCount = 1, .BackColor = Backdrop
         }
         root.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         root.RowStyles.Add(New RowStyle(SizeType.Absolute, 102))
         root.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        root.RowStyles.Add(New RowStyle(SizeType.Absolute, 172))
         frm.Controls.Add(root)
+
+        ' Native draggable divider: no fixed 172px console and no overlap.
+        Dim split As New SplitContainer With {
+            .Name = "mainOutputSplitter", .Orientation = Orientation.Horizontal,
+            .Dock = DockStyle.Fill, .Margin = Padding.Empty, .Padding = Padding.Empty,
+            .SplitterWidth = 9, .Panel1MinSize = 215, .Panel2MinSize = 145,
+            .FixedPanel = FixedPanel.Panel2,
+            .BackColor = Color.FromArgb(207, 225, 243),
+            .BorderStyle = BorderStyle.None,
+            .TabStop = True
+        }
+        root.Controls.Add(split, 0, 1)
+
+        Dim savedOutputHeight As Integer = 194
+        Try
+            Using key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                "Software\DISMGUI\UserInterface", False)
+                If key IsNot Nothing Then
+                    Dim raw = key.GetValue("OutputHeight")
+                    If TypeOf raw Is Integer Then savedOutputHeight = CInt(raw)
+                End If
+            End Using
+        Catch
+            ' Preference storage must not interrupt the application.
+        End Try
+        savedOutputHeight = Math.Max(155, Math.Min(520, savedOutputHeight))
+        AddHandler frm.Shown, Sub(sender, e)
+            If split.IsDisposed Then Return
+            split.BeginInvoke(New MethodInvoker(Sub()
+                If split.IsDisposed Then Return
+                Dim maxDistance = split.Height - split.SplitterWidth - split.Panel2MinSize
+                If maxDistance <= split.Panel1MinSize Then Return
+                Dim wantedDistance = split.Height - split.SplitterWidth - savedOutputHeight
+                split.SplitterDistance = Math.Max(split.Panel1MinSize,
+                                                  Math.Min(maxDistance, wantedDistance))
+            End Sub))
+        End Sub
+        AddHandler split.SplitterMoved, Sub(sender, e)
+            Try
+                Using key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(
+                    "Software\DISMGUI\UserInterface")
+                    If key IsNot Nothing Then
+                        key.SetValue("OutputHeight", split.Panel2.Height,
+                                     Microsoft.Win32.RegistryValueKind.DWord)
+                    End If
+                End Using
+            Catch
+                ' A locked-down workstation may not permit writing preferences.
+            End Try
+        End Sub
 
         ' Header is a real responsive grid, not independently positioned controls.
         ' This prevents title/subtitle/menu overlap at 100-200% Windows DPI.
@@ -355,7 +404,7 @@ Public NotInheritable Class ModernTheme
         workspace.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         workspace.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 242))
         workspace.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        root.Controls.Add(workspace, 0, 1)
+        split.Panel1.Controls.Add(workspace)
 
         Dim side As New FlowLayoutPanel With {
             .Dock = DockStyle.Fill, .AutoScroll = True,
@@ -463,27 +512,61 @@ Public NotInheritable Class ModernTheme
 
         Dim logArea As New TableLayoutPanel With {
             .Dock = DockStyle.Fill, .RowCount = 2, .ColumnCount = 1,
-            .Margin = New Padding(15, 8, 15, 11), .BackColor = Backdrop
+            .Margin = Padding.Empty, .Padding = New Padding(13, 7, 13, 12),
+            .BackColor = Backdrop
         }
         logArea.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        logArea.RowStyles.Add(New RowStyle(SizeType.Absolute, 36))
+        logArea.RowStyles.Add(New RowStyle(SizeType.Absolute, 54))
         logArea.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        root.Controls.Add(logArea, 0, 2)
+        split.Panel2.Controls.Add(logArea)
         Dim logHeader As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 4, .RowCount = 1,
-            .BackColor = Color.FromArgb(230, 240, 250), .Padding = New Padding(10, 3, 8, 3),
+            .Dock = DockStyle.Fill, .ColumnCount = 5, .RowCount = 1,
+            .BackColor = Color.FromArgb(230, 240, 250),
+            .Padding = New Padding(12, 5, 10, 5),
             .Margin = Padding.Empty
         }
         logHeader.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        logHeader.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 119))
-        logHeader.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 92))
-        logHeader.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 92))
+        logHeader.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 113))
+        logHeader.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 124))
+        logHeader.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 87))
+        logHeader.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 87))
         logHeader.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         logArea.Controls.Add(logHeader, 0, 0)
-        Dim logTitle = TextLabel("DISM OUTPUT", UiFont(10, True), TextInk)
+        Dim logTitle = TextLabel("DISM OUTPUT  ·  Drag divider to resize", UiFont(9.5F, True), TextInk)
         logTitle.Dock = DockStyle.Fill
+        logTitle.AutoEllipsis = True
         logTitle.TextAlign = ContentAlignment.MiddleLeft
         logHeader.Controls.Add(logTitle, 0, 0)
+
+        Dim restoreHeight As Integer = savedOutputHeight
+        Dim expanded As Boolean = False
+        Dim expand As New Button With {
+            .Name = "btnExpandOutput", .Text = "Expand",
+            .Dock = DockStyle.Fill, .Margin = New Padding(4, 3, 4, 3)
+        }
+        StyleButton(expand, "browse")
+        AddHandler expand.Click, Sub(sender, e)
+            If Not expanded Then
+                restoreHeight = split.Panel2.Height
+                split.SplitterDistance = split.Panel1MinSize
+                expanded = True
+                expand.Text = "Restore"
+            Else
+                Dim maxDistance = split.Height - split.SplitterWidth - split.Panel2MinSize
+                Dim targetDistance = split.Height - split.SplitterWidth - restoreHeight
+                If maxDistance > split.Panel1MinSize Then
+                    split.SplitterDistance = Math.Max(split.Panel1MinSize,
+                                                     Math.Min(maxDistance, targetDistance))
+                End If
+                expanded = False
+                expand.Text = "Expand"
+            End If
+        End Sub
+        logHeader.Controls.Add(expand, 1, 0)
+        tips.SetToolTip(expand,
+                        "Expand the DISM output panel or restore its previous height." &
+                        Environment.NewLine &
+                        "You can also drag the horizontal divider with the mouse.")
 
         Dim copy As New Button With {
             .Name = "btnCopyOutput", .Text = "Copy log",
@@ -493,19 +576,19 @@ Public NotInheritable Class ModernTheme
         AddHandler copy.Click, Sub(sender, e)
             If Not String.IsNullOrWhiteSpace(output.Text) Then Clipboard.SetText(output.Text)
         End Sub
-        logHeader.Controls.Add(copy, 1, 0)
+        logHeader.Controls.Add(copy, 2, 0)
         Dim clear As New Button With {
             .Name = "btnClearOutput", .Text = "Clear",
             .Dock = DockStyle.Fill, .Margin = New Padding(4, 2, 4, 2)
         }
         StyleButton(clear, "neutral")
         AddHandler clear.Click, Sub(sender, e) output.Clear()
-        logHeader.Controls.Add(clear, 2, 0)
+        logHeader.Controls.Add(clear, 3, 0)
         exitButton.Text = "Exit"
         exitButton.Dock = DockStyle.Fill
         exitButton.Margin = New Padding(4, 2, 0, 2)
         StyleButton(exitButton, "neutral")
-        logHeader.Controls.Add(exitButton, 3, 0)
+        logHeader.Controls.Add(exitButton, 4, 0)
 
         output.Dock = DockStyle.Fill
         output.BackColor = Color.White
