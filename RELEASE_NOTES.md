@@ -1,4 +1,11 @@
-# DISM GUI v4.2.4
+# DISM GUI v4.2.5
+
+## Version in window titles
+
+- Show the installed version as `DISM GUI 4.2.5 - Modern Edition` in the main title bar, without a leading `v`.
+- About and Update Center title bars display the same installed version without `v`.
+- Windows UI smoke tests verify all three captions before packaging.
+
 
 ## Resizable DISM Output
 
