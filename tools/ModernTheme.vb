@@ -607,6 +607,8 @@ Public NotInheritable Class ModernTheme
         output.ReadOnly = True
         output.Margin = Padding.Empty
         logArea.Controls.Add(output, 0, 1)
+        ' Remember window size, position and maximized state safely.
+        WindowGeometry.Install(frm)
         frm.ResumeLayout(True)
     End Sub
 
