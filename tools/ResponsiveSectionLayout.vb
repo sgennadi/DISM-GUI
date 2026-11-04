@@ -159,10 +159,10 @@ Public NotInheritable Class ResponsiveSectionLayout
                 Dim indexLabel = page.Controls("Label3")
                 Dim indexCombo = page.Controls("cmbIndex")
                 If indexLabel IsNot Nothing Then
-                    MoveResize(indexLabel, rightX - 77, 5, 70, 19)
+                    MoveResize(indexLabel, rightX - 101, 59, 53, 24)
                 End If
                 If indexCombo IsNot Nothing Then
-                    MoveResize(indexCombo, rightX - 77, 25, 62, 27)
+                    MoveResize(indexCombo, rightX - 52, 57, 48, 27)
                 End If
             End If
 
