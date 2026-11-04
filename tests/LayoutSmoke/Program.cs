@@ -369,6 +369,21 @@ internal static class LayoutSmoke
             tabs.SelectedIndex = 9;
             Application.DoEvents();
             var selectedWimButton = Find(dashboard, "btn360UseInMount") as Button;
+            var reportField = typeof(Wim360Dashboard).GetField("report",
+                System.Reflection.BindingFlags.NonPublic |
+                System.Reflection.BindingFlags.Instance);
+            var currentReport = reportField?.GetValue(dashboard) as Wim360Reader.WimReport;
+            Console.WriteLine("WIM 360 handoff diagnostics: " +
+                $"dashboardVisible={dashboard.Visible}; " +
+                $"dashboardEnabled={dashboard.Enabled}; " +
+                $"buttonEnabled={selectedWimButton?.Enabled}; " +
+                $"rows={indexGrid.Rows.Count}; selected={indexGrid.SelectedRows.Count}; " +
+                $"current={indexGrid.CurrentRow?.Cells[0].Value}; " +
+                $"fieldPath='{wimPathField.Text}'; " +
+                $"reportPath='{currentReport?.ImageFile}'; " +
+                $"reportCount={currentReport?.Images.Count}; " +
+                $"pathEquals={string.Equals(wimPathField.Text.Trim(), currentReport?.ImageFile,
+                    StringComparison.OrdinalIgnoreCase)}");
             Require(selectedWimButton is not null && selectedWimButton.Enabled,
                     "WIM 360 Use in Mount action should be available after metadata load");
             indexGrid.Rows[1].Selected = true;
