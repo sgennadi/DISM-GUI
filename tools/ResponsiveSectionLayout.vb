@@ -82,9 +82,19 @@ Public NotInheritable Class ResponsiveSectionLayout
         Try
             Dim page = layout.Page
             page.SuspendLayout()
-            Dim rightX = Math.Max(525, width - 195)
-            Dim leftWidth = rightX - 24
-            Dim browseX = Math.Max(350, leftWidth - 181)
+            Dim compact = width < 725
+            Dim rightX = If(compact, 10, Math.Max(525, width - 195))
+            Dim leftWidth = If(compact, width - 20, rightX - 24)
+            Dim browseX = If(compact, Math.Max(295, width - 186),
+                              Math.Max(350, leftWidth - 181))
+            Dim compactStart = 395
+            If compact Then
+                For Each originalControl In layout.Original
+                    If Not IsActionButton(originalControl.Key, originalControl.Value) Then
+                        compactStart = Math.Max(compactStart, originalControl.Value.Bottom + 27)
+                    End If
+                Next
+            End If
 
             For Each kv In layout.Original
                 Dim control = kv.Key
@@ -94,10 +104,27 @@ Public NotInheritable Class ResponsiveSectionLayout
                 Dim w = rect.Width
                 Dim h = rect.Height
                 If IsActionButton(control, rect) Then
-                    ' Full-width action column with room for long labels.
-                    x = rightX
-                    w = Math.Min(175, Math.Max(144, width - rightX - 12))
-                    h = Math.Max(54, h)
+                    If compact Then
+                        Dim sequence As Integer = 0
+                        For Each other In layout.Original
+                            If IsActionButton(other.Key, other.Value) AndAlso
+                               (other.Value.Y < rect.Y OrElse
+                               (other.Value.Y = rect.Y AndAlso
+                                String.CompareOrdinal(other.Key.Name, control.Name) < 0)) Then
+                                sequence += 1
+                            End If
+                        Next
+                        Dim columnWidth = Math.Max(135, (width - 42)  2)
+                        x = 12 + (sequence Mod 2) * (columnWidth + 12)
+                        y = compactStart + (sequence  2) * 61
+                        w = columnWidth
+                        h = 53
+                    Else
+                        ' Full-width action column with room for long labels.
+                        x = rightX
+                        w = Math.Min(175, Math.Max(144, width - rightX - 12))
+                        h = Math.Max(54, h)
+                    End If
                 ElseIf TypeOf control Is GroupBox Then
                     w = Math.Max(rect.Width, leftWidth - rect.X)
                 ElseIf IsBrowse(control) AndAlso rect.X >= 320 Then
@@ -159,10 +186,10 @@ Public NotInheritable Class ResponsiveSectionLayout
                 Dim indexLabel = page.Controls("Label3")
                 Dim indexCombo = page.Controls("cmbIndex")
                 If indexLabel IsNot Nothing Then
-                    MoveResize(indexLabel, rightX - 101, 59, 53, 24)
+                    MoveResize(indexLabel, If(compact, 374, rightX - 101), 59, 53, 24)
                 End If
                 If indexCombo IsNot Nothing Then
-                    MoveResize(indexCombo, rightX - 52, 57, 48, 27)
+                    MoveResize(indexCombo, If(compact, 428, rightX - 52), 57, 48, 27)
                 End If
             End If
 
