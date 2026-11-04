@@ -58,6 +58,64 @@ internal static class LayoutSmoke
         return null;
     }
 
+    private static System.Collections.Generic.IEnumerable<Control> Leaves(Control root)
+    {
+        foreach (Control child in root.Controls)
+        {
+            if (child is Label or Button or CheckBox or ComboBox or TextBox or
+                MaskedTextBox or NumericUpDown)
+            {
+                if (child.Visible && child.Width > 0 && child.Height > 0)
+                    yield return child;
+            }
+            foreach (var nested in Leaves(child))
+                yield return nested;
+        }
+    }
+
+    private static void ValidateSection(Control page, int section, string dimension)
+    {
+        Require(Find(page, "SectionResponsiveRoot") is TableLayoutPanel,
+            $"Section {section} still has legacy absolute positions");
+        var left = Find(page, "SectionFields") as FlowLayoutPanel;
+        var actions = Find(page, "SectionActions") as FlowLayoutPanel;
+        Require(left is not null && actions is not null,
+            $"Section {section} fields/actions are missing");
+        Require(left!.AutoScroll && actions!.AutoScroll,
+            $"Section {section} must allow vertical scrolling at high DPI");
+        var leaves = Leaves(page).ToList();
+        Require(leaves.OfType<Button>().Any() && leaves.OfType<TextBoxBase>().Any(),
+            $"Section {section} lacks original interactive elements");
+        for (int i = 0; i < leaves.Count; ++i)
+        {
+            var ctrl = leaves[i];
+            var bounds = ctrl.RectangleToScreen(ctrl.ClientRectangle);
+            foreach (var other in leaves.Skip(i + 1))
+            {
+                var peer = other.RectangleToScreen(other.ClientRectangle);
+                Require(!bounds.IntersectsWith(peer),
+                    $"Section {section} at {dimension}: {ctrl.Name} " +
+                    $"{bounds} overlaps {other.Name} {peer}");
+            }
+            if (ctrl is Button button)
+            {
+                var measured = TextRenderer.MeasureText(button.Text, button.Font,
+                    new Size(Math.Max(70, button.ClientSize.Width - 15), 1000),
+                    TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl);
+                Require(measured.Height <= button.ClientSize.Height + 3,
+                    $"Section {section} at {dimension}: button '{button.Text}' " +
+                    $"is vertically clipped ({measured.Height}>{button.Height})");
+            }
+            if (ctrl is Label label && !string.IsNullOrWhiteSpace(label.Text))
+            {
+                var measured = TextRenderer.MeasureText(label.Text, label.Font);
+                Require(measured.Height <= label.ClientSize.Height + 3,
+                    $"Section {section} at {dimension}: label '{label.Text}' is clipped");
+            }
+        }
+        Console.WriteLine($"PASS {dimension} section {section} ({leaves.Count} interactive/text elements)");
+    }
+
     [STAThread]
     private static int Main()
     {
@@ -160,6 +218,21 @@ internal static class LayoutSmoke
                 }
             }
 
+            // Exercise ALL nine sections at both realistic window sizes.
+            foreach (var size in new[] { new Size(900, 650), new Size(1180, 760) })
+            {
+                var allowed = Screen.PrimaryScreen!.WorkingArea;
+                form.ClientSize = new Size(Math.Min(size.Width, allowed.Width - 40),
+                    Math.Min(size.Height, allowed.Height - 60));
+                for (var section = 1; section <= 8; section++)
+                {
+                    tabs.SelectedIndex = section;
+                    Application.DoEvents();
+                    ValidateSection(tabs.TabPages[section], section + 1,
+                        $"{form.ClientSize.Width}x{form.ClientSize.Height}");
+                    Snapshot(form, $"DISM-GUI-Section-{section + 1}-{form.ClientSize.Width}x{form.ClientSize.Height}");
+                }
+            }
             form.Hide();
             form.Dispose();
 
