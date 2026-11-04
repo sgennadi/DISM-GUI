@@ -264,11 +264,12 @@ Public NotInheritable Class Wim360Dashboard
     End Function
 
     Public Sub ActivateFromMount()
-        Dim path = mountPath()
-        If Not String.IsNullOrWhiteSpace(path) AndAlso
-           Not String.Equals(path.Trim(), fileBox.Text.Trim(),
-                             StringComparison.OrdinalIgnoreCase) Then
-            fileBox.Text = path.Trim()
+        ' Treat the current Mount path as an initial suggestion only.
+        ' Returning to this workspace must not overwrite a WIM selected here.
+        If Not String.IsNullOrWhiteSpace(fileBox.Text) Then Return
+        Dim selectedPath = mountPath()
+        If Not String.IsNullOrWhiteSpace(selectedPath) Then
+            fileBox.Text = selectedPath.Trim()
             StartScan()
         End If
     End Sub
@@ -326,6 +327,11 @@ Public NotInheritable Class Wim360Dashboard
             If Me.IsDisposed OrElse generation <> scanGeneration OrElse
                Not String.Equals(path, fileBox.Text.Trim(), StringComparison.OrdinalIgnoreCase) Then
                 Return
+            End If
+            ' Normalize relative paths so Use in Mount uses the inspected file.
+            If Not String.Equals(fileBox.Text.Trim(), loaded.ImageFile,
+                                 StringComparison.OrdinalIgnoreCase) Then
+                fileBox.Text = loaded.ImageFile
             End If
             ShowReport(loaded)
         Catch ex As Exception
