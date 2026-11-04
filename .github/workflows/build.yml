@@ -1,0 +1,41 @@
+name: DISM GUI - VS2026 x86 x64 ARM64
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2025
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [win-x86, win-x64, win-arm64]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Prepare modernized DISM GUI source
+        run: python tools/prepare_source.py
+      - name: Check patch
+        shell: pwsh
+        run: |
+          python -c "from pathlib import Path; s=Path('DISM GUI/frmMain.vb').read_text(encoding='utf-8-sig'); assert 'ChooseFolderModern(' in s and 'ShowUnmountResult(' in s; print('Patched source OK')"
+      - name: Publish portable EXE
+        shell: pwsh
+        run: ./Build.ps1 -Runtime '${{ matrix.rid }}' -SkipPrepare
+      - uses: actions/upload-artifact@v5
+        with:
+          name: DISMGUI-VS2026-${{ matrix.rid }}
+          path: artifacts/DISMGUI-VS2026-${{ matrix.rid }}.zip
+          if-no-files-found: error
