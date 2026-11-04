@@ -61,7 +61,7 @@ Public NotInheritable Class ResponsiveSectionLayout
         Dim chooseMount = Take(page, "btnOpenMount")
         Dim imageIndex = DirectCast(Take(page, "cmbIndex"), ComboBox)
         Dim info = Take(page, "btnDisplayWIMInfo")
-        Dim readOnly = Take(page, "chkMountReadOnly")
+        Dim readOnlyCheckbox = Take(page, "chkMountReadOnly")
         Dim mountButton = DirectCast(Take(page, "btnMount"), Button)
         Dim dismountButton = DirectCast(Take(page, "btnDismount"), Button)
         Dim openMounted = DirectCast(Take(page, "btnOpenFolder"), Button)
@@ -144,8 +144,8 @@ Public NotInheritable Class ResponsiveSectionLayout
         chooseMount.Margin = New Padding(7, 3, 0, 4)
         mountRow.Controls.Add(chooseMount, 1, 0)
 
-        readOnly.Margin = New Padding(3, 12, 0, 6)
-        left.Controls.Add(readOnly, 0, 5)
+        readOnlyCheckbox.Margin = New Padding(3, 12, 0, 6)
+        left.Controls.Add(readOnlyCheckbox, 0, 5)
 
         Dim actions As New TableLayoutPanel With {
             .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 5,
