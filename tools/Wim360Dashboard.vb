@@ -350,8 +350,8 @@ Public NotInheritable Class Wim360Dashboard
         report = value
         imageCount.Text = value.ImageCount.ToString()
         fileSize.Text = Wim360Reader.HumanSize(value.FileSizeBytes)
-        Dim mounted = value.Images.Count(Function(x) x.MountStatus.StartsWith("Mounted",
-                                                 StringComparison.OrdinalIgnoreCase))
+        Dim mounted = value.Images.Where(Function(x) x.MountStatus.StartsWith("Mounted",
+                                                 StringComparison.OrdinalIgnoreCase)).Count()
         mounts.Text = If(value.MountScanWarning.Length > 0, "Not checked",
                          If(mounted = 0, "No mounts", mounted.ToString() & " mounted"))
         status.Text = If(value.MountScanWarning.Length > 0,
