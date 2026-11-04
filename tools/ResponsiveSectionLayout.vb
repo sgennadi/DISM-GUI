@@ -219,10 +219,9 @@ Public NotInheritable Class ResponsiveSectionLayout
             If page.Name = "TabPage1" Then
                 BuildMountPage(page)
             Else
-                Dim layout As New PageLayout(page)
-                Pages(page) = layout
-                page.AutoScroll = True
-                AddHandler page.SizeChanged, Sub(sender, e) UpdateLayout(layout)
+                ' Replace all old absolute-positioned pages. Each original
+                ' control keeps its identity and DISM event handlers.
+                ResponsiveForms.Install(page)
             End If
         Next
         AddHandler tabs.SizeChanged, Sub(sender, e) UpdateVisible(tabs)
