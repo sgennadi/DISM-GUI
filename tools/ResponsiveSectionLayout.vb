@@ -123,11 +123,41 @@ Public NotInheritable Class ResponsiveSectionLayout
         indexRow.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         left.Controls.Add(indexRow, 0, 2)
         AddLabel(indexRow, "Image index", 0, 0)
-        imageIndex.Margin = New Padding(0, 10, 8, 13)
-        imageIndex.DropDownWidth = 112
-        imageIndex.Font = ModernTheme.UiFont(10, True)
-        imageIndex.FlatStyle = FlatStyle.Flat
-        indexRow.Controls.Add(imageIndex, 1, 0)
+        ' The original ComboBox stays alive for frmMain business logic.
+        ' A numeric selector avoids Windows' bright blue edit-selection artifact.
+        Dim indexSpinner As New NumericUpDown With {
+            .Name = "nudImageIndex", .Minimum = 1D, .Maximum = 999D,
+            .Value = 1D, .DecimalPlaces = 0,
+            .TextAlign = HorizontalAlignment.Center,
+            .BorderStyle = BorderStyle.FixedSingle,
+            .Font = ModernTheme.UiFont(10, True),
+            .BackColor = Color.White, .ForeColor = ModernTheme.TextInk,
+            .Dock = DockStyle.Fill, .Margin = New Padding(0, 10, 9, 13)
+        }
+        AddHandler indexSpinner.ValueChanged, Sub(sender, e)
+            Dim valueText = indexSpinner.Value.ToString(
+                System.Globalization.CultureInfo.InvariantCulture)
+            If imageIndex.Text <> valueText Then imageIndex.Text = valueText
+        End Sub
+        AddHandler imageIndex.TextChanged, Sub(sender, e)
+            Dim number As Integer
+            If Integer.TryParse(imageIndex.Text, number) AndAlso
+               number >= CInt(indexSpinner.Minimum) AndAlso
+               number <= CInt(indexSpinner.Maximum) AndAlso
+               indexSpinner.Value <> CDec(number) Then
+                indexSpinner.Value = CDec(number)
+            End If
+        End Sub
+        If String.IsNullOrWhiteSpace(imageIndex.Text) Then
+            imageIndex.Text = "1"
+        Else
+            Dim currentIndex As Integer
+            If Integer.TryParse(imageIndex.Text, currentIndex) AndAlso
+               currentIndex >= 1 AndAlso currentIndex <= 999 Then
+                indexSpinner.Value = CDec(currentIndex)
+            End If
+        End If
+        indexRow.Controls.Add(indexSpinner, 1, 0)
         ' Image information is in the right actions column, so Index has
         ' its own readable row even on smaller laptops and at 200% DPI.
 
