@@ -367,7 +367,7 @@ Public NotInheritable Class UpdateManager
             AddHandler check.Click, AddressOf CheckClicked
             actions.Controls.Add(check, 0, 0)
 
-            install = New Button With {.Text = "Install update", .Dock = DockStyle.Fill,
+            install = New Button With {.Text = "Update", .Dock = DockStyle.Fill,
                                        .Margin = New Padding(0, 0, 12, 0), .Enabled = False}
             ModernTheme.StyleButton(install, "primary")
             AddHandler install.Click, AddressOf InstallClicked
@@ -416,7 +416,7 @@ Public NotInheritable Class UpdateManager
             busy = True
             check.Enabled = False
             install.Enabled = False
-            install.Text = "Install update"
+            install.Text = "Update"
             latestValue.Text = "Latest stable: Checking..."
             status.Text = "Checking GitHub Releases..."
             detail.Text = "Checking release version and architecture-specific download..."
@@ -499,10 +499,10 @@ Public NotInheritable Class UpdateManager
                             detail.Text = "The same verified version is available. " &
                                           "Use Reinstall only if you need a clean copy."
                         Else
-                            install.Text = "Install update"
+                            install.Text = "Update"
                             status.Text = "A newer stable version is available."
                             status.ForeColor = ModernTheme.Green
-                            detail.Text = "Select Install update to download the verified " &
+                            detail.Text = "Select Update to download the verified " &
                                           "ZIP, back up your current EXE and install " &
                                           tag & ". DISM GUI will restart."
                         End If
