@@ -84,11 +84,11 @@ internal static class LayoutSmoke
             var browseWim = Find(page, "btnOpenWIM")!;
             var mount = Find(page, "txtMount")!;
             var browseMount = Find(page, "btnOpenMount")!;
-            var index = Find(page, "cmbIndex") as ComboBox;
+            var index = Find(page, "nudImageIndex") as NumericUpDown;
             var mountAction = Find(page, "btnMount")!;
             var dismountAction = Find(page, "btnDismount")!;
             var info = Find(page, "btnDisplayWIMInfo")!;
-            Require(index is not null, "Image index selector missing");
+            Require(index is not null, "Numeric image index selector missing");
             Require(dismountAction.BackColor != ModernTheme.Red,
                 "Dismount action must not be red like an error state");
 
@@ -100,14 +100,14 @@ internal static class LayoutSmoke
                 form.ClientSize = effective;
                 form.PerformLayout();
                 Application.DoEvents();
-                Require(index!.Width >= 75, $"Image index too narrow at {size}");
+                Require(index!.Width >= 75, $"Numeric image index too narrow at {size}");
                 Require(browseWim.Width >= 110 && browseMount.Width >= 110,
                     $"Browse actions too narrow at {size}");
                 NoOverlap(wim, browseWim, "WIM text / Browse WIM");
                 NoOverlap(mount, browseMount, "Mount path / Browse folder");
                 NoOverlap(mountAction, dismountAction, "Mount / Dismount");
                 NoOverlap(dismountAction, info, "Dismount / Image info");
-                NoOverlap(index, browseWim, "Image index / Choose WIM");
+                NoOverlap(index, browseWim, "Numeric image index / Choose WIM");
                 var heading = form.Controls.Find("btnToolsMenu", true).First();
                 Require(heading.RectangleToScreen(heading.ClientRectangle).Right <=
                         form.RectangleToScreen(form.ClientRectangle).Right,
