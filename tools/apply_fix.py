@@ -234,8 +234,12 @@ def main():
         Me.BeginInvoke(New MethodInvoker(Sub()
             ShowUnmountResult(success, details)
             If closeAfterUnmount Then
-                closeAfterUnmount = False
-                If success Then Me.Close()
+                If success Then
+                    ' Keep the flag set while FormClosing handles the intentional exit.
+                    Me.Close()
+                Else
+                    closeAfterUnmount = False
+                End If
             End If
         End Sub))
     End Sub''', "unmount result")
