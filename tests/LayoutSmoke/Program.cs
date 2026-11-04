@@ -73,6 +73,19 @@ internal static class LayoutSmoke
         }
     }
 
+    private static Rectangle ClippedRectangle(Control control)
+    {
+        if (!control.Visible) return Rectangle.Empty;
+        var visible = control.RectangleToScreen(control.ClientRectangle);
+        for (Control? parent = control.Parent; parent is not null; parent = parent.Parent)
+        {
+            visible = Rectangle.Intersect(visible,
+                parent.RectangleToScreen(parent.ClientRectangle));
+            if (visible.IsEmpty) return Rectangle.Empty;
+        }
+        return visible;
+    }
+
     private static void ValidateSection(Control page, int section, string dimension)
     {
         Require(Find(page, "SectionResponsiveRoot") is TableLayoutPanel,
@@ -89,10 +102,12 @@ internal static class LayoutSmoke
         for (int i = 0; i < leaves.Count; ++i)
         {
             var ctrl = leaves[i];
-            var bounds = ctrl.RectangleToScreen(ctrl.ClientRectangle);
+            var bounds = ClippedRectangle(ctrl);
+            if (bounds.IsEmpty) continue; // Currently scrolled outside the viewport
             foreach (var other in leaves.Skip(i + 1))
             {
-                var peer = other.RectangleToScreen(other.ClientRectangle);
+                var peer = ClippedRectangle(other);
+                if (peer.IsEmpty) continue;
                 Require(!bounds.IntersectsWith(peer),
                     $"Section {section} at {dimension}: {ctrl.Name} " +
                     $"{bounds} overlaps {other.Name} {peer}");
