@@ -380,6 +380,15 @@ Public NotInheritable Class UpdateManager
 
         Private Async Sub InstallClicked(sender As Object, e As EventArgs)
             If busy OrElse String.IsNullOrWhiteSpace(assetDownload) Then Return
+            For Each openForm As Form In Application.OpenForms
+                Dim main = TryCast(openForm, frmMain)
+                If main IsNot Nothing AndAlso main.HasMountedImage Then
+                    MessageBox.Show(Me, "A WIM is mounted or DISM is still working. Finish and dismount the image before installing an update.",
+                                    "Update unavailable during DISM operations",
+                                    MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                    Return
+                End If
+            Next
             If MessageBox.Show(Me, "Download and install the verified DISM GUI release?" &
                                Environment.NewLine &
                                "Close any mounted WIM images before proceeding.",
