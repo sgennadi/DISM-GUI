@@ -45,6 +45,20 @@ Public NotInheritable Class ModernTheme
     End Function
 
     Public Shared Function MakeAppIcon() As Icon
+        ' Use the executable's embedded multi-size ICO for title bar, Alt-Tab and taskbar.
+        ' The fallback below is used only in a source-only designer or development preview.
+        Try
+            Dim exePath = Application.ExecutablePath
+            If Not String.IsNullOrWhiteSpace(exePath) AndAlso
+               System.IO.File.Exists(exePath) Then
+                Using embedded As Icon = Icon.ExtractAssociatedIcon(exePath)
+                    If embedded IsNot Nothing Then
+                        Return DirectCast(embedded.Clone(), Icon)
+                    End If
+                End Using
+            End If
+        Catch
+        End Try
         Using bmp As New Bitmap(64, 64)
             Using g = Graphics.FromImage(bmp)
                 g.SmoothingMode = SmoothingMode.AntiAlias
