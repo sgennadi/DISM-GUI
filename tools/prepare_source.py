@@ -55,9 +55,18 @@ if "<ApplicationIcon>App.ico</ApplicationIcon>" not in s:
   </PropertyGroup>
 </Project>""")
 
-s = s.replace("<ApplicationVersion>4.0.0.0</ApplicationVersion>", "<ApplicationVersion>4.2.0.0</ApplicationVersion>")
-s = s.replace("<AssemblyVersion>4.0.0.0</AssemblyVersion>", "<AssemblyVersion>4.2.0.0</AssemblyVersion>")
-s = s.replace("<FileVersion>4.0.0.0</FileVersion>", "<FileVersion>4.2.0.0</FileVersion>")
+# A single VERSION file drives EXE metadata, About, and release publishing.
+version = (root / "VERSION").read_text(encoding="utf-8").strip()
+parts = version.split(".")
+if len(parts) != 3 or not all(part.isascii() and part.isdecimal() for part in parts):
+    raise RuntimeError("VERSION must contain major.minor.patch, e.g. 4.2.0")
+exe_version = version + ".0"
+for property_name in ("ApplicationVersion", "AssemblyVersion", "FileVersion"):
+    source_value = f"<{property_name}>4.0.0.0</{property_name}>"
+    target_value = f"<{property_name}>{exe_version}</{property_name}>"
+    if s.count(source_value) != 1:
+        raise RuntimeError(f"Expected one upstream {property_name} property")
+    s = s.replace(source_value, target_value)
 s = s.replace("<Company>http://mikecel79.wordpress.com</Company>", "<Company>DISM GUI contributors</Company>")
 if "<DebugType>none</DebugType>" not in s:
     s = s.replace("</Project>", """  <PropertyGroup>
