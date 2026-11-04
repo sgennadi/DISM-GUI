@@ -84,7 +84,7 @@ Public NotInheritable Class ResponsiveSectionLayout
             page.SuspendLayout()
             Dim rightX = Math.Max(525, width - 195)
             Dim leftWidth = rightX - 24
-            Dim browseX = Math.Max(356, leftWidth - 146)
+            Dim browseX = Math.Max(350, leftWidth - 181)
 
             For Each kv In layout.Original
                 Dim control = kv.Key
@@ -102,7 +102,7 @@ Public NotInheritable Class ResponsiveSectionLayout
                     w = Math.Max(rect.Width, leftWidth - rect.X)
                 ElseIf IsBrowse(control) AndAlso rect.X >= 320 Then
                     x = browseX
-                    w = Math.Min(140, Math.Max(118, leftWidth - browseX - 7))
+                    w = Math.Min(176, Math.Max(142, leftWidth - browseX - 7))
                     h = Math.Max(28, h)
                 ElseIf TypeOf control Is TextBox Then
                     If rect.X <= 110 Then
@@ -129,7 +129,7 @@ Public NotInheritable Class ResponsiveSectionLayout
                 Dim source = pair.Value
                 Dim actualInnerWidth = parent.ClientSize.Width
                 If actualInnerWidth < 100 Then Continue For
-                Dim nestedButtonX = actualInnerWidth - 169
+                Dim nestedButtonX = actualInnerWidth - 191
                 For Each kv In source
                     Dim child = kv.Key
                     Dim r = kv.Value
@@ -139,7 +139,7 @@ Public NotInheritable Class ResponsiveSectionLayout
                     Dim h = r.Height
                     If TypeOf child Is Button AndAlso r.X >= 300 Then
                         x = nestedButtonX
-                        w = Math.Max(125, actualInnerWidth - x - 12)
+                        w = Math.Max(150, actualInnerWidth - x - 12)
                         h = Math.Max(28, h)
                     ElseIf TypeOf child Is TextBox Then
                         w = Math.Max(r.Width, nestedButtonX - r.X - 12)
