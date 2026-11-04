@@ -392,8 +392,8 @@ internal static class LayoutSmoke
             Application.DoEvents();
             Require(tabs.SelectedIndex == 0 &&
                     ((TextBox)Find(tabs.TabPages[0], "txtWIM")!).Text == @"C:\test\boot.wim" &&
-                    ((ComboBox)Find(tabs.TabPages[0], "cmbIndex")!).Text == "2",
-                    "WIM 360 selected index must populate existing Mount controls without mounting");
+                    ((NumericUpDown)Find(tabs.TabPages[0], "nudImageIndex")!).Value == 2,
+                    "WIM 360 selected index must populate the visible Mount selector without mounting");
             ((TextBox)Find(tabs.TabPages[0], "txtWIM")!).Text = "";
             wimPathField.Text = "";
             tabs.SelectedIndex = 0;

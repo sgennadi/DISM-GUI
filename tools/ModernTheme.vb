@@ -453,12 +453,17 @@ Public NotInheritable Class ModernTheme
                 Dim mountPage = tabs.TabPages(0)
                 Dim source = TryCast(mountPage.Controls.Find(
                     "txtWIM", True).FirstOrDefault(), TextBox)
-                Dim index = TryCast(mountPage.Controls.Find(
-                    "cmbIndex", True).FirstOrDefault(), ComboBox)
+                Dim indexSpinner = TryCast(mountPage.Controls.Find(
+                    "nudImageIndex", True).FirstOrDefault(), NumericUpDown)
                 If source IsNot Nothing Then source.Text = path
-                If index IsNot Nothing Then
-                    index.Text = imageIndex.ToString(
-                        System.Globalization.CultureInfo.InvariantCulture)
+                If indexSpinner IsNot Nothing AndAlso imageIndex > 0 Then
+                    ' The visible spinner synchronizes the original hidden
+                    ' cmbIndex field through its ValueChanged handler.
+                    Dim wantedIndex = CDec(imageIndex)
+                    If wantedIndex > indexSpinner.Maximum Then
+                        indexSpinner.Maximum = wantedIndex
+                    End If
+                    indexSpinner.Value = wantedIndex
                 End If
                 tabs.SelectedIndex = 0
             End Sub)
