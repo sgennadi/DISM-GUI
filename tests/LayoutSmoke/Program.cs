@@ -128,6 +128,9 @@ internal static class LayoutSmoke
                 NoOverlap(copyLog!, clearLog!, "Copy log / Clear");
                 NoOverlap(clearLog!, exitApp!, "Clear / Exit");
                 NoOverlap(expandLog!, copyLog!, "Expand / Copy log");
+                NoOverlap(copyLog!, logText!, "Copy log / DISM output text");
+                NoOverlap(clearLog!, logText!, "Clear / DISM output text");
+                NoOverlap(exitApp!, logText!, "Exit / DISM output text");
                 Require(logText!.Height >= 45 && copyLog!.Height >= 24,
                     $"Output textbox or toolbar clipped at {effective}");
                 Require(splitter!.Panel2.Height >= splitter.Panel2MinSize,
