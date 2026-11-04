@@ -9,6 +9,27 @@ Modernized from [mikecel79/DISMGUI](https://github.com/mikecel79/DISMGUI). Origi
 
 **Download**: [Actions -> latest successful build -> Artifacts](https://github.com/sgennadi/DISM-GUI/actions/workflows/build.yml). Each archive contains a portable self-contained application.
 
+## Driver Studio — Smart Driver Detection
+
+Driver Studio scans a folder or individual driver INF files, optionally
+recursing through subfolders. It extracts the DriverVer date/version, INF
+name, manufacturer, class, selected hardware IDs and source-INF SHA-256.
+
+To check whether the *same version* is already present, first mount the
+chosen WIM index using **Mount & Inspect**. Then choose **Compare with
+mounted index** in Driver Studio. The tool verifies that the WIM file,
+index, and mount directory match and queries structured
+`Get-WindowsDriver -Path <mount-folder> -All` metadata. If the index is
+not mounted, every unverified candidate is labeled **Not checked**.
+
+**Same version** means the same INF name, provider, class, version and
+date; this does not guarantee identical signed driver files. Driver Studio
+flags per-model DriverVer directives and version/date ranking conflicts as
+**Review**. The checkboxes are part of a *read-only comparison plan* —
+**no drivers are installed** by this screen yet. The legacy Drivers
+section's Add drivers button still imports the **entire folder**, so do
+not rely on it to honor Driver Studio's skip checkboxes.
+
 ## WIM 360 — Image Studio
 
 Select **WIM 360** at the top of the left navigation. Choose a `.wim` or
