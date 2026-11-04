@@ -13,7 +13,7 @@ Public NotInheritable Class Wim360Dashboard
     Private ReadOnly mountPath As Func(Of String)
     Private ReadOnly useInMount As Action(Of String, Integer)
     Private ReadOnly canvas As Panel
-    Private ReadOnly layout As TableLayoutPanel
+    Private ReadOnly dashboardLayout As TableLayoutPanel
     Private ReadOnly fileBox As TextBox
     Private ReadOnly browse As Button
     Private ReadOnly scan As Button
@@ -49,21 +49,21 @@ Public NotInheritable Class Wim360Dashboard
                                  .BackColor = Color.White}
         Controls.Add(canvas)
 
-        layout = New TableLayoutPanel With {
+        dashboardLayout = New TableLayoutPanel With {
             .Name = "Wim360Layout",
             .ColumnCount = 1, .RowCount = 7,
             .Dock = DockStyle.Top, .Height = 655, .Width = 710,
             .BackColor = Color.White,
             .Margin = Padding.Empty, .Padding = New Padding(17, 13, 17, 18)
         }
-        layout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+        dashboardLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         For Each height As Integer In {53, 57, 72, 27, 205, 145, 63}
-            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, height))
+            dashboardLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, height))
         Next
-        canvas.Controls.Add(layout)
+        canvas.Controls.Add(dashboardLayout)
         AddHandler canvas.ClientSizeChanged, Sub(sender, e)
             Dim newWidth = Math.Max(410, canvas.ClientSize.Width - 1)
-            If layout.Width <> newWidth Then layout.Width = newWidth
+            If dashboardLayout.Width <> newWidth Then dashboardLayout.Width = newWidth
         End Sub
 
         Dim header As New TableLayoutPanel With {
@@ -73,7 +73,7 @@ Public NotInheritable Class Wim360Dashboard
         header.RowStyles.Add(New RowStyle(SizeType.Percent, 55))
         header.RowStyles.Add(New RowStyle(SizeType.Percent, 45))
         header.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        layout.Controls.Add(header, 0, 0)
+        dashboardLayout.Controls.Add(header, 0, 0)
         header.Controls.Add(MakeText("WIM 360  |  IMAGE DASHBOARD",
                                     13, True, ModernTheme.TextInk), 0, 0)
         header.Controls.Add(MakeText("Read-only preview  •  No mounting or changes",
@@ -87,7 +87,7 @@ Public NotInheritable Class Wim360Dashboard
         pathRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         pathRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 142))
         pathRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 113))
-        layout.Controls.Add(pathRow, 0, 1)
+        dashboardLayout.Controls.Add(pathRow, 0, 1)
 
         fileBox = New TextBox With {
             .Name = "txt360Path", .Dock = DockStyle.Fill,
@@ -125,7 +125,7 @@ Public NotInheritable Class Wim360Dashboard
         For i As Integer = 1 To 3
             metrics.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, CSng(100.0 / 3.0)))
         Next
-        layout.Controls.Add(metrics, 0, 2)
+        dashboardLayout.Controls.Add(metrics, 0, 2)
         imageCount = AddMetric(metrics, 0, "INDEXES", "—")
         fileSize = AddMetric(metrics, 1, "FILE SIZE", "—")
         mounts = AddMetric(metrics, 2, "MOUNT STATUS", "Not checked")
@@ -134,7 +134,7 @@ Public NotInheritable Class Wim360Dashboard
                           9.5F, False, ModernTheme.Muted)
         status.Name = "lbl360Status"
         status.Margin = New Padding(0, 1, 0, 2)
-        layout.Controls.Add(status, 0, 3)
+        dashboardLayout.Controls.Add(status, 0, 3)
 
         indexTable = New DataGridView With {
             .Name = "grid360Indexes",
@@ -168,7 +168,7 @@ Public NotInheritable Class Wim360Dashboard
         indexTable.Columns(2).FillWeight = 90
         indexTable.Columns(3).FillWeight = 145
         AddHandler indexTable.SelectionChanged, AddressOf IndexSelectionChanged
-        layout.Controls.Add(indexTable, 0, 4)
+        dashboardLayout.Controls.Add(indexTable, 0, 4)
 
         Dim info As New TableLayoutPanel With {
             .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 2,
@@ -177,7 +177,7 @@ Public NotInheritable Class Wim360Dashboard
         info.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         info.RowStyles.Add(New RowStyle(SizeType.Absolute, 29))
         info.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        layout.Controls.Add(info, 0, 5)
+        dashboardLayout.Controls.Add(info, 0, 5)
         info.Controls.Add(MakeText("SELECTED INDEX  |  METADATA",
                                   9.5F, True, ModernTheme.Blue), 0, 0)
 
@@ -203,7 +203,7 @@ Public NotInheritable Class Wim360Dashboard
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 210))
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 155))
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        layout.Controls.Add(actions, 0, 6)
+        dashboardLayout.Controls.Add(actions, 0, 6)
 
         useSelected = New Button With {
             .Name = "btn360UseInMount", .Text = "Use index in Mount",
@@ -264,13 +264,24 @@ Public NotInheritable Class Wim360Dashboard
     End Function
 
     Public Sub ActivateFromMount()
-        ' Treat the current Mount path as an initial suggestion only.
-        ' Returning to this workspace must not overwrite a WIM selected here.
-        If Not String.IsNullOrWhiteSpace(fileBox.Text) Then Return
-        Dim selectedPath = mountPath()
-        If Not String.IsNullOrWhiteSpace(selectedPath) Then
-            fileBox.Text = selectedPath.Trim()
-            StartScan()
+        ' Treat the current Mount path as a suggestion only. Never override the
+        ' user's WIM 360 choice when returning to the dashboard.
+        If String.IsNullOrWhiteSpace(fileBox.Text) Then
+            Dim suggestedPath = mountPath()
+            If Not String.IsNullOrWhiteSpace(suggestedPath) Then
+                fileBox.Text = suggestedPath.Trim()
+                StartScan()
+                Return
+            End If
+        End If
+
+        ' WinForms DataGridView may clear selection while its TabPage is hidden.
+        ' Re-evaluate the usable index after the page becomes visible.
+        If report IsNot Nothing AndAlso indexTable.Rows.Count > 0 Then
+            If indexTable.SelectedRows.Count = 0 Then
+                indexTable.Rows(0).Selected = True
+            End If
+            UpdateSelection()
         End If
     End Sub
 
@@ -381,10 +392,20 @@ Public NotInheritable Class Wim360Dashboard
     End Sub
 
     Private Function SelectedImage() As Wim360Reader.ImageInfo
-        If report Is Nothing OrElse indexTable.SelectedRows.Count = 0 Then Return Nothing
-        Dim row = indexTable.SelectedRows(0)
+        If report Is Nothing OrElse indexTable.Rows.Count = 0 Then Return Nothing
+        ' The selected row is authoritative; CurrentRow (and then the first
+        ' displayed image) keeps the action available across tab activation.
+        Dim selectedRow As DataGridViewRow = Nothing
+        If indexTable.SelectedRows.Count > 0 Then
+            selectedRow = indexTable.SelectedRows(0)
+        ElseIf indexTable.CurrentRow IsNot Nothing Then
+            selectedRow = indexTable.CurrentRow
+        Else
+            selectedRow = indexTable.Rows(0)
+        End If
         Dim wanted As Integer = 0
-        If Not Integer.TryParse(Convert.ToString(row.Cells(0).Value), wanted) Then Return Nothing
+        If Not Integer.TryParse(Convert.ToString(selectedRow.Cells(0).Value),
+                                wanted) Then Return Nothing
         Return report.Images.FirstOrDefault(Function(x) x.Index = wanted)
     End Function
 
