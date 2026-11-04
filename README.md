@@ -1,22 +1,33 @@
-# DISM GUI — VS 2026 Modernized
+# DISM GUI - Visual Studio 2026 / .NET 10
 
-Based on https://github.com/mikecel79/DISMGUI with original author credit.
+Modernized from [mikecel79/DISMGUI](https://github.com/mikecel79/DISMGUI). Original author credited.
 
-## Build
-Visual Studio 2026; .NET 10 Windows WinForms; VB.NET. Targets: win-x86, win-x64, win-arm64.
+## Builds
+- Windows x64: `DISMGUI-VS2026-win-x64.zip`
+- Windows ARM64: `DISMGUI-VS2026-win-arm64.zip`
+- Windows x86: `DISMGUI-VS2026-win-x86.zip`
 
-GitHub Actions downloads upstream source, applies modern-dialog fixes, and publishes portable architecture-specific ZIP artifacts. Upstream is not modified.
+**Download**: [Actions -> latest successful build -> Artifacts](https://github.com/sgennadi/DISM-GUI/actions/workflows/build.yml). Each archive contains a portable self-contained application.
 
-## Improvements
-- Modern Windows folder picker, owned by main window.
-- Remember separate recent WIM/mount/driver/capture/apply paths.
-- Commit / Discard / Cancel on UI thread.
-- Owned foreground success/failure message after unmount.
+## Changes
+- Modern Windows dialog for selecting mount, apply, driver, package and capture folders; matching file picker for WIM images.
+- Last used paths stored per category in `HKCU\Software\DISMGUI\RecentPaths`.
+- Cancel selection preserves previous path; mount and apply destinations require empty directories.
+- Commit / Discard / Cancel on the main UI thread.
+- Foreground, main-window-owned unmount notification on success or failure; includes error code.
+- Capture DISM stdout and stderr without hanging on full pipes.
 
-## Local build
-Run PowerShell: ./Build.ps1 -Runtime win-x64 (requires .NET 10 SDK and Python 3).
+## Local Visual Studio 2026
+Requires .NET 10 SDK and Python 3 on Windows.
 
-Test using disposable WIM copies. Native ARM64 hardware testing requires Windows ARM64.
+1. Clone this repository.
+2. Run `python tools/prepare_source.py` once to download the pinned upstream VB.NET source, apply the UI fixes and update the project to .NET 10.
+3. Open `DISM GUI/DISM GUI.vbproj` in Visual Studio 2026.
+4. Build in Visual Studio or publish via PowerShell: `./Build.ps1 -Runtime all`.
 
-## Attribution
-Original project: mikecel79/DISMGUI. Verify upstream license terms before redistributing binary releases.
+The source is downloaded from a **pinned upstream revision** at preparation time, rather than copied into this repository. GitHub Actions automatically performs preparation and publishes x86/x64/ARM64 portable ZIP artifacts.
+
+## Test safely
+CI tests compilation, not real WIM operations. Test with disposable WIM copies first. ARM64 runtime testing requires a Windows ARM64 machine.
+
+**Attribution and redistribution:** Upstream license terms are not clearly stated. Verify redistribution rights before publishing modified binaries.
