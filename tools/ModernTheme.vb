@@ -509,7 +509,7 @@ Public NotInheritable Class ModernTheme
         Dim studioPageIndex = tabs.TabPages.Count - 1
 
         Dim wimNav As New Button With {
-            .Name = "navWim360", .Text = "  WIM 360   |   Image Studio",
+            .Name = "navWim360", .Text = "  WIM 360",
             .Size = New Size(211, 45), .Margin = New Padding(2, 0, 2, 13),
             .FlatStyle = FlatStyle.Flat,
             .TextAlign = ContentAlignment.MiddleLeft,
@@ -522,7 +522,7 @@ Public NotInheritable Class ModernTheme
         side.Controls.Add(wimNav)
 
         Dim studioNav As New Button With {
-            .Name = "navDriverStudio", .Text = "  Driver Studio   |   Smart Detection",
+            .Name = "navDriverStudio", .Text = "  Driver Studio",
             .Size = New Size(211, 45), .Margin = New Padding(2, 0, 2, 14),
             .FlatStyle = FlatStyle.Flat, .TextAlign = ContentAlignment.MiddleLeft,
             .Font = UiFont(9.7F, True), .BackColor = Color.White,
@@ -573,7 +573,7 @@ Public NotInheritable Class ModernTheme
             Dim index As Integer = i
             Dim navBtn As New Button With {
                 .Name = "nav" & i.ToString(), .Text = "  " & (i + 1).ToString("00") &
-                   "    " & sectionNames(Math.Min(i, sectionNames.Length - 1)),
+                   "    " & sectionNames(Math.Min(i, sectionNames.Length - 1)).Replace("&", "&&"),
                 .Size = New Size(211, 43), .Margin = New Padding(2, 1, 2, 6),
                 .FlatStyle = FlatStyle.Flat, .TextAlign = ContentAlignment.MiddleLeft,
                 .Font = UiFont(10, True), .ForeColor = TextInk, .BackColor = Color.White,

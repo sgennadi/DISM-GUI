@@ -126,6 +126,7 @@ Public NotInheritable Class DriverStudioEngine
             End Using
         End Using
         Dim section As String = ""
+        Dim hasPerModelDriverVer As Boolean = False
         Dim ids As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
         For Each raw As String In infText.Split({vbCrLf, vbLf},
                                                StringSplitOptions.None)
@@ -143,6 +144,10 @@ Public NotInheritable Class DriverStudioEngine
             If equalPosition > 0 Then
                 Dim key = line.Substring(0, equalPosition).Trim()
                 Dim value = line.Substring(equalPosition + 1).Trim()
+                If key.Equals("DriverVer", StringComparison.OrdinalIgnoreCase) AndAlso
+                   Not section.Equals("Version", StringComparison.OrdinalIgnoreCase) Then
+                    hasPerModelDriverVer = True
+                End If
                 If section.Equals("Version", StringComparison.OrdinalIgnoreCase) Then
                     versionEntries(key) = value
                 ElseIf section.Equals("Strings", StringComparison.OrdinalIgnoreCase) OrElse
@@ -182,6 +187,8 @@ Public NotInheritable Class DriverStudioEngine
             End If
         End If
         Dim errors As New List(Of String)()
+        If hasPerModelDriverVer Then errors.Add(
+            "INF has model-specific DriverVer directives; review device version")
         If item.Provider.Length = 0 Then errors.Add("Provider missing")
         If item.ClassName.Length = 0 Then errors.Add("Class missing")
         If item.Version.Length = 0 Then errors.Add("DriverVer version missing")
@@ -257,9 +264,19 @@ Public NotInheritable Class DriverStudioEngine
         End If
         Dim difference = cVersion.CompareTo(eVersion)
         If difference > 0 Then
-            d.Status = "Newer"
-            d.Selected = True
-            d.Detail = "Incoming version is newer. Windows may still choose another package based on ranking."
+            Dim sourceDate = DateForComparison(candidate.DriverDate)
+            Dim imageDate = DateForComparison(existing.DriverDate)
+            If sourceDate.HasValue AndAlso imageDate.HasValue AndAlso
+               sourceDate.Value < imageDate.Value Then
+                d.Status = "Review"
+                d.Detail = "Incoming version is higher, but its DriverVer date is older. " &
+                           "Windows driver ranking may still prefer the installed package."
+            Else
+                d.Status = "Newer"
+                d.Selected = True
+                d.Detail = "Incoming version is newer. Windows may still choose " &
+                           "another package based on driver ranking."
+            End If
         ElseIf difference < 0 Then
             d.Status = "Older"
             d.Detail = "Installed version is newer. Older package is not selected automatically."
@@ -329,7 +346,8 @@ Public NotInheritable Class DriverStudioEngine
                             Else
                                 d.Status = "New"
                                 d.Selected = True
-                                d.Detail = "No package with the same INF/provider/class identity found in this mounted index."
+                                d.Detail = "No matching INF/provider/class package found. " &
+                                           "Different-INF Hardware ID conflicts cannot be ruled out."
                             End If
                         End If
                     End If
@@ -349,7 +367,8 @@ Public NotInheritable Class DriverStudioEngine
             ""
         }
         For Each d In items
-            rows.Add(d.Status & " | " & d.Candidate.InfName & " | incoming " &
+            rows.Add(If(d.Selected, "[selected] ", "[skip/review] ") &
+                     d.Status & " | " & d.Candidate.InfName & " | incoming " &
                      d.Candidate.Version & " | installed " & d.InstalledVersion &
                      " | provider " & d.Candidate.Provider)
             rows.Add("  " & d.Detail)

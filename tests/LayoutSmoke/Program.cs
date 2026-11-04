@@ -388,6 +388,14 @@ internal static class LayoutSmoke
                 new[] { newer }, inventory, true);
             Require(comparisonNewer[0].Status == "Newer" && comparisonNewer[0].Selected,
                     "Newer driver should be selected by default");
+            var newerWithOlderDate = new DriverStudioEngine.DriverPackage {
+                InfName=source.InfName, FilePath=source.FilePath,
+                Provider=source.Provider, ClassName=source.ClassName,
+                Version="2.5.0.0", DriverDate="10/01/2026" };
+            var ranked = DriverStudioEngine.CompareCandidates(
+                new[] { newerWithOlderDate }, inventory, true);
+            Require(ranked[0].Status == "Review" && !ranked[0].Selected,
+                    "A newer version with older DriverVer date requires review");
             var older = new DriverStudioEngine.DriverPackage {
                 InfName=source.InfName, FilePath=source.FilePath,
                 Provider=source.Provider, ClassName=source.ClassName,
@@ -521,6 +529,11 @@ internal static class LayoutSmoke
                     "Driver Studio preview must show existing driver version not pre-selected");
             Require(((Button)Find(studioPanel, "btnStudioCopyPlan")!).Enabled,
                     "Driver Studio preview should offer Copy comparison");
+            var visibleScan = (Button)Find(studioPanel, "btnStudioScan")!;
+            var visibleCompare = (Button)Find(studioPanel, "btnStudioCompare")!;
+            Require(visibleScan.Width >= 85 && visibleCompare.Width >= 130 &&
+                    studioGrid.Height >= 145,
+                    "Driver Studio must have readable scan buttons and comparison grid");
             Snapshot(form, "DISM-GUI-Driver-Studio");
             tabs.SelectedIndex = 0;
             Application.DoEvents();

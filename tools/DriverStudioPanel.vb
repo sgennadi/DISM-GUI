@@ -63,12 +63,13 @@ Public NotInheritable Class DriverStudioPanel
         rootLayout = New TableLayoutPanel With {
             .Name = "DriverStudioLayout",
             .ColumnCount = 1, .RowCount = 8, .Dock = DockStyle.Top,
-            .Width = 660, .Height = 760,
+            .Width = 660, .Height = 710,
             .BackColor = Color.White, .Margin = Padding.Empty,
             .Padding = New Padding(15, 12, 15, 18)
         }
         rootLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        For Each h As Integer In {59, 68, 50, 80, 38, 270, 130, 65}
+        ' Show the driver decision grid earlier in short windows.
+        For Each h As Integer In {53, 54, 40, 32, 235, 66, 135, 65}
             rootLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, h))
         Next
         viewport.Controls.Add(rootLayout)
@@ -169,7 +170,7 @@ Public NotInheritable Class DriverStudioPanel
         For i As Integer = 1 To 3
             metrics.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, CSng(100.0 / 3.0)))
         Next
-        rootLayout.Controls.Add(metrics, 0, 3)
+        rootLayout.Controls.Add(metrics, 0, 5)
         totalMetric = AddMetric(metrics, 0, "SOURCE PACKAGES")
         newMetric = AddMetric(metrics, 1, "NEW / NEWER")
         sameMetric = AddMetric(metrics, 2, "SAME VERSION")
@@ -181,7 +182,7 @@ Public NotInheritable Class DriverStudioPanel
         textStatus.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         textStatus.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
         textStatus.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
-        rootLayout.Controls.Add(textStatus, 0, 4)
+        rootLayout.Controls.Add(textStatus, 0, 3)
         targetLabel = WriteLabel("Target WIM index: not selected",
                                  8.9F, False, ModernTheme.Muted)
         targetLabel.Name = "lblStudioTarget"
@@ -237,7 +238,7 @@ Public NotInheritable Class DriverStudioPanel
                 decisions(e.RowIndex).Selected = TypeOf value Is Boolean AndAlso CBool(value)
             End If
         End Sub
-        rootLayout.Controls.Add(grid, 0, 5)
+        rootLayout.Controls.Add(grid, 0, 4)
 
         Dim detailsLayout As New TableLayoutPanel With {
             .Dock = DockStyle.Fill, .RowCount = 2, .ColumnCount = 1,
