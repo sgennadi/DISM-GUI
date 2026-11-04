@@ -1,7 +1,8 @@
-# DISM GUI v4.2.1
+# DISM GUI v4.2.2
 
 Windows Image Toolkit, modernized for .NET 10 and Visual Studio 2026.
 
+- WIM index selector: wider editable field, comfortable spacing between the index value and dropdown arrow, and removal of automatic blue text highlighting. The existing WIM File / Choose WIM / Index row is preserved.
 - Light, colorful user interface based on the Nipkg Creator visual palette, with responsive controls across all nine DISM sections.
 - High-DPI-friendly About and Update Center dialogs with full labels, native multi-resolution icon and readable fonts.
 - GitHub Releases-based update checker: **Update** for newer releases; **Reinstall** for matching version. Automatic stable-release check upon opening Update Center. Downloads verified by SHA-256.
