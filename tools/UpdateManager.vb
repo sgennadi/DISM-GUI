@@ -28,7 +28,7 @@ Public NotInheritable Class UpdateManager
 
     Shared Sub New()
         Web.Timeout = TimeSpan.FromSeconds(60)
-        Web.DefaultRequestHeaders.UserAgent.ParseAdd("DISMGUI-Modern-Updater/4.1")
+        Web.DefaultRequestHeaders.UserAgent.ParseAdd("DISMGUI-Modern-Updater/4.2.1")
         Web.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json")
     End Sub
 
