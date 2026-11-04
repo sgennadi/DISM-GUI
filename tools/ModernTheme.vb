@@ -437,6 +437,48 @@ Public NotInheritable Class ModernTheme
         navTitle.Width = 210
         side.Controls.Add(navTitle)
 
+        ' WIM 360 is a full embedded workspace. The original nine tabs retain
+        ' their indexes and handlers. Selecting an image never mounts it.
+        Dim wimPage As New TabPage("WIM 360") With {
+            .Name = "TabPageWim360", .BackColor = Color.White,
+            .UseVisualStyleBackColor = False
+        }
+        Dim wim360 = New Wim360Dashboard(
+            Function()
+                Dim source = TryCast(tabs.TabPages(0).Controls.Find(
+                    "txtWIM", True).FirstOrDefault(), TextBox)
+                Return If(source Is Nothing, "", source.Text)
+            End Function,
+            Sub(path, imageIndex)
+                Dim mountPage = tabs.TabPages(0)
+                Dim source = TryCast(mountPage.Controls.Find(
+                    "txtWIM", True).FirstOrDefault(), TextBox)
+                Dim index = TryCast(mountPage.Controls.Find(
+                    "cmbIndex", True).FirstOrDefault(), ComboBox)
+                If source IsNot Nothing Then source.Text = path
+                If index IsNot Nothing Then
+                    index.Text = imageIndex.ToString(
+                        System.Globalization.CultureInfo.InvariantCulture)
+                End If
+                tabs.SelectedIndex = 0
+            End Sub)
+        wimPage.Controls.Add(wim360)
+        tabs.TabPages.Add(wimPage)
+        Dim wimPageIndex = tabs.TabPages.Count - 1
+
+        Dim wimNav As New Button With {
+            .Name = "navWim360", .Text = "  WIM 360   |   Image Studio",
+            .Size = New Size(211, 45), .Margin = New Padding(2, 0, 2, 13),
+            .FlatStyle = FlatStyle.Flat,
+            .TextAlign = ContentAlignment.MiddleLeft,
+            .Font = UiFont(10, True), .BackColor = Color.White,
+            .ForeColor = TextInk, .Cursor = Cursors.Hand,
+            .UseVisualStyleBackColor = False
+        }
+        wimNav.FlatAppearance.BorderColor = Color.FromArgb(198, 215, 234)
+        AddHandler wimNav.Click, Sub(sender, e) tabs.SelectedIndex = wimPageIndex
+        side.Controls.Add(wimNav)
+
         Dim sectionNames As String() = {"Mount & Inspect", "Drivers", "Packages",
             "Windows Features", "Editions", "Unattend XML",
             "Applications", "Capture WIM", "Apply WIM"}
@@ -456,10 +498,15 @@ Public NotInheritable Class ModernTheme
                 b.FlatAppearance.MouseOverBackColor = If(n = index,
                        Color.FromArgb(12, 70, 180), Color.FromArgb(211, 230, 254))
             Next
-            pageHeading.Text = sectionNames(index).ToUpperInvariant()
+            Dim onWim = index = wimPageIndex
+            wimNav.BackColor = If(onWim, Blue, Color.White)
+            wimNav.ForeColor = If(onWim, Color.White, TextInk)
+            wimNav.FlatAppearance.BorderColor = If(onWim, Blue,
+                                                     Color.FromArgb(198, 215, 234))
+            pageHeading.Text = If(onWim, "WIM 360", sectionNames(Math.Min(index, 8)).ToUpperInvariant())
         End Sub
 
-        For i As Integer = 0 To tabs.TabPages.Count - 1
+        For i As Integer = 0 To sectionNames.Length - 1
             Dim index As Integer = i
             Dim navBtn As New Button With {
                 .Name = "nav" & i.ToString(), .Text = "  " & (i + 1).ToString("00") &
@@ -478,12 +525,17 @@ Public NotInheritable Class ModernTheme
             side.Controls.Add(navBtn)
         Next
         AddHandler side.SizeChanged, Sub(sender, e)
+            wimNav.Width = Math.Max(176, side.ClientSize.Width -
+                                   side.Padding.Left - side.Padding.Right - 13)
             For Each b In navButtons
                 b.Width = Math.Max(176, side.ClientSize.Width - side.Padding.Left -
                                    side.Padding.Right - 13)
             Next
         End Sub
-        AddHandler tabs.SelectedIndexChanged, Sub(sender, e) setActive(Math.Max(0, tabs.SelectedIndex))
+        AddHandler tabs.SelectedIndexChanged, Sub(sender, e)
+            setActive(Math.Max(0, tabs.SelectedIndex))
+            If tabs.SelectedIndex = wimPageIndex Then wim360.ActivateFromMount()
+        End Sub
         setActive(0)
 
         Dim content As New TableLayoutPanel With {
@@ -521,6 +573,7 @@ Public NotInheritable Class ModernTheme
         Dim tips As New ToolTip With {.AutoPopDelay = 14000, .InitialDelay = 600,
                                      .ReshowDelay = 200}
         For Each page As TabPage In tabs.TabPages
+            If page.Name = "TabPageWim360" Then Continue For
             page.BackColor = Color.White
             page.UseVisualStyleBackColor = False
             page.AutoScroll = True
