@@ -1,21 +1,21 @@
-# DISM GUI 4.2.7
+# DISM GUI 4.2.8
 
-## Release changelog inside Update Center
-- **What's new:** Update Center now displays the actual changelog from the latest stable GitHub Release directly below the version status, before the Update or Reinstall button.
-- **Scrollable release notes:** long descriptions can be read without obscuring buttons; resize the Updates window to give the changelog more space.
-- **Full changelog on GitHub:** the heading links to the exact stable release's detailed notes. Content is displayed as plain text; Markdown links and headings are made easier to read.
-- **Safe empty/offline states:** shows a clear message when a release has no notes or the GitHub API is unavailable; update installation still requires architecture-specific ZIP and SHA-256 verification.
-- **Version labels:** when the same version is installed, Reinstall remains available, and its changelog remains visible. Newer versions show Update.
+## Email Support / Contact
+- Added an **Email Support** button and a clickable **Support: sgennadi@hotmail.com** contact address in the About dialog.
+- Added **Tools > Email Support...** to the main window.
+- Launches the user's default mail client with the recipient, subject (`DISM GUI Support - 4.2.8`), installed version, process architecture, and an empty issue-description field.
+- No email is sent automatically. If no default mail client is configured, a fallback offers to copy the support email address to the clipboard.
+- Address is maintained centrally in the application to keep About and Tools consistent.
 
-## Features retained from 4.2.6
-- Responsive layout for all nine DISM image-servicing sections, including unclipped Package/Driver browse buttons.
-- Resizable DISM output with Expand/Restore and saved panel height.
-- Saved window size, position and maximized state with disconnected-monitor recovery.
-- Light-color modern interface, embedded native icon, automatic discreet Tools update notification.
-- Self-contained .NET 10 Windows x64, x86 and ARM64 builds; PDB and legacy config files excluded.
+## Existing functionality
+- Inline release notes / changelog in the Update Center; GitHub Releases updates with verified SHA-256.
+- Responsive layout for all nine DISM sections, light UI and embedded Windows executable icon.
+- Resizable DISM output with Expand/Restore and saved height.
+- Remembers main-window size and position, with off-screen recovery.
+- Portable Windows x86, x64 and ARM64 builds without legacy config and debug symbols.
 
-## Validation
-- Windows CI builds x86/x64/ARM64 and smoke-tests the Update Center changelog controls and visual layout with live WinForms screenshots.
-- Real-world DISM operations and 150%-200% DPI still require end-user Windows testing with disposable WIM copies.
+## Checks
+- Windows CI compiles all three architectures and smoke-tests About/Tools support controls and the generated mailto URL.
+- Actual default mail client handling and operations on real WIM images still need manual testing on Windows.
 
-Originally based on DISM GUI by Mike Celone (mikecel79/DISMGUI). Attribution preserved.
+Original DISM GUI by Mike Celone (mikecel79/DISMGUI). Attribution preserved.

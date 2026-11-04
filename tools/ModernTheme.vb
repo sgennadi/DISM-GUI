@@ -388,6 +388,15 @@ Public NotInheritable Class ModernTheme
         Dim updatesMenuItem As New ToolStripMenuItem("Check for updates...")
         AddHandler updatesMenuItem.Click, Sub(sender, e) UpdateManager.ShowUpdateDialog(frm)
         toolsMenu.Items.Add(New ToolStripSeparator())
+        Dim emailSupportMenu As New ToolStripMenuItem("Email Support...") With {
+            .Name = "mnuEmailSupport",
+            .ToolTipText = SupportContact.SupportEmail
+        }
+        AddHandler emailSupportMenu.Click, Sub(sender, e)
+            SupportContact.OpenSupportEmail(frm)
+        End Sub
+        toolsMenu.Items.Add(emailSupportMenu)
+        toolsMenu.Items.Add(New ToolStripSeparator())
         toolsMenu.Items.Add(updatesStatus)
         toolsMenu.Items.Add(updatesMenuItem)
 

@@ -227,6 +227,10 @@ internal static class LayoutSmoke
                     tools.ContextMenuStrip.Items.Cast<ToolStripItem>()
                          .Any(item => item.Text == "About"),
                     "Tools button must contain the original About and DISM commands");
+            Require(tools.ContextMenuStrip.Items.Cast<ToolStripItem>()
+                    .Any(item => item.Text == "Email Support..." &&
+                        item.Name == "mnuEmailSupport"),
+                    "Tools dropdown must contain Email Support");
             var splitter = Find(form, "mainOutputSplitter") as SplitContainer;
             var copyLog = Find(form, "btnCopyOutput") as Button;
             var clearLog = Find(form, "btnClearOutput") as Button;
@@ -329,6 +333,25 @@ internal static class LayoutSmoke
                 Require(aboutTitle is not null && aboutSub is not null,
                         "About heading labels missing");
                 NoOverlap(aboutTitle!, aboutSub!, "About title and subtitle");
+                var supportEmailLink = Find(about, "lnkSupportEmail") as LinkLabel;
+                var supportEmailButton = Find(about, "btnEmailSupport") as Button;
+                Require(supportEmailLink is not null && supportEmailButton is not null,
+                        "About Support email link and button must exist");
+                Require(supportEmailLink!.Text.Contains("sgennadi@hotmail.com") &&
+                        supportEmailButton!.Text == "Email Support",
+                        "About must display the intended support email address");
+                Require(supportEmailButton.Height >= 28 && supportEmailButton.Width >= 120,
+                        "Email Support button is too small or clipped");
+                var mailto = SupportContact.BuildSupportMailto();
+                var decoded = Uri.UnescapeDataString(mailto);
+                Require(mailto.StartsWith("mailto:sgennadi@hotmail.com?subject=",
+                                         StringComparison.OrdinalIgnoreCase),
+                        "Support mailto is addressed incorrectly");
+                Require(decoded.Contains("DISM GUI Support - " + appVersion) &&
+                        decoded.Contains("DISM GUI version: " + appVersion) &&
+                        decoded.Contains("Architecture: ") &&
+                        decoded.Contains("Issue description:"),
+                        "Support mailto must include subject, version, architecture, and issue prompt");
                 Snapshot(about, "DISM-GUI-About");
                 about.Hide();
             }

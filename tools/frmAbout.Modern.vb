@@ -18,8 +18,8 @@ Public NotInheritable Class frmAbout
         Me.BackColor = ModernTheme.Backdrop
         Me.Font = ModernTheme.UiFont(10)
         Me.AutoScaleMode = AutoScaleMode.Font
-        Me.ClientSize = New Size(730, 460)
-        Me.MinimumSize = New Size(700, 445)
+        Me.ClientSize = New Size(730, 490)
+        Me.MinimumSize = New Size(700, 468)
         Try
             Me.Icon = ModernTheme.MakeAppIcon()
         Catch
@@ -71,7 +71,7 @@ Public NotInheritable Class frmAbout
                                            10, False, Color.FromArgb(231, 246, 255)), 0, 1)
 
         Dim body As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 5,
+            .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 6,
             .Margin = Padding.Empty, .Padding = New Padding(18, 14, 18, 7),
             .BackColor = Color.White
         }
@@ -79,6 +79,7 @@ Public NotInheritable Class frmAbout
         body.RowStyles.Add(New RowStyle(SizeType.Absolute, 35))
         body.RowStyles.Add(New RowStyle(SizeType.Absolute, 40))
         body.RowStyles.Add(New RowStyle(SizeType.Absolute, 40))
+        body.RowStyles.Add(New RowStyle(SizeType.Absolute, 37))
         body.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         root.Controls.Add(body, 0, 1)
 
@@ -104,11 +105,25 @@ Public NotInheritable Class frmAbout
         End Sub
         body.Controls.Add(link, 0, 4)
 
+        Dim supportLink As New LinkLabel With {
+            .Name = "lnkSupportEmail",
+            .Text = "Support: " & SupportContact.SupportEmail,
+            .Dock = DockStyle.Fill, .LinkColor = ModernTheme.Blue,
+            .ActiveLinkColor = ModernTheme.Green,
+            .Font = ModernTheme.UiFont(10, True),
+            .TextAlign = ContentAlignment.MiddleLeft, .Margin = Padding.Empty
+        }
+        AddHandler supportLink.LinkClicked, Sub(sender, e)
+            SupportContact.OpenSupportEmail(Me)
+        End Sub
+        body.Controls.Add(supportLink, 0, 5)
+
         Dim footer As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 3, .RowCount = 1,
+            .Dock = DockStyle.Fill, .ColumnCount = 4, .RowCount = 1,
             .BackColor = ModernTheme.Backdrop, .Padding = New Padding(0, 11, 0, 0),
             .Margin = Padding.Empty
         }
+        footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 185))
         footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 185))
         footer.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 110))
@@ -120,13 +135,24 @@ Public NotInheritable Class frmAbout
         ModernTheme.StyleButton(updateButton, "primary")
         AddHandler updateButton.Click, Sub(sender, e) UpdateManager.ShowUpdateDialog(Me)
         footer.Controls.Add(updateButton, 0, 0)
+
+        Dim emailButton As New Button With {
+            .Name = "btnEmailSupport", .Text = "Email Support",
+            .Dock = DockStyle.Fill, .Margin = New Padding(0, 0, 12, 2)
+        }
+        ModernTheme.StyleButton(emailButton, "browse")
+        AddHandler emailButton.Click, Sub(sender, e)
+            SupportContact.OpenSupportEmail(Me)
+        End Sub
+        footer.Controls.Add(emailButton, 1, 0)
+
         Dim closeButton As New Button With {.Text = "Close",
                                             .Dock = DockStyle.Fill,
                                             .Margin = New Padding(0, 0, 0, 2)}
         ModernTheme.StyleButton(closeButton, "neutral")
         AddHandler closeButton.Click, Sub(sender, e) Me.Close()
         Me.CancelButton = closeButton
-        footer.Controls.Add(closeButton, 2, 0)
+        footer.Controls.Add(closeButton, 3, 0)
     End Sub
 
     Private Shared Function CreateLabel(caption As String, size As Single,
