@@ -31,3 +31,10 @@ The source is downloaded from a **pinned upstream revision** at preparation time
 CI tests compilation, not real WIM operations. Test with disposable WIM copies first. ARM64 runtime testing requires a Windows ARM64 machine.
 
 **Attribution and redistribution:** Upstream license terms are not clearly stated. Verify redistribution rights before publishing modified binaries.
+
+## Support
+For DISM GUI questions or bug reports, use **About → Email Support** or
+**Tools → Email Support...** in the application. The default email client
+opens a draft addressed to **[sgennadi@hotmail.com](mailto:sgennadi@hotmail.com?subject=DISM%20GUI%20Support)**,
+including the installed version and architecture. No message is sent
+automatically.
