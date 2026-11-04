@@ -238,7 +238,9 @@ Public NotInheritable Class ResponsiveForms
         Private Sub RootResized(sender As Object, e As EventArgs)
             ' At narrow window sizes stack actions *under* fields. The fields
             ' keep full width and both panes remain vertically scrollable.
-            Dim narrow = root.ClientSize.Width < 690
+            ' Keep side-by-side actions on ordinary laptop windows; stack only
+            ' when the workspace itself becomes exceptionally narrow.
+            Dim narrow = root.ClientSize.Width < 560
             If narrow AndAlso root.RowCount <> 2 Then
                 root.SuspendLayout()
                 root.ColumnStyles(1).SizeType = SizeType.Absolute
@@ -258,10 +260,16 @@ Public NotInheritable Class ResponsiveForms
                 root.RowStyles.Clear()
                 root.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
                 root.ColumnStyles(1).SizeType = SizeType.Absolute
-                root.ColumnStyles(1).Width = 210
+                root.ColumnStyles(1).Width = If(root.ClientSize.Width < 740, 180, 210)
                 rightPanel.FlowDirection = FlowDirection.TopDown
                 rightPanel.WrapContents = False
                 root.ResumeLayout(True)
+            End If
+            If Not narrow AndAlso root.RowCount = 1 Then
+                Dim wanted = If(root.ClientSize.Width < 740, 180, 210)
+                If root.ColumnStyles(1).Width <> wanted Then
+                    root.ColumnStyles(1).Width = wanted
+                End If
             End If
             LeftResized(sender, e)
             RightResized(sender, e)
