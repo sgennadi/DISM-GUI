@@ -45,6 +45,41 @@ Public NotInheritable Class UpdateManager
         End Select
     End Function
 
+    ' One read-only, non-interrupting startup check for the Tools menu.
+    ' Returns a newer stable version only if the current architecture asset and
+    ' SHA-256 digest are present. Failure/offline simply yields no notification.
+    Public Shared Async Function CheckForUpdatesAsync() As Task(Of String)
+        Try
+            Using timeout As New System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(9))
+                Using response = Await Web.GetAsync(ReleaseApi, timeout.Token)
+                    If Not response.IsSuccessStatusCode Then Return Nothing
+                    Using document = JsonDocument.Parse(Await response.Content.ReadAsStringAsync())
+                        Dim release = document.RootElement
+                        Dim tag = release.GetProperty("tag_name").GetString()
+                        If String.IsNullOrWhiteSpace(tag) Then Return Nothing
+                        Dim remote As Version = Nothing
+                        If Not Version.TryParse(tag.TrimStart("v"c, "V"c), remote) Then Return Nothing
+                        If remote <= CurrentVersion() Then Return Nothing
+                        Dim wanted = "DISMGUI-VS2026-" & CurrentArchitecture() & ".zip"
+                        For Each asset In release.GetProperty("assets").EnumerateArray()
+                            If Not String.Equals(asset.GetProperty("name").GetString(),
+                                                 wanted, StringComparison.OrdinalIgnoreCase) Then Continue For
+                            Dim digest As JsonElement
+                            If asset.TryGetProperty("digest", digest) AndAlso
+                               digest.ValueKind = JsonValueKind.String AndAlso
+                               digest.GetString().StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) Then
+                                Return remote.ToString(3)
+                            End If
+                        Next
+                    End Using
+                End Using
+            End Using
+        Catch
+            ' Network errors, rate limits and proxy failures must not block startup.
+        End Try
+        Return Nothing
+    End Function
+
     Public Shared Sub ShowUpdateDialog(owner As IWin32Window)
         Using form As New UpdateWindow()
             form.ShowDialog(owner)
