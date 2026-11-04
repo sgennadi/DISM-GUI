@@ -60,8 +60,8 @@ Public NotInheritable Class ModernTheme
             End Using
             Dim handle = bmp.GetHicon()
             Try
-                Using icon = Icon.FromHandle(handle)
-                    Return DirectCast(icon.Clone(), Icon)
+                Using appImage = Icon.FromHandle(handle)
+                    Return DirectCast(appImage.Clone(), Icon)
                 End Using
             Finally
                 DestroyIcon(handle)
