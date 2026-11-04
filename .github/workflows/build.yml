@@ -49,3 +49,67 @@ jobs:
           name: DISMGUI-VS2026-${{ matrix.rid }}
           path: artifacts/DISMGUI-VS2026-${{ matrix.rid }}.zip
           if-no-files-found: error
+
+  stable-release:
+    name: Publish verified stable release
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: Download all three portable ZIPs
+        uses: actions/download-artifact@v7
+        with:
+          pattern: DISMGUI-VS2026-*
+          path: dist
+          merge-multiple: true
+      - name: Verify release artifacts and compute SHA-256 checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '\r\n' < VERSION)"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid release version: $version" >&2
+            exit 1
+          fi
+          echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+          for rid in win-x86 win-x64 win-arm64; do
+            zip="dist/DISMGUI-VS2026-$rid.zip"
+            test -s "$zip"
+            unzip -Z1 "$zip" | grep -Fxq 'DISM GUI.exe'
+            if unzip -Z1 "$zip" | grep -Ei '\.pdb$|DISM GUI\.(dll|exe)\.config$'; then
+              echo "Unexpected debug symbols or legacy config in $zip" >&2
+              exit 1
+            fi
+          done
+          (cd dist && sha256sum DISMGUI-VS2026-*.zip > SHA256SUMS.txt)
+          cat dist/SHA256SUMS.txt
+      - name: Check if this version is already published
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "v${RELEASE_VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Release v${RELEASE_VERSION} already exists; leaving its assets unchanged."
+            echo "SKIP_RELEASE=true" >> "$GITHUB_ENV"
+          fi
+      - name: Publish stable release with x86, x64 and ARM64 files
+        if: env.SKIP_RELEASE != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "v${RELEASE_VERSION}" \
+            dist/DISMGUI-VS2026-win-x86.zip \
+            dist/DISMGUI-VS2026-win-x64.zip \
+            dist/DISMGUI-VS2026-win-arm64.zip \
+            dist/SHA256SUMS.txt \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
+            --title "DISM GUI v${RELEASE_VERSION}" \
+            --notes-file RELEASE_NOTES.md \
+            --latest
