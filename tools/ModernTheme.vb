@@ -10,16 +10,16 @@ Public NotInheritable Class ModernTheme
     Private Sub New()
     End Sub
 
-    Public Shared ReadOnly Navy As Color = Color.FromArgb(16, 26, 55)
-    Public Shared ReadOnly Navy2 As Color = Color.FromArgb(35, 53, 103)
-    Public Shared ReadOnly Backdrop As Color = Color.FromArgb(243, 247, 253)
-    Public Shared ReadOnly TextInk As Color = Color.FromArgb(38, 55, 82)
-    Public Shared ReadOnly Muted As Color = Color.FromArgb(103, 120, 144)
-    Public Shared ReadOnly Blue As Color = Color.FromArgb(45, 110, 235)
-    Public Shared ReadOnly Cyan As Color = Color.FromArgb(23, 182, 202)
+    Public Shared ReadOnly Navy As Color = Color.FromArgb(11, 46, 90)
+    Public Shared ReadOnly Navy2 As Color = Color.FromArgb(14, 106, 230)
+    Public Shared ReadOnly Backdrop As Color = Color.FromArgb(244, 247, 253)
+    Public Shared ReadOnly TextInk As Color = Color.FromArgb(20, 39, 68)
+    Public Shared ReadOnly Muted As Color = Color.FromArgb(94, 112, 142)
+    Public Shared ReadOnly Blue As Color = Color.FromArgb(14, 106, 230)
+    Public Shared ReadOnly Cyan As Color = Color.FromArgb(30, 194, 255)
     Public Shared ReadOnly Purple As Color = Color.FromArgb(125, 92, 224)
-    Public Shared ReadOnly Green As Color = Color.FromArgb(19, 162, 122)
-    Public Shared ReadOnly Red As Color = Color.FromArgb(228, 77, 105)
+    Public Shared ReadOnly Green As Color = Color.FromArgb(16, 170, 93)
+    Public Shared ReadOnly Red As Color = Color.FromArgb(211, 70, 91)
 
     Public Shared Function UiFont(size As Single, Optional bold As Boolean = False) As Font
         Return New Font("Segoe UI", size, If(bold, FontStyle.Bold, FontStyle.Regular), GraphicsUnit.Point)
@@ -101,18 +101,20 @@ Public NotInheritable Class ModernTheme
                 role = "neutral"
             End If
         End If
-        Dim bg As Color = If(role = "primary", Blue,
+        Dim bg As Color = If(role = "primary", Green,
                              If(role = "danger", Red,
-                                If(role = "browse", Color.FromArgb(215, 237, 252),
-                                   Color.FromArgb(225, 233, 247))))
+                                If(role = "browse", Color.FromArgb(226, 239, 255),
+                                   Color.White)))
         button.UseVisualStyleBackColor = False
         button.FlatStyle = FlatStyle.Flat
-        button.FlatAppearance.BorderSize = 0
+        button.FlatAppearance.BorderSize = 1
+        button.FlatAppearance.BorderColor = If(role = "primary" OrElse role = "danger", bg,
+                                                Color.FromArgb(211, 225, 243))
         button.FlatAppearance.MouseOverBackColor = ControlPaint.Light(bg, 0.12F)
         button.FlatAppearance.MouseDownBackColor = ControlPaint.Dark(bg, 0.1F)
         button.BackColor = bg
         button.ForeColor = If(role = "primary" OrElse role = "danger", Color.White, TextInk)
-        button.Font = UiFont(8.5F, True)
+        button.Font = UiFont(9.8F, True)
         button.Cursor = Cursors.Hand
         button.AutoEllipsis = True
         AddHandler button.SizeChanged, Sub(sender, e)
@@ -144,23 +146,23 @@ Public NotInheritable Class ModernTheme
             ElseIf TypeOf c Is TextBox Then
                 c.ForeColor = TextInk
                 c.BackColor = Color.White
-                c.Font = UiFont(9)
+                c.Font = UiFont(10)
                 DirectCast(c, TextBox).BorderStyle = BorderStyle.FixedSingle
             ElseIf TypeOf c Is ComboBox Then
                 c.ForeColor = TextInk
                 c.BackColor = Color.White
-                c.Font = UiFont(9)
+                c.Font = UiFont(10)
                 DirectCast(c, ComboBox).FlatStyle = FlatStyle.Flat
             ElseIf TypeOf c Is Label Then
                 c.ForeColor = Muted
-                c.Font = UiFont(9)
+                c.Font = UiFont(9.7F)
             ElseIf TypeOf c Is CheckBox Then
                 c.ForeColor = TextInk
-                c.Font = UiFont(9)
+                c.Font = UiFont(9.7F)
             ElseIf TypeOf c Is GroupBox Then
                 c.BackColor = Color.White
                 c.ForeColor = TextInk
-                c.Font = UiFont(9, True)
+                c.Font = UiFont(9.8F, True)
             End If
             If c.HasChildren Then StyleControls(c, tips)
         Next
@@ -174,10 +176,11 @@ Public NotInheritable Class ModernTheme
     Public Shared Sub ApplyMain(frm As Form, tabs As TabControl, output As TextBox,
                                 menu As MenuStrip, exitButton As Button, outputLabel As Label)
         frm.SuspendLayout()
-        frm.Font = UiFont(9)
+        frm.Font = UiFont(10)
+        frm.AutoScaleMode = AutoScaleMode.Font
         frm.BackColor = Backdrop
         frm.StartPosition = FormStartPosition.CenterScreen
-        frm.MinimumSize = New Size(760, 590)
+        frm.MinimumSize = New Size(850, 585)
         frm.Text = "DISM GUI  •  Modern Edition"
         Try
             frm.Icon = MakeAppIcon()
@@ -185,8 +188,8 @@ Public NotInheritable Class ModernTheme
             ' Icon drawing never blocks operation.
         End Try
         Dim workArea = Screen.FromControl(frm).WorkingArea
-        frm.ClientSize = New Size(Math.Max(720, Math.Min(1190, workArea.Width - 48)),
-                                  Math.Max(550, Math.Min(800, workArea.Height - 70)))
+        frm.ClientSize = New Size(Math.Max(800, Math.Min(1260, workArea.Width - 56)),
+                                  Math.Max(545, Math.Min(790, workArea.Height - 68)))
 
         frm.Controls.Remove(tabs)
         frm.Controls.Remove(output)
@@ -199,55 +202,61 @@ Public NotInheritable Class ModernTheme
             .RowCount = 3, .ColumnCount = 1, .BackColor = Backdrop
         }
         root.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        root.RowStyles.Add(New RowStyle(SizeType.Absolute, 88))
+        root.RowStyles.Add(New RowStyle(SizeType.Absolute, 102))
         root.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        root.RowStyles.Add(New RowStyle(SizeType.Absolute, 198))
+        root.RowStyles.Add(New RowStyle(SizeType.Absolute, 172))
         frm.Controls.Add(root)
 
         Dim hero As New Panel With {.Dock = DockStyle.Fill, .Margin = Padding.Empty}
         AddHandler hero.Paint, Sub(sender, e)
             If hero.Width < 1 OrElse hero.Height < 1 Then Return
-            Using gradient As New LinearGradientBrush(hero.ClientRectangle, Navy, Navy2,
+            Using gradient As New LinearGradientBrush(hero.ClientRectangle,
+                                                        Color.FromArgb(20, 93, 190), Color.FromArgb(21, 168, 228),
                                                         LinearGradientMode.Horizontal)
                 e.Graphics.FillRectangle(gradient, hero.ClientRectangle)
             End Using
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias
-            Using brush As New SolidBrush(Color.FromArgb(25, 77, 199, 238))
+            Using brush As New SolidBrush(Color.FromArgb(34, 161, 246, 243))
                 e.Graphics.FillEllipse(brush, hero.Width - 290, -128, 330, 260)
             End Using
             Using brush As New SolidBrush(Cyan)
                 e.Graphics.FillRectangle(brush, 0, hero.Height - 4, 130, 4)
             End Using
-            Using brush As New SolidBrush(Purple)
+            Using brush As New SolidBrush(Green)
                 e.Graphics.FillRectangle(brush, 130, hero.Height - 4, 92, 4)
             End Using
         End Sub
         root.Controls.Add(hero, 0, 0)
 
-        Dim mark As New Label With {
-            .Text = "D", .Font = UiFont(27, True), .ForeColor = Cyan,
-            .BackColor = Color.Transparent, .Location = New Point(23, 14),
-            .Size = New Size(52, 57), .TextAlign = ContentAlignment.MiddleCenter
+        Dim mark As New PictureBox With {
+            .Location = New Point(24, 20), .Size = New Size(57, 57),
+            .SizeMode = PictureBoxSizeMode.StretchImage, .BackColor = Color.Transparent
         }
+        Try
+            Using appMark As Icon = MakeAppIcon()
+                mark.Image = appMark.ToBitmap()
+            End Using
+        Catch
+        End Try
         hero.Controls.Add(mark)
-        Dim title = TextLabel("DISM GUI", UiFont(21, True), Color.White)
-        title.Location = New Point(83, 12)
-        title.Size = New Size(315, 41)
+        Dim title = TextLabel("DISM GUI", UiFont(24, True), Color.White)
+        title.Location = New Point(93, 15)
+        title.Size = New Size(320, 43)
         hero.Controls.Add(title)
-        Dim subtitle = TextLabel("WINDOWS IMAGE TOOLKIT  /  VS 2026",
-                                 UiFont(9), Color.FromArgb(175, 217, 247))
-        subtitle.Location = New Point(85, 54)
-        subtitle.Size = New Size(450, 24)
+        Dim subtitle = TextLabel("WINDOWS IMAGE TOOLKIT", UiFont(10),
+                                 Color.FromArgb(230, 245, 255))
+        subtitle.Location = New Point(95, 61)
+        subtitle.Size = New Size(395, 28)
         hero.Controls.Add(subtitle)
 
         menu.Dock = DockStyle.None
         menu.AutoSize = False
-        menu.BackColor = Navy2
+        menu.BackColor = Color.FromArgb(23, 112, 214)
         menu.ForeColor = Color.White
-        menu.Font = UiFont(9, True)
+        menu.Font = UiFont(10, True)
         menu.Padding = New Padding(7, 8, 4, 0)
-        menu.Size = New Size(224, 39)
-        menu.Location = New Point(hero.Width - menu.Width - 16, 24)
+        menu.Size = New Size(254, 43)
+        menu.Location = New Point(hero.Width - menu.Width - 20, 26)
         menu.Anchor = AnchorStyles.Top Or AnchorStyles.Right
         For Each item As ToolStripItem In menu.Items
             item.ForeColor = Color.White
@@ -258,6 +267,10 @@ Public NotInheritable Class ModernTheme
             End If
         Next
         hero.Controls.Add(menu)
+        AddHandler hero.SizeChanged, Sub(sender, e)
+            subtitle.Width = Math.Max(80, hero.ClientSize.Width - menu.Width - subtitle.Left - 18)
+            title.Width = Math.Max(80, hero.ClientSize.Width - menu.Width - title.Left - 18)
+        End Sub
         Dim updateMenu As New ToolStripMenuItem("Check for Updates...")
         AddHandler updateMenu.Click, Sub(sender, e) UpdateManager.ShowUpdateDialog(frm)
         menu.Items.Add(updateMenu)
@@ -267,39 +280,41 @@ Public NotInheritable Class ModernTheme
             .RowCount = 1, .BackColor = Backdrop
         }
         workspace.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        workspace.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 211))
+        workspace.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 242))
         workspace.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         root.Controls.Add(workspace, 0, 1)
 
         Dim side As New FlowLayoutPanel With {
             .Dock = DockStyle.Fill, .AutoScroll = True,
             .FlowDirection = FlowDirection.TopDown, .WrapContents = False,
-            .Padding = New Padding(8, 15, 7, 12), .Margin = Padding.Empty,
-            .BackColor = Navy
+            .Padding = New Padding(11, 17, 9, 14), .Margin = Padding.Empty,
+            .BackColor = Color.FromArgb(226, 239, 255)
         }
         workspace.Controls.Add(side, 0, 0)
-        Dim navTitle = TextLabel("  WORKSPACES", UiFont(8.5F, True),
-                                 Color.FromArgb(143, 168, 204))
-        navTitle.Height = 36
-        navTitle.Width = 180
+        Dim navTitle = TextLabel("  WORKSPACES", UiFont(10, True),
+                                 Color.FromArgb(12, 70, 180))
+        navTitle.Height = 42
+        navTitle.Width = 210
         side.Controls.Add(navTitle)
 
         Dim sectionNames As String() = {"Mount & Inspect", "Drivers", "Packages",
             "Windows Features", "Editions", "Unattend XML",
             "Applications", "Capture WIM", "Apply WIM"}
-        Dim sectionColors As Color() = {Cyan, Blue, Purple, Green, Color.Orange,
-                                       Purple, Cyan, Green, Red}
+        Dim sectionColors As Color() = {Blue, Green, Blue, Green, Blue,
+                                       Green, Blue, Green, Blue}
         Dim navButtons As New List(Of Button)()
-        Dim pageHeading = TextLabel(sectionNames(0).ToUpperInvariant(), UiFont(10.0F, True), TextInk)
+        Dim pageHeading = TextLabel(sectionNames(0).ToUpperInvariant(), UiFont(12.0F, True), TextInk)
         pageHeading.Dock = DockStyle.Fill
         pageHeading.TextAlign = ContentAlignment.MiddleLeft
         Dim setActive As Action(Of Integer) = Sub(index)
             For n As Integer = 0 To navButtons.Count - 1
                 Dim b = navButtons(n)
-                b.BackColor = If(n = index, Navy2, Navy)
-                b.ForeColor = If(n = index, Color.White, Color.FromArgb(196, 211, 234))
-                b.FlatAppearance.BorderSize = If(n = index, 1, 0)
-                b.FlatAppearance.BorderColor = sectionColors(n Mod sectionColors.Length)
+                b.BackColor = If(n = index, Blue, Color.White)
+                b.ForeColor = If(n = index, Color.White, TextInk)
+                b.FlatAppearance.BorderSize = 1
+                b.FlatAppearance.BorderColor = If(n = index, Blue, Color.FromArgb(211, 225, 243))
+                b.FlatAppearance.MouseOverBackColor = If(n = index,
+                       Color.FromArgb(12, 70, 180), Color.FromArgb(211, 230, 254))
             Next
             pageHeading.Text = sectionNames(index).ToUpperInvariant()
         End Sub
@@ -309,28 +324,35 @@ Public NotInheritable Class ModernTheme
             Dim navBtn As New Button With {
                 .Name = "nav" & i.ToString(), .Text = "  " & (i + 1).ToString("00") &
                    "    " & sectionNames(Math.Min(i, sectionNames.Length - 1)),
-                .Size = New Size(190, 40), .Margin = New Padding(2, 1, 2, 4),
+                .Size = New Size(211, 43), .Margin = New Padding(2, 1, 2, 6),
                 .FlatStyle = FlatStyle.Flat, .TextAlign = ContentAlignment.MiddleLeft,
-                .Font = UiFont(9, True), .ForeColor = Color.White, .BackColor = Navy,
+                .Font = UiFont(10, True), .ForeColor = TextInk, .BackColor = Color.White,
                 .Cursor = Cursors.Hand, .UseVisualStyleBackColor = False
             }
-            navBtn.FlatAppearance.BorderSize = 0
+            navBtn.FlatAppearance.BorderSize = 1
+            navBtn.FlatAppearance.BorderColor = Color.FromArgb(211, 225, 243)
             AddHandler navBtn.Click, Sub(sender, e)
                 tabs.SelectedIndex = index
             End Sub
             navButtons.Add(navBtn)
             side.Controls.Add(navBtn)
         Next
+        AddHandler side.SizeChanged, Sub(sender, e)
+            For Each b In navButtons
+                b.Width = Math.Max(176, side.ClientSize.Width - side.Padding.Left -
+                                   side.Padding.Right - 13)
+            Next
+        End Sub
         AddHandler tabs.SelectedIndexChanged, Sub(sender, e) setActive(Math.Max(0, tabs.SelectedIndex))
         setActive(0)
 
         Dim content As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .Padding = New Padding(18, 13, 18, 8),
+            .Dock = DockStyle.Fill, .Padding = New Padding(19, 15, 19, 10),
             .Margin = Padding.Empty, .ColumnCount = 1, .RowCount = 2,
             .BackColor = Backdrop
         }
         content.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        content.RowStyles.Add(New RowStyle(SizeType.Absolute, 36))
+        content.RowStyles.Add(New RowStyle(SizeType.Absolute, 44))
         content.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         workspace.Controls.Add(content, 1, 0)
         content.Controls.Add(pageHeading, 0, 0)
@@ -364,6 +386,7 @@ Public NotInheritable Class ModernTheme
             page.AutoScroll = True
             StyleControls(page, tips)
         Next
+        ResponsiveSectionLayout.Install(tabs)
 
         Dim logArea As New TableLayoutPanel With {
             .Dock = DockStyle.Fill, .RowCount = 2, .ColumnCount = 1,
@@ -373,40 +396,40 @@ Public NotInheritable Class ModernTheme
         logArea.RowStyles.Add(New RowStyle(SizeType.Absolute, 36))
         logArea.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         root.Controls.Add(logArea, 0, 2)
-        Dim logHeader As New Panel With {.Dock = DockStyle.Fill}
+        Dim logHeader As New Panel With {.Dock = DockStyle.Fill, .BackColor = Color.FromArgb(226, 239, 255)}
         logArea.Controls.Add(logHeader, 0, 0)
-        Dim logTitle = TextLabel("DISM OUTPUT", UiFont(9, True), TextInk)
+        Dim logTitle = TextLabel("DISM OUTPUT", UiFont(10.0F, True), TextInk)
         logTitle.Dock = DockStyle.Left
         logTitle.Width = 170
         logTitle.TextAlign = ContentAlignment.MiddleLeft
         logHeader.Controls.Add(logTitle)
         Dim toolButtons As New FlowLayoutPanel With {
             .Dock = DockStyle.Right, .FlowDirection = FlowDirection.RightToLeft,
-            .WrapContents = False, .Width = 240
+            .WrapContents = False, .Width = 270
         }
         logHeader.Controls.Add(toolButtons)
         Dim clear As New Button With {.Name = "btnClearOutput", .Text = "Clear",
-                                     .Size = New Size(86, 29), .Margin = New Padding(3)}
+                                     .Size = New Size(90, 31), .Margin = New Padding(3)}
         StyleButton(clear)
         AddHandler clear.Click, Sub(sender, e) output.Clear()
         toolButtons.Controls.Add(clear)
         Dim copy As New Button With {.Name = "btnCopyOutput", .Text = "Copy Log",
-                                    .Size = New Size(103, 29), .Margin = New Padding(3)}
+                                    .Size = New Size(114, 31), .Margin = New Padding(3)}
         StyleButton(copy, "browse")
         AddHandler copy.Click, Sub(sender, e)
             If Not String.IsNullOrWhiteSpace(output.Text) Then Clipboard.SetText(output.Text)
         End Sub
         toolButtons.Controls.Add(copy)
         output.Dock = DockStyle.Fill
-        output.BackColor = Color.FromArgb(20, 32, 58)
-        output.ForeColor = Color.FromArgb(213, 234, 248)
-        output.Font = New Font("Consolas", 9.0F, FontStyle.Regular)
-        output.BorderStyle = BorderStyle.None
+        output.BackColor = Color.White
+        output.ForeColor = TextInk
+        output.Font = New Font("Consolas", 10.0F, FontStyle.Regular)
+        output.BorderStyle = BorderStyle.FixedSingle
         output.ReadOnly = True
         output.Margin = Padding.Empty
         logArea.Controls.Add(output, 0, 1)
         exitButton.Text = "Exit"
-        exitButton.Size = New Size(86, 29)
+        exitButton.Size = New Size(90, 31)
         StyleButton(exitButton, "neutral")
         exitButton.Dock = DockStyle.Right
         logHeader.Controls.Add(exitButton)
