@@ -82,6 +82,21 @@ internal static class LayoutSmoke
                         form.RectangleToScreen(form.ClientRectangle).Right,
                         "Tools button extends off-window");
                 Console.WriteLine($"PASS {size}: header, Tools, Index, Mount and Dismount are non-overlapping");
+                try
+                {
+                    var folder = System.IO.Path.Combine(System.Environment.CurrentDirectory, "ui-screenshots");
+                    System.IO.Directory.CreateDirectory(folder);
+                    using var snapshot = new Bitmap(form.Width, form.Height);
+                    form.DrawToBitmap(snapshot, new Rectangle(Point.Empty, form.Size));
+                    snapshot.Save(System.IO.Path.Combine(folder,
+                        $"DISM-GUI-{size.Width}x{size.Height}.png"),
+                        System.Drawing.Imaging.ImageFormat.Png);
+                }
+                catch (Exception imageError)
+                {
+                    // Some hosted Windows sessions restrict GUI screenshotting.
+                    Console.WriteLine("Screenshot unavailable: " + imageError.Message);
+                }
             }
 
             form.Hide();
