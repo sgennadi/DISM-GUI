@@ -223,7 +223,7 @@ Public NotInheritable Class UpdateManager
         Private ReadOnly detail As Label
         Private ReadOnly install As Button
         Private ReadOnly check As Button
-        Private ReadOnly close As Button
+        Private ReadOnly closeButton As Button
         Private ReadOnly progressBar As ProgressBar
         Private assetDownload As String
         Private assetDigest As String
@@ -296,12 +296,12 @@ Public NotInheritable Class UpdateManager
                               {.UseShellExecute = True})
             End Sub
             Me.Controls.Add(releases)
-            close = New Button With {.Text = "Close", .Location = New Point(481, 281),
+            closeButton = New Button With {.Text = "Close", .Location = New Point(481, 281),
                                      .Size = New Size(84, 43)}
-            ModernTheme.StyleButton(close)
-            AddHandler close.Click, Sub(sender, e) Me.Close()
-            Me.Controls.Add(close)
-            Me.CancelButton = close
+            ModernTheme.StyleButton(closeButton)
+            AddHandler closeButton.Click, Sub(sender, e) Me.Close()
+            Me.Controls.Add(closeButton)
+            Me.CancelButton = closeButton
         End Sub
 
         Private Async Sub CheckClicked(sender As Object, e As EventArgs)
@@ -397,7 +397,7 @@ Public NotInheritable Class UpdateManager
             busy = True
             check.Enabled = False
             install.Enabled = False
-            close.Enabled = False
+            closeButton.Enabled = False
             progressBar.Value = 0
             progressBar.Visible = True
             status.Text = "Downloading and verifying..."
@@ -417,7 +417,7 @@ Public NotInheritable Class UpdateManager
             Finally
                 busy = False
                 check.Enabled = True
-                close.Enabled = True
+                closeButton.Enabled = True
             End Try
         End Sub
 
