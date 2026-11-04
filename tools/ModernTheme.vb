@@ -88,7 +88,7 @@ Public NotInheritable Class ModernTheme
             Dim n = button.Name.ToLowerInvariant()
             If n.Contains("dismount") OrElse n.Contains("remove") OrElse
                n.Contains("delete") OrElse n.Contains("disable") OrElse n.Contains("del") Then
-                role = "danger"
+                role = "secondary"
             ElseIf n.Contains("mount") AndAlso Not n.Contains("open") Then
                 role = "primary"
             ElseIf n.Contains("apply") OrElse n.Contains("add") OrElse
@@ -101,20 +101,20 @@ Public NotInheritable Class ModernTheme
                 role = "neutral"
             End If
         End If
-        Dim bg As Color = If(role = "primary", Green,
-                             If(role = "danger", Red,
-                                If(role = "browse", Color.FromArgb(226, 239, 255),
+        Dim bg As Color = If(role = "primary", Blue,
+                             If(role = "secondary", Color.FromArgb(232, 241, 251),
+                                If(role = "browse", Color.FromArgb(233, 243, 254),
                                    Color.White)))
         button.UseVisualStyleBackColor = False
         button.FlatStyle = FlatStyle.Flat
         button.FlatAppearance.BorderSize = 1
-        button.FlatAppearance.BorderColor = If(role = "primary" OrElse role = "danger", bg,
-                                                Color.FromArgb(211, 225, 243))
+        button.FlatAppearance.BorderColor = If(role = "primary", Blue,
+                                                Color.FromArgb(195, 215, 238))
         button.FlatAppearance.MouseOverBackColor = ControlPaint.Light(bg, 0.12F)
         button.FlatAppearance.MouseDownBackColor = ControlPaint.Dark(bg, 0.1F)
         button.BackColor = bg
-        button.ForeColor = If(role = "primary" OrElse role = "danger", Color.White, TextInk)
-        button.Font = UiFont(9.8F, True)
+        button.ForeColor = If(role = "primary", Color.White, TextInk)
+        button.Font = UiFont(9.3F, True)
         button.Cursor = Cursors.Hand
         button.AutoEllipsis = True
         AddHandler button.SizeChanged, Sub(sender, e)
@@ -235,30 +235,36 @@ Public NotInheritable Class ModernTheme
         root.RowStyles.Add(New RowStyle(SizeType.Absolute, 172))
         frm.Controls.Add(root)
 
+        ' Header is a real responsive grid, not independently positioned controls.
+        ' This prevents title/subtitle/menu overlap at 100-200% Windows DPI.
         Dim hero As New Panel With {.Dock = DockStyle.Fill, .Margin = Padding.Empty}
         AddHandler hero.Paint, Sub(sender, e)
             If hero.Width < 1 OrElse hero.Height < 1 Then Return
             Using gradient As New LinearGradientBrush(hero.ClientRectangle,
-                                                        Color.FromArgb(20, 93, 190), Color.FromArgb(21, 168, 228),
-                                                        LinearGradientMode.Horizontal)
+                     Color.FromArgb(36, 98, 174), Color.FromArgb(55, 150, 215),
+                     LinearGradientMode.Horizontal)
                 e.Graphics.FillRectangle(gradient, hero.ClientRectangle)
             End Using
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias
-            Using brush As New SolidBrush(Color.FromArgb(34, 161, 246, 243))
-                e.Graphics.FillEllipse(brush, hero.Width - 290, -128, 330, 260)
-            End Using
-            Using brush As New SolidBrush(Cyan)
-                e.Graphics.FillRectangle(brush, 0, hero.Height - 4, 130, 4)
-            End Using
-            Using brush As New SolidBrush(Green)
-                e.Graphics.FillRectangle(brush, 130, hero.Height - 4, 92, 4)
+            Using brush As New SolidBrush(Color.FromArgb(26, Color.White))
+                e.Graphics.FillEllipse(brush, hero.Width - 275, -165, 305, 265)
             End Using
         End Sub
         root.Controls.Add(hero, 0, 0)
 
+        Dim heroGrid As New TableLayoutPanel With {
+            .Dock = DockStyle.Fill, .ColumnCount = 3, .RowCount = 1,
+            .Margin = Padding.Empty, .Padding = New Padding(18, 13, 22, 13),
+            .BackColor = Color.Transparent
+        }
+        heroGrid.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        heroGrid.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 64))
+        heroGrid.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+        heroGrid.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 178))
+        hero.Controls.Add(heroGrid)
+
         Dim mark As New PictureBox With {
-            .Location = New Point(24, 20), .Size = New Size(57, 57),
-            .SizeMode = PictureBoxSizeMode.StretchImage, .BackColor = Color.Transparent
+            .Dock = DockStyle.Fill, .SizeMode = PictureBoxSizeMode.Zoom,
+            .Margin = New Padding(2, 7, 11, 7), .BackColor = Color.Transparent
         }
         Try
             Using appMark As Icon = MakeAppIcon()
@@ -266,42 +272,70 @@ Public NotInheritable Class ModernTheme
             End Using
         Catch
         End Try
-        hero.Controls.Add(mark)
-        Dim title = TextLabel("DISM GUI", UiFont(24, True), Color.White)
-        title.Location = New Point(93, 15)
-        title.Size = New Size(320, 43)
-        hero.Controls.Add(title)
-        Dim subtitle = TextLabel("WINDOWS IMAGE TOOLKIT", UiFont(10),
-                                 Color.FromArgb(230, 245, 255))
-        subtitle.Location = New Point(95, 61)
-        subtitle.Size = New Size(395, 28)
-        hero.Controls.Add(subtitle)
+        heroGrid.Controls.Add(mark, 0, 0)
 
-        menu.Dock = DockStyle.None
-        menu.AutoSize = False
-        menu.BackColor = Color.FromArgb(23, 112, 214)
-        menu.ForeColor = Color.White
-        menu.Font = UiFont(10, True)
-        menu.Padding = New Padding(7, 8, 4, 0)
-        menu.Size = New Size(254, 43)
-        menu.Location = New Point(hero.Width - menu.Width - 20, 26)
-        menu.Anchor = AnchorStyles.Top Or AnchorStyles.Right
-        For Each item As ToolStripItem In menu.Items
-            item.ForeColor = Color.White
-            If TypeOf item Is ToolStripMenuItem Then
-                For Each subItem As ToolStripItem In DirectCast(item, ToolStripMenuItem).DropDownItems
-                    subItem.ForeColor = TextInk
-                Next
+        Dim heading As New TableLayoutPanel With {
+            .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 2,
+            .Margin = Padding.Empty, .BackColor = Color.Transparent
+        }
+        heading.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+        heading.RowStyles.Add(New RowStyle(SizeType.Percent, 57))
+        heading.RowStyles.Add(New RowStyle(SizeType.Percent, 43))
+        heroGrid.Controls.Add(heading, 1, 0)
+        Dim title = TextLabel("DISM GUI", UiFont(19, True), Color.White)
+        title.TextAlign = ContentAlignment.MiddleLeft
+        title.Dock = DockStyle.Fill
+        title.AutoEllipsis = True
+        heading.Controls.Add(title, 0, 0)
+        Dim subtitle = TextLabel("Windows Image Toolkit", UiFont(10),
+                                 Color.FromArgb(241, 250, 255))
+        subtitle.Dock = DockStyle.Fill
+        subtitle.TextAlign = ContentAlignment.MiddleLeft
+        subtitle.AutoEllipsis = True
+        heading.Controls.Add(subtitle, 0, 1)
+
+        ' Reuse the *original* Tools menu items and their existing event handlers.
+        ' A real bordered button opens a context menu instead of a barely visible
+        ' menu label which looks like plain text.
+        Dim toolsMenu As New ContextMenuStrip With {
+            .Font = UiFont(10), .BackColor = Color.White,
+            .ForeColor = TextInk, .ShowImageMargin = False
+        }
+        If menu.Items.Count > 0 Then
+            Dim originalTools = TryCast(menu.Items(0), ToolStripMenuItem)
+            If originalTools IsNot Nothing Then
+                While originalTools.DropDownItems.Count > 0
+                    Dim currentItem = originalTools.DropDownItems(0)
+                    originalTools.DropDownItems.RemoveAt(0)
+                    toolsMenu.Items.Add(currentItem)
+                End While
             End If
-        Next
-        hero.Controls.Add(menu)
-        AddHandler hero.SizeChanged, Sub(sender, e)
-            subtitle.Width = Math.Max(80, hero.ClientSize.Width - menu.Width - subtitle.Left - 18)
-            title.Width = Math.Max(80, hero.ClientSize.Width - menu.Width - title.Left - 18)
+        End If
+        menu.Visible = False
+
+        Dim toolsButton As New Button With {
+            .Name = "btnToolsMenu", .Text = "Tools  " & ChrW(&H25BE),
+            .Dock = DockStyle.Fill, .Margin = New Padding(10, 14, 0, 14)
+        }
+        StyleButton(toolsButton, "neutral")
+        toolsButton.FlatAppearance.BorderColor = Color.FromArgb(202, 228, 247)
+        toolsButton.BackColor = Color.White
+        toolsButton.ForeColor = Color.FromArgb(27, 78, 132)
+        AddHandler toolsButton.Click, Sub(sender, e)
+            toolsMenu.Show(toolsButton, New Point(0, toolsButton.Height))
         End Sub
-        Dim updateMenu As New ToolStripMenuItem("Check for Updates...")
-        AddHandler updateMenu.Click, Sub(sender, e) UpdateManager.ShowUpdateDialog(frm)
-        menu.Items.Add(updateMenu)
+        heroGrid.Controls.Add(toolsButton, 2, 0)
+
+        Dim updatesMenuItem As New ToolStripMenuItem("Check for updates...")
+        AddHandler updatesMenuItem.Click, Sub(sender, e) UpdateManager.ShowUpdateDialog(frm)
+        toolsMenu.Items.Add(New ToolStripSeparator())
+        toolsMenu.Items.Add(updatesMenuItem)
+
+        ' Quiet one-shot check: no popup, no repeated MFA or background polling.
+        ' The menu signals newer stable versions without interrupting DISM work.
+        AddHandler frm.Shown, Sub(sender, e)
+            NotifyUpdateInMenuAsync(toolsButton, updatesMenuItem)
+        End Sub
 
         Dim workspace As New TableLayoutPanel With {
             .Dock = DockStyle.Fill, .Margin = Padding.Empty, .ColumnCount = 2,
@@ -424,45 +458,72 @@ Public NotInheritable Class ModernTheme
         logArea.RowStyles.Add(New RowStyle(SizeType.Absolute, 36))
         logArea.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         root.Controls.Add(logArea, 0, 2)
-        Dim logHeader As New Panel With {.Dock = DockStyle.Fill, .BackColor = Color.FromArgb(226, 239, 255)}
-        logArea.Controls.Add(logHeader, 0, 0)
-        Dim logTitle = TextLabel("DISM OUTPUT", UiFont(10.0F, True), TextInk)
-        logTitle.Dock = DockStyle.Left
-        logTitle.Width = 170
-        logTitle.TextAlign = ContentAlignment.MiddleLeft
-        logHeader.Controls.Add(logTitle)
-        Dim toolButtons As New FlowLayoutPanel With {
-            .Dock = DockStyle.Right, .FlowDirection = FlowDirection.RightToLeft,
-            .WrapContents = False, .Width = 270
+        Dim logHeader As New TableLayoutPanel With {
+            .Dock = DockStyle.Fill, .ColumnCount = 4, .RowCount = 1,
+            .BackColor = Color.FromArgb(230, 240, 250), .Padding = New Padding(10, 3, 8, 3),
+            .Margin = Padding.Empty
         }
-        logHeader.Controls.Add(toolButtons)
-        Dim clear As New Button With {.Name = "btnClearOutput", .Text = "Clear",
-                                     .Size = New Size(90, 31), .Margin = New Padding(3)}
-        StyleButton(clear)
-        AddHandler clear.Click, Sub(sender, e) output.Clear()
-        toolButtons.Controls.Add(clear)
-        Dim copy As New Button With {.Name = "btnCopyOutput", .Text = "Copy Log",
-                                    .Size = New Size(114, 31), .Margin = New Padding(3)}
+        logHeader.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+        logHeader.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 119))
+        logHeader.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 92))
+        logHeader.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 92))
+        logHeader.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        logArea.Controls.Add(logHeader, 0, 0)
+        Dim logTitle = TextLabel("DISM OUTPUT", UiFont(10, True), TextInk)
+        logTitle.Dock = DockStyle.Fill
+        logTitle.TextAlign = ContentAlignment.MiddleLeft
+        logHeader.Controls.Add(logTitle, 0, 0)
+
+        Dim copy As New Button With {
+            .Name = "btnCopyOutput", .Text = "Copy log",
+            .Dock = DockStyle.Fill, .Margin = New Padding(4, 2, 4, 2)
+        }
         StyleButton(copy, "browse")
         AddHandler copy.Click, Sub(sender, e)
             If Not String.IsNullOrWhiteSpace(output.Text) Then Clipboard.SetText(output.Text)
         End Sub
-        toolButtons.Controls.Add(copy)
+        logHeader.Controls.Add(copy, 1, 0)
+        Dim clear As New Button With {
+            .Name = "btnClearOutput", .Text = "Clear",
+            .Dock = DockStyle.Fill, .Margin = New Padding(4, 2, 4, 2)
+        }
+        StyleButton(clear, "neutral")
+        AddHandler clear.Click, Sub(sender, e) output.Clear()
+        logHeader.Controls.Add(clear, 2, 0)
+        exitButton.Text = "Exit"
+        exitButton.Dock = DockStyle.Fill
+        exitButton.Margin = New Padding(4, 2, 0, 2)
+        StyleButton(exitButton, "neutral")
+        logHeader.Controls.Add(exitButton, 3, 0)
+
         output.Dock = DockStyle.Fill
         output.BackColor = Color.White
         output.ForeColor = TextInk
-        output.Font = New Font("Consolas", 10.0F, FontStyle.Regular)
+        output.Font = New Font("Consolas", 9.5F, FontStyle.Regular)
         output.BorderStyle = BorderStyle.FixedSingle
         output.ReadOnly = True
         output.Margin = Padding.Empty
         logArea.Controls.Add(output, 0, 1)
-        exitButton.Text = "Exit"
-        exitButton.Size = New Size(90, 31)
-        StyleButton(exitButton, "neutral")
-        exitButton.Dock = DockStyle.Right
-        logHeader.Controls.Add(exitButton)
-        exitButton.BringToFront()
         frm.ResumeLayout(True)
+    End Sub
+
+    Private Shared Async Sub NotifyUpdateInMenuAsync(toolsButton As Button,
+                                                       menuItem As ToolStripMenuItem)
+        Try
+            Dim available = Await UpdateManager.CheckForUpdatesAsync()
+            If String.IsNullOrWhiteSpace(available) OrElse toolsButton.IsDisposed Then Return
+            toolsButton.Text = "Tools  " & ChrW(&H2022)
+            toolsButton.ForeColor = Color.FromArgb(12, 110, 67)
+            toolsButton.BackColor = Color.FromArgb(233, 250, 240)
+            menuItem.Text = "Update available: v" & available & "..."
+            menuItem.ForeColor = Color.FromArgb(12, 124, 75)
+            menuItem.Font = UiFont(10, True)
+            Dim tips As New ToolTip()
+            tips.SetToolTip(toolsButton, "A new DISM GUI version v" & available &
+                                          " is available under Tools.")
+        Catch
+            ' Update notification must never interrupt local DISM work.
+        End Try
     End Sub
 
     Public Shared Sub ApplyProgress(frm As Form, label As Label, bar As ProgressBar)
