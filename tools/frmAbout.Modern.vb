@@ -18,8 +18,8 @@ Public NotInheritable Class frmAbout
         Me.BackColor = ModernTheme.Backdrop
         Me.Font = ModernTheme.UiFont(10)
         Me.AutoScaleMode = AutoScaleMode.Font
-        Me.ClientSize = New Size(680, 420)
-        Me.MinimumSize = New Size(640, 410)
+        Me.ClientSize = New Size(730, 460)
+        Me.MinimumSize = New Size(700, 445)
         Try
             Me.Icon = ModernTheme.MakeAppIcon()
         Catch
@@ -31,7 +31,7 @@ Public NotInheritable Class frmAbout
             .Padding = New Padding(18, 15, 18, 13)
         }
         root.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        root.RowStyles.Add(New RowStyle(SizeType.Absolute, 105))
+        root.RowStyles.Add(New RowStyle(SizeType.Absolute, 126))
         root.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         root.RowStyles.Add(New RowStyle(SizeType.Absolute, 62))
         Me.Controls.Add(root)
@@ -39,8 +39,8 @@ Public NotInheritable Class frmAbout
         Dim header As New TableLayoutPanel With {
             .Dock = DockStyle.Fill, .ColumnCount = 2,
             .RowCount = 1, .BackColor = ModernTheme.Blue,
-            .Padding = New Padding(14, 10, 14, 10),
-            .Margin = New Padding(0, 0, 0, 10)
+            .Padding = New Padding(16, 13, 16, 13),
+            .Margin = New Padding(0, 0, 0, 9)
         }
         header.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 83))
         header.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
@@ -63,11 +63,11 @@ Public NotInheritable Class frmAbout
             .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 2,
             .BackColor = Color.Transparent, .Margin = Padding.Empty
         }
-        textHeader.RowStyles.Add(New RowStyle(SizeType.Percent, 55))
-        textHeader.RowStyles.Add(New RowStyle(SizeType.Percent, 45))
+        textHeader.RowStyles.Add(New RowStyle(SizeType.Percent, 60))
+        textHeader.RowStyles.Add(New RowStyle(SizeType.Percent, 40))
         header.Controls.Add(textHeader, 1, 0)
-        textHeader.Controls.Add(CreateLabel("DISM GUI", 20, True, Color.White), 0, 0)
-        textHeader.Controls.Add(CreateLabel("Windows Image Toolkit  ·  Modern Edition",
+        textHeader.Controls.Add(CreateLabel("DISM GUI", 18, True, Color.White), 0, 0)
+        textHeader.Controls.Add(CreateLabel("Windows Image Toolkit",
                                            10, False, Color.FromArgb(231, 246, 255)), 0, 1)
 
         Dim body As New TableLayoutPanel With {
