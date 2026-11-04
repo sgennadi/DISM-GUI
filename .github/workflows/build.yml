@@ -35,6 +35,13 @@ jobs:
         if: matrix.rid == 'win-x64'
         shell: pwsh
         run: dotnet run --project tests/LayoutSmoke/LayoutSmoke.csproj --configuration Release -p:Platform=AnyCPU
+      - name: Upload WinForms layout screenshots (x64)
+        if: matrix.rid == 'win-x64'
+        uses: actions/upload-artifact@v7
+        with:
+          name: DISMGUI-UI-Layout-Preview
+          path: ui-screenshots/*.png
+          if-no-files-found: warn
       - name: Publish portable EXE
         shell: pwsh
         run: ./Build.ps1 -Runtime '${{ matrix.rid }}' -SkipPrepare
