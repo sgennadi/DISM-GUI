@@ -5,6 +5,7 @@ Idempotent; validates upstream markers to avoid silent partial transformations.
 """
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 
 if len(sys.argv) != 2:
@@ -27,6 +28,10 @@ def edit_once(path, old, new, label):
 
 for name in ("ModernTheme.vb", "UpdateManager.vb"):
     shutil.copyfile(tools / name, project / name)
+
+# Embed the same multi-resolution icon in the executable and every window.
+subprocess.run([sys.executable, str(tools / "generate_icon.py"),
+                str(project / "App.ico")], check=True)
 
 # Replace obsolete About dialog controls and unneeded original logo resources.
 shutil.copyfile(tools / "frmAbout.Modern.vb", project / "frmAbout.vb")
