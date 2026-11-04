@@ -34,6 +34,16 @@ jobs:
       - name: Publish portable EXE
         shell: pwsh
         run: ./Build.ps1 -Runtime '${{ matrix.rid }}' -SkipPrepare
+      - name: Verify embedded EXE icon and no PDB/config clutter
+        shell: pwsh
+        run: |
+          python tools/verify_icon.py "DISM GUI/App.ico" "artifacts/${{ matrix.rid }}/DISM GUI.exe"
+          $badFiles = @(Get-ChildItem -LiteralPath "artifacts/${{ matrix.rid }}" -File | Where-Object {
+            $_.Extension -ieq '.pdb' -or
+            $_.Name -ieq 'DISM GUI.dll.config' -or
+            $_.Name -ieq 'DISM GUI.exe.config'
+          })
+          if ($badFiles.Count -ne 0) { throw "Unexpected debug/config files in portable package" }
       - uses: actions/upload-artifact@v7
         with:
           name: DISMGUI-VS2026-${{ matrix.rid }}
