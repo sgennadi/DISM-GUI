@@ -1,29 +1,21 @@
-# DISM GUI 4.2.6
+# DISM GUI 4.2.7
 
-## Fully responsive Windows image servicing sections
-- Rebuilt all nine workspaces with responsive layouts rather than overlapping fixed legacy coordinates.
-- Drivers: add/delete drivers, recurse and unsigned options, driver information actions.
-- Packages: dedicated full-width folder input with a **Choose package folder** button, remove by name/path, get/add package actions.
-- Features, Editions, Unattend, Applications, Capture and Apply: dedicated labels, input fields, browse controls, checkboxes and clearly sized action buttons.
-- All original DISM controls and event handlers are retained; long action labels wrap instead of being clipped. Fields/actions scroll independently at tight window sizes.
-- Mount uses the previously rebuilt WIM/image-index grid.
+## Release changelog inside Update Center
+- **What's new:** Update Center now displays the actual changelog from the latest stable GitHub Release directly below the version status, before the Update or Reinstall button.
+- **Scrollable release notes:** long descriptions can be read without obscuring buttons; resize the Updates window to give the changelog more space.
+- **Full changelog on GitHub:** the heading links to the exact stable release's detailed notes. Content is displayed as plain text; Markdown links and headings are made easier to read.
+- **Safe empty/offline states:** shows a clear message when a release has no notes or the GitHub API is unavailable; update installation still requires architecture-specific ZIP and SHA-256 verification.
+- **Version labels:** when the same version is installed, Reinstall remains available, and its changelog remains visible. Newer versions show Update.
 
-## Window placement and preferences
-- The main window remembers normal size, location and maximized state on close; no manual reconfiguration on next launch.
-- If a saved position lies on an unplugged monitor or outside the current desktop, it reopens in a visible working area.
-- Preferences stored under `HKCU\Software\DISMGUI\UserInterface`, alongside the resizable DISM output height.
-- Drag the DISM output splitter or use **Expand / Restore** to change the log height.
+## Features retained from 4.2.6
+- Responsive layout for all nine DISM image-servicing sections, including unclipped Package/Driver browse buttons.
+- Resizable DISM output with Expand/Restore and saved panel height.
+- Saved window size, position and maximized state with disconnected-monitor recovery.
+- Light-color modern interface, embedded native icon, automatic discreet Tools update notification.
+- Self-contained .NET 10 Windows x64, x86 and ARM64 builds; PDB and legacy config files excluded.
 
-## Appearance, updates and portable binaries
-- Nipkg Creator-inspired light palette, restrained action colors, consistent native icon.
-- Main, About and Update Center titles show the installed version without a `v` prefix.
-- Tools menu quietly indicates a newer SHA-256 verified stable release, when available.
-- Portable .NET 10 Windows EXE ZIP packages for x64, x86, ARM64; no unnecessary PDB or DISM GUI.dll.config.
+## Validation
+- Windows CI builds x86/x64/ARM64 and smoke-tests the Update Center changelog controls and visual layout with live WinForms screenshots.
+- Real-world DISM operations and 150%-200% DPI still require end-user Windows testing with disposable WIM copies.
 
-## Validation and limits
-- GitHub Actions compiles for all three Windows architectures.
-- Windows x64 UI smoke tests exercise **all nine sections** at two window sizes (900x650 and 1180x760), check for visible control overlap and clipped button/label text, and capture screenshots.
-- Window placement persistence and off-screen recovery are tested using native WinForms forms.
-- UI tests do not replace manual validation at 150%/200% DPI or functional image servicing on a real Windows system. Test DISM operations with disposable WIM copies first.
-
-Original DISM GUI by Mike Celone (mikecel79/DISMGUI). Attribution preserved. Confirm upstream redistribution rights before broad redistribution.
+Originally based on DISM GUI by Mike Celone (mikecel79/DISMGUI). Attribution preserved.

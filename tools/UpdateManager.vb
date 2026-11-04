@@ -8,6 +8,7 @@ Imports System.Net
 Imports System.Net.Http
 Imports System.Reflection
 Imports System.Runtime.InteropServices
+Imports System.Text.RegularExpressions
 Imports System.Security.Cryptography
 Imports System.Text.Json
 Imports System.Threading.Tasks
@@ -251,6 +252,27 @@ Public NotInheritable Class UpdateManager
         End Try
     End Function
 
+    ' Render GitHub release notes as readable plain text without HTML or script execution.
+    ' Keep the original information and bullet order; the complete source stays linked.
+    Private Shared Function FormatReleaseNotesMarkdown(markdown As String) As String
+        If String.IsNullOrWhiteSpace(markdown) Then
+            Return "No changelog was included in this release. Open GitHub Releases for details."
+        End If
+        Dim body = markdown.Replace(vbCrLf, vbLf).Replace(vbCr, vbLf)
+        If body.Length > 45000 Then body = body.Substring(0, 45000) & vbLf &
+            "(Truncated here. See the full changelog on GitHub.)"
+        Dim lines As New List(Of String)()
+        For Each rawLine As String In body.Split(ControlChars.Lf)
+            Dim line = rawLine.TrimEnd()
+            line = Regex.Replace(line, "^\s{0,3}#{1,6}\s+", "")
+            line = Regex.Replace(line, "^\s*[-*]\s+", "• ")
+            line = Regex.Replace(line, "\[([^\]]+)\]\((https?://[^)]+)\)", "$1")
+            line = line.Replace("**", "").Replace("`", "")
+            lines.Add(line)
+        Next
+        Return String.Join(Environment.NewLine, lines).Trim()
+    End Function
+
     ' Responsive, informative update center. No installation action until a verified
     ' stable GitHub Release for the current architecture has been found.
     Private NotInheritable Class UpdateWindow
@@ -260,6 +282,9 @@ Public NotInheritable Class UpdateManager
         Private ReadOnly latestValue As Label
         Private ReadOnly status As Label
         Private ReadOnly detail As Label
+        Private ReadOnly changelogTitle As Label
+        Private ReadOnly releaseNotes As TextBox
+        Private ReadOnly releaseLink As LinkLabel
         Private ReadOnly install As Button
         Private ReadOnly check As Button
         Private ReadOnly closeButton As Button
@@ -273,15 +298,15 @@ Public NotInheritable Class UpdateManager
         Public Sub New()
             Me.Text = "DISM GUI " & CurrentVersion().ToString(3) & " - Updates"
             Me.StartPosition = FormStartPosition.CenterParent
-            Me.FormBorderStyle = FormBorderStyle.FixedDialog
-            Me.MaximizeBox = False
+            Me.FormBorderStyle = FormBorderStyle.Sizable
+            Me.MaximizeBox = True
             Me.MinimizeBox = False
             Me.ShowInTaskbar = False
             Me.BackColor = ModernTheme.Backdrop
             Me.Font = ModernTheme.UiFont(10)
             Me.AutoScaleMode = AutoScaleMode.Font
-            Me.ClientSize = New Size(815, 525)
-            Me.MinimumSize = New Size(785, 495)
+            Me.ClientSize = New Size(835, 625)
+            Me.MinimumSize = New Size(785, 535)
             Me.ShowIcon = True
             Try
                 Me.Icon = ModernTheme.MakeAppIcon()
@@ -289,12 +314,13 @@ Public NotInheritable Class UpdateManager
             End Try
 
             Dim root As New TableLayoutPanel With {
-                .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 4,
+                .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 5,
                 .Margin = Padding.Empty, .Padding = New Padding(17, 16, 17, 13),
                 .BackColor = ModernTheme.Backdrop
             }
             root.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
             root.RowStyles.Add(New RowStyle(SizeType.Absolute, 125))
+            root.RowStyles.Add(New RowStyle(SizeType.Absolute, 183))
             root.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
             root.RowStyles.Add(New RowStyle(SizeType.Absolute, 45))
             root.RowStyles.Add(New RowStyle(SizeType.Absolute, 73))
@@ -368,6 +394,70 @@ Public NotInheritable Class UpdateManager
                                10, False, ModernTheme.Muted)
             info.Controls.Add(detail, 0, 3)
 
+            ' Inline release changelog (not a separate popup). It expands with
+            ' the Updates window and stays scrollable for long release notes.
+            Dim changesPanel As New TableLayoutPanel With {
+                .Name = "ChangelogPanel", .Dock = DockStyle.Fill,
+                .ColumnCount = 1, .RowCount = 2,
+                .BackColor = Color.White,
+                .Margin = New Padding(0, 9, 0, 0),
+                .Padding = New Padding(18, 7, 18, 13)
+            }
+            changesPanel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+            changesPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 36))
+            changesPanel.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+            root.Controls.Add(changesPanel, 0, 2)
+
+            Dim changesHeading As New TableLayoutPanel With {
+                .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 1,
+                .Margin = Padding.Empty, .BackColor = Color.White
+            }
+            changesHeading.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+            changesHeading.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 238))
+            changesHeading.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+            changesPanel.Controls.Add(changesHeading, 0, 0)
+
+            changelogTitle = MakeLabel("WHAT'S NEW", 10.5F, True, ModernTheme.TextInk)
+            changelogTitle.Name = "lblChangelogTitle"
+            changesHeading.Controls.Add(changelogTitle, 0, 0)
+
+            releaseLink = New LinkLabel With {
+                .Name = "lnkFullChangelog",
+                .Text = "Full changelog on GitHub",
+                .Font = ModernTheme.UiFont(9.2F, True),
+                .LinkColor = ModernTheme.Blue, .ActiveLinkColor = ModernTheme.Green,
+                .Dock = DockStyle.Fill, .Margin = Padding.Empty,
+                .TextAlign = ContentAlignment.MiddleRight,
+                .Enabled = False, .TabStop = True
+            }
+            AddHandler releaseLink.LinkClicked, Sub(sender, e)
+                Dim version = latestValue.Text.Replace("Latest stable: ", "").Trim()
+                If version.Length > 1 AndAlso
+                   version.StartsWith("v", StringComparison.OrdinalIgnoreCase) Then
+                    Dim releaseVersion As Version = Nothing
+                    If Version.TryParse(version.Substring(1), releaseVersion) Then
+                        Process.Start(New ProcessStartInfo(
+                            ProjectUrl & "/releases/tag/" & Uri.EscapeDataString(version)) With
+                            {.UseShellExecute = True})
+                    End If
+                End If
+            End Sub
+            changesHeading.Controls.Add(releaseLink, 1, 0)
+
+            releaseNotes = New TextBox With {
+                .Name = "txtReleaseChangelog",
+                .Multiline = True, .ReadOnly = True,
+                .ScrollBars = ScrollBars.Vertical, .WordWrap = True,
+                .Dock = DockStyle.Fill, .TabStop = False,
+                .BackColor = Color.FromArgb(249, 251, 255),
+                .ForeColor = ModernTheme.TextInk,
+                .Font = ModernTheme.UiFont(9.5F),
+                .BorderStyle = BorderStyle.FixedSingle,
+                .Margin = New Padding(0, 0, 0, 1),
+                .Text = "Checking the latest stable release..."
+            }
+            changesPanel.Controls.Add(releaseNotes, 0, 1)
+
             Dim progressPanel As New TableLayoutPanel With {
                 .Dock = DockStyle.Fill, .RowCount = 2, .ColumnCount = 1,
                 .Margin = Padding.Empty, .BackColor = ModernTheme.Backdrop
@@ -382,7 +472,7 @@ Public NotInheritable Class UpdateManager
                 .Visible = False, .Style = ProgressBarStyle.Continuous
             }
             progressPanel.Controls.Add(progressBar, 0, 1)
-            root.Controls.Add(progressPanel, 0, 2)
+            root.Controls.Add(progressPanel, 0, 3)
 
             Dim actions As New TableLayoutPanel With {
                 .Dock = DockStyle.Fill, .ColumnCount = 5, .RowCount = 1,
@@ -394,7 +484,7 @@ Public NotInheritable Class UpdateManager
             actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
             actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 135))
             actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 107))
-            root.Controls.Add(actions, 0, 3)
+            root.Controls.Add(actions, 0, 4)
 
             check = New Button With {.Text = "Check", .Dock = DockStyle.Fill,
                                      .Margin = New Padding(0, 0, 12, 0)}
@@ -462,6 +552,9 @@ Public NotInheritable Class UpdateManager
             assetDownload = Nothing
             assetDigest = Nothing
             assetSize = 0
+            changelogTitle.Text = "WHAT'S NEW"
+            releaseNotes.Text = "Loading release notes from GitHub..."
+            releaseLink.Enabled = False
 
             Try
                 Using response = Await Web.GetAsync(ReleaseApi)
@@ -472,6 +565,7 @@ Public NotInheritable Class UpdateManager
                         detail.Text = "The Actions page contains test builds. " &
                                       "Stable ZIP packages appear under GitHub Releases " &
                                       "once a version is published."
+                        releaseNotes.Text = "No stable release or changelog is available yet."
                         Return
                     End If
                     response.EnsureSuccessStatusCode()
@@ -484,6 +578,15 @@ Public NotInheritable Class UpdateManager
                             Throw New InvalidDataException("The stable release has an invalid version tag")
                         End If
                         latestValue.Text = "Latest stable: " & tag
+                        changelogTitle.Text = "WHAT'S NEW IN " & remote.ToString(3)
+                        Dim notesJson As JsonElement
+                        If release.TryGetProperty("body", notesJson) AndAlso
+                           notesJson.ValueKind = JsonValueKind.String Then
+                            releaseNotes.Text = FormatReleaseNotesMarkdown(notesJson.GetString())
+                        Else
+                            releaseNotes.Text = FormatReleaseNotesMarkdown(Nothing)
+                        End If
+                        releaseLink.Enabled = True
                         Dim normalizedRemote = NormalizeVersion(remote)
                         Dim normalizedCurrent = NormalizeVersion(CurrentVersion())
 
@@ -552,6 +655,8 @@ Public NotInheritable Class UpdateManager
                 status.Text = "Could not check GitHub Releases"
                 status.ForeColor = ModernTheme.Red
                 detail.Text = ex.Message
+                releaseNotes.Text = "Couldn't retrieve the release changelog. " &
+                                    "Use Releases to view the published history on GitHub."
             Finally
                 busy = False
                 check.Enabled = True

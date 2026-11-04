@@ -86,6 +86,16 @@ internal static class LayoutSmoke
         return visible;
     }
 
+    private static System.Collections.Generic.IEnumerable<Control> AllControls(Control root)
+    {
+        foreach (Control child in root.Controls)
+        {
+            yield return child;
+            foreach (var nested in AllControls(child))
+                yield return nested;
+        }
+    }
+
     private static void ValidateSection(Control page, int section, string dimension)
     {
         Require(Find(page, "SectionResponsiveRoot") is TableLayoutPanel,
@@ -332,6 +342,26 @@ internal static class LayoutSmoke
                 Application.DoEvents();
                 Require(updateForm.Text == $"DISM GUI {appVersion} - Updates",
                         "Update Center title must show actual version without v prefix");
+                var notesBox = Find(updateForm, "txtReleaseChangelog") as TextBox;
+                var notesHeader = Find(updateForm, "lblChangelogTitle") as Label;
+                var notesLink = Find(updateForm, "lnkFullChangelog") as LinkLabel;
+                Require(notesBox is not null && notesHeader is not null &&
+                        notesLink is not null,
+                        "Update Center inline changelog controls are missing");
+                Require(notesBox!.ReadOnly && notesBox.Multiline &&
+                        notesBox.ScrollBars == ScrollBars.Vertical,
+                        "Release changelog must be read-only, multiline and scrollable");
+                Require(notesBox.Height >= 72,
+                        "Changelog box too short to read at the default window size");
+                // Changelog has its own layout row above the footer, never
+                // overlaying Update, Reinstall, Releases or Close.
+                var boxBounds = notesBox.RectangleToScreen(notesBox.ClientRectangle);
+                foreach (var button in AllControls(updateForm).OfType<Button>())
+                {
+                    var bounds = button.RectangleToScreen(button.ClientRectangle);
+                    Require(!boxBounds.IntersectsWith(bounds),
+                        $"Changelog overlaps the {button.Text} action");
+                }
                 var updatesTitle = FindLabel(updateForm, "UPDATES");
                 var updatesSub = FindLabel(updateForm,
                     "Stable releases  ·  SHA-256 verified");
@@ -342,7 +372,22 @@ internal static class LayoutSmoke
                 updateForm.Hide();
             }
 
-            Console.WriteLine("PASS About and Update Center heading layout");
+            // Markdown is rendered as plain text and preserves the original
+            // release descriptions without loading HTML in WinForms.
+            var formatter = typeof(UpdateManager).GetMethod(
+                "FormatReleaseNotesMarkdown",
+                System.Reflection.BindingFlags.NonPublic |
+                System.Reflection.BindingFlags.Static);
+            Require(formatter is not null, "Release changelog formatter missing");
+            var formatted = (string)formatter!.Invoke(null, new object[] {
+                "## Changes\n- Fixed controls\nSee [Release](https://github.com/example)"
+            })!;
+            Require(formatted.Contains("Changes") &&
+                    formatted.Contains("• Fixed controls") &&
+                    formatted.Contains("See Release") &&
+                    !formatted.Contains("](https://"),
+                    "Release changelog markdown is not readable");
+            Console.WriteLine("PASS About, Update Center and inline changelog layout");
             VerifyWindowGeometry();
             return 0;
         }
