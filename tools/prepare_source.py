@@ -55,8 +55,10 @@ if "<ApplicationIcon>App.ico</ApplicationIcon>" not in s:
   </PropertyGroup>
 </Project>""")
 
-s = s.replace("<AssemblyVersion>4.0.0.0</AssemblyVersion>", "<AssemblyVersion>4.1.0.0</AssemblyVersion>")
-s = s.replace("<FileVersion>4.0.0.0</FileVersion>", "<FileVersion>4.1.0.0</FileVersion>")
+s = s.replace("<ApplicationVersion>4.0.0.0</ApplicationVersion>", "<ApplicationVersion>4.2.0.0</ApplicationVersion>")
+s = s.replace("<AssemblyVersion>4.0.0.0</AssemblyVersion>", "<AssemblyVersion>4.2.0.0</AssemblyVersion>")
+s = s.replace("<FileVersion>4.0.0.0</FileVersion>", "<FileVersion>4.2.0.0</FileVersion>")
+s = s.replace("<Company>http://mikecel79.wordpress.com</Company>", "<Company>DISM GUI contributors</Company>")
 if "<DebugType>none</DebugType>" not in s:
     s = s.replace("</Project>", """  <PropertyGroup>
     <DebugType>none</DebugType>
