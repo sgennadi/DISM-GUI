@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+"""Prepare upstream DISM GUI source with local UI improvements for .NET 10."""
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+import urllib.request
+import zipfile
+
+root = Path(__file__).resolve().parents[1]
+source = root / "DISM GUI"
+project = source / "DISM GUI.vbproj"
+main = source / "frmMain.vb"
+
+if not project.is_file() or not main.is_file():
+    if source.exists():
+        raise RuntimeError("Incomplete DISM GUI source directory; remove it and retry.")
+    url = "https://github.com/mikecel79/DISMGUI/archive/refs/heads/master.zip"
+    print("Downloading upstream mikecel79/DISMGUI...")
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = Path(tmp) / "upstream.zip"
+        urllib.request.urlretrieve(url, archive)
+        with zipfile.ZipFile(archive) as z:
+            for item in z.infolist():
+                if not item.filename.startswith("DISMGUI-master/DISM GUI/"):
+                    continue
+                relative = Path(item.filename).relative_to("DISMGUI-master")
+                if ".." in relative.parts:
+                    raise RuntimeError("Unexpected path in upstream archive")
+                target = root / relative
+                if item.is_dir():
+                    target.mkdir(parents=True, exist_ok=True)
+                else:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with z.open(item) as src, target.open("wb") as dst:
+                        shutil.copyfileobj(src, dst)
+
+if "Private Function ChooseFolderModern(" not in main.read_text(encoding="utf-8-sig"):
+    print("Applying modern dialogs and safe WIM unmount patch...")
+    subprocess.run([sys.executable, str(root / "tools" / "apply_fix.py"), str(root)], check=True)
+
+s = project.read_text(encoding="utf-8-sig")
+s = s.replace("<TargetFramework>net9.0-windows</TargetFramework>", "<TargetFramework>net10.0-windows</TargetFramework>")
+s = s.replace('<Platform Condition=" \'$(Platform)\' == \'\' ">x86</Platform>', '<Platform Condition=" \'$(Platform)\' == \'\' ">AnyCPU</Platform>')
+project.write_text(s, encoding="utf-8-sig")
+assert "net10.0-windows" in s, "TargetFramework not updated"
+print("Ready:", project)
