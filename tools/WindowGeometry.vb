@@ -37,12 +37,12 @@ Public NotInheritable Class WindowGeometry
                         Dim working As Rectangle = Rectangle.Empty
                         Dim bestArea As Long = 0
 
-                        For Each screen In Screen.AllScreens
-                            Dim intersection = Rectangle.Intersect(saved, screen.WorkingArea)
+                        For Each display As Screen In System.Windows.Forms.Screen.AllScreens
+                            Dim intersection = Rectangle.Intersect(saved, display.WorkingArea)
                             Dim area As Long = CLng(intersection.Width) * CLng(intersection.Height)
                             If area > bestArea Then
                                 bestArea = area
-                                working = screen.WorkingArea
+                                working = display.WorkingArea
                             End If
                         Next
                         ' An off-screen window is recovered onto the primary display.
