@@ -236,7 +236,7 @@ Public NotInheritable Class UpdateManager
         Private busy As Boolean
 
         Public Sub New()
-            Me.Text = "DISM GUI - Updates"
+            Me.Text = "DISM GUI - Updates - v" & CurrentVersion().ToString(3)
             Me.StartPosition = FormStartPosition.CenterParent
             Me.FormBorderStyle = FormBorderStyle.FixedDialog
             Me.MaximizeBox = False
@@ -394,6 +394,9 @@ Public NotInheritable Class UpdateManager
             tips.SetToolTip(install, "Available after a release and SHA-256 digest are verified")
             tips.SetToolTip(releases, "Open the download page in your browser")
             tips.SetToolTip(closeButton, "Close only the Update Center")
+            ' Opening Update Center checks the latest release automatically;
+            ' the manual Check for updates button remains available for refresh.
+            AddHandler Me.Shown, Sub(sender, e) CheckClicked(check, EventArgs.Empty)
         End Sub
 
         Private Shared Function MakeLabel(value As String, size As Single, bold As Boolean,
