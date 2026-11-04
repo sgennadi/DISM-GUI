@@ -131,6 +131,63 @@ internal static class LayoutSmoke
         Console.WriteLine($"PASS {dimension} section {section} ({leaves.Count} interactive/text elements)");
     }
 
+    private static void VerifyWindowGeometry()
+    {
+        var work = Screen.PrimaryScreen!.WorkingArea;
+        var saved = new Rectangle(work.Left + 26, work.Top + 25,
+            Math.Min(800, Math.Max(530, work.Width - 110)),
+            Math.Min(570, Math.Max(460, work.Height - 105)));
+
+        using (var first = new Form { MinimumSize = new Size(500, 420),
+                                       StartPosition = FormStartPosition.Manual,
+                                       ShowInTaskbar = false })
+        {
+            WindowGeometry.Install(first);
+            first.StartPosition = FormStartPosition.Manual;
+            first.Bounds = saved;
+            first.Show();
+            Application.DoEvents();
+            first.Close(); // FormClosed persists its final normal bounds.
+        }
+        using (var second = new Form { MinimumSize = new Size(500, 420),
+                                        ShowInTaskbar = false })
+        {
+            WindowGeometry.Install(second);
+            second.Show();
+            Application.DoEvents();
+            Require(Math.Abs(second.Left - saved.Left) <= 6 &&
+                    Math.Abs(second.Top - saved.Top) <= 6 &&
+                    Math.Abs(second.Width - saved.Width) <= 8 &&
+                    Math.Abs(second.Height - saved.Height) <= 8,
+                "Window size or position did not restore from user preferences");
+            second.Close();
+        }
+
+        // Unplugged monitor / obsolete display coordinates must not strand a
+        // restored window outside every active desktop.
+        var prefPath = @"Software\DISMGUI\UserInterface";
+        using (var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(prefPath))
+        {
+            key!.SetValue("WindowLeft", 50000);
+            key.SetValue("WindowTop", 50000);
+            key.SetValue("WindowWidth", 850);
+            key.SetValue("WindowHeight", 610);
+        }
+        using (var rescued = new Form { MinimumSize = new Size(500, 420),
+                                         ShowInTaskbar = false })
+        {
+            WindowGeometry.Install(rescued);
+            rescued.Show();
+            Application.DoEvents();
+            Require(Screen.AllScreens.Any(screen =>
+                Rectangle.Intersect(rescued.Bounds, screen.WorkingArea).Width >= 120 &&
+                Rectangle.Intersect(rescued.Bounds, screen.WorkingArea).Height >= 120),
+                "A restored window is stranded outside all connected screens");
+            rescued.Close();
+        }
+        Console.WriteLine("PASS window size/position persistence and off-screen recovery");
+    }
+
     [STAThread]
     private static int Main()
     {
@@ -286,6 +343,7 @@ internal static class LayoutSmoke
             }
 
             Console.WriteLine("PASS About and Update Center heading layout");
+            VerifyWindowGeometry();
             return 0;
         }
         catch (Exception ex)
