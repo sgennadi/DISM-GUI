@@ -16,16 +16,18 @@ main = source / "frmMain.vb"
 if not project.is_file() or not main.is_file():
     if source.exists():
         raise RuntimeError("Incomplete DISM GUI source directory; remove it and retry.")
-    url = "https://github.com/mikecel79/DISMGUI/archive/refs/heads/master.zip"
+    revision = "6e368a14dcf241ed9ee898591b0b65239e3a21f7"  # pinned upstream source
+    url = f"https://github.com/mikecel79/DISMGUI/archive/{revision}.zip"
     print("Downloading upstream mikecel79/DISMGUI...")
     with tempfile.TemporaryDirectory() as tmp:
         archive = Path(tmp) / "upstream.zip"
         urllib.request.urlretrieve(url, archive)
         with zipfile.ZipFile(archive) as z:
             for item in z.infolist():
-                if not item.filename.startswith("DISMGUI-master/DISM GUI/"):
+                components = item.filename.split("/")
+                if len(components) < 3 or components[1] != "DISM GUI":
                     continue
-                relative = Path(item.filename).relative_to("DISMGUI-master")
+                relative = Path(*components[1:])
                 if ".." in relative.parts:
                     raise RuntimeError("Unexpected path in upstream archive")
                 target = root / relative
@@ -44,5 +46,5 @@ s = project.read_text(encoding="utf-8-sig")
 s = s.replace("<TargetFramework>net9.0-windows</TargetFramework>", "<TargetFramework>net10.0-windows</TargetFramework>")
 s = s.replace('<Platform Condition=" \'$(Platform)\' == \'\' ">x86</Platform>', '<Platform Condition=" \'$(Platform)\' == \'\' ">AnyCPU</Platform>')
 project.write_text(s, encoding="utf-8-sig")
-assert "net10.0-windows" in s, "TargetFramework not updated"
+assert "<TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>" in s, "TargetFramework not updated"
 print("Ready:", project)
