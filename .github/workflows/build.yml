@@ -34,7 +34,7 @@ jobs:
       - name: Publish portable EXE
         shell: pwsh
         run: ./Build.ps1 -Runtime '${{ matrix.rid }}' -SkipPrepare
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: DISMGUI-VS2026-${{ matrix.rid }}
           path: artifacts/DISMGUI-VS2026-${{ matrix.rid }}.zip
