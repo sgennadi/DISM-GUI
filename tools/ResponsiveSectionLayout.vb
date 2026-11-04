@@ -3,9 +3,9 @@ Imports System.Collections.Generic
 Imports System.Drawing
 Imports System.Windows.Forms
 
-' Responsive layout for the nine legacy DISM GUI pages.
-' The upstream designer coordinates target a 655px page. Adapt widths and
-' group internals without changing any existing event handler or command.
+' Resizes legacy sections while preserving their original DISM event handlers.
+' The Mount workspace uses a real grid: WIM path, image index, and buttons
+' can no longer overlap because each occupies a separate layout cell.
 Public NotInheritable Class ResponsiveSectionLayout
     Private Sub New()
     End Sub
@@ -34,13 +34,162 @@ Public NotInheritable Class ResponsiveSectionLayout
 
     Private Shared ReadOnly Pages As New Dictionary(Of TabPage, PageLayout)()
 
+    Private Shared Function Take(page As TabPage, name As String) As Control
+        Dim c = page.Controls(name)
+        If c Is Nothing Then Throw New InvalidOperationException("Missing original DISM control: " & name)
+        page.Controls.Remove(c)
+        c.Dock = DockStyle.Fill
+        c.Margin = New Padding(0, 3, 5, 4)
+        Return c
+    End Function
+
+    Private Shared Sub AddLabel(parent As TableLayoutPanel, text As String,
+                                column As Integer, row As Integer)
+        parent.Controls.Add(New Label With {
+            .Text = text, .Font = ModernTheme.UiFont(10, True),
+            .ForeColor = ModernTheme.TextInk,
+            .TextAlign = ContentAlignment.MiddleLeft,
+            .Dock = DockStyle.Fill, .Margin = Padding.Empty
+        }, column, row)
+    End Sub
+
+    Private Shared Sub BuildMountPage(page As TabPage)
+        page.SuspendLayout()
+        Dim wim = Take(page, "txtWIM")
+        Dim mount = Take(page, "txtMount")
+        Dim chooseWim = Take(page, "btnOpenWIM")
+        Dim chooseMount = Take(page, "btnOpenMount")
+        Dim imageIndex = DirectCast(Take(page, "cmbIndex"), ComboBox)
+        Dim info = Take(page, "btnDisplayWIMInfo")
+        Dim readOnly = Take(page, "chkMountReadOnly")
+        Dim mountButton = DirectCast(Take(page, "btnMount"), Button)
+        Dim dismountButton = DirectCast(Take(page, "btnDismount"), Button)
+        Dim openMounted = DirectCast(Take(page, "btnOpenFolder"), Button)
+
+        ' Remove original fixed-position labels, replacing them with measured
+        ' grid labels. Names are not used by the existing DISM command handlers.
+        For Each name In {"Label1", "Label2", "Label3"}
+            Dim old = page.Controls(name)
+            If old IsNot Nothing Then
+                page.Controls.Remove(old)
+                old.Dispose()
+            End If
+        Next
+
+        page.AutoScroll = False
+        Dim root As New TableLayoutPanel With {
+            .Name = "MountResponsiveRoot",
+            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 1,
+            .Padding = New Padding(17, 18, 14, 13),
+            .Margin = Padding.Empty, .BackColor = Color.White
+        }
+        root.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+        root.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 208))
+        root.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        page.Controls.Add(root)
+
+        Dim left As New TableLayoutPanel With {
+            .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 7,
+            .Margin = New Padding(0, 0, 22, 0), .Padding = Padding.Empty,
+            .BackColor = Color.White
+        }
+        left.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+        For Each height In {29, 48, 61, 29, 48, 45}
+            left.RowStyles.Add(New RowStyle(SizeType.Absolute, height))
+        Next
+        left.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        root.Controls.Add(left, 0, 0)
+
+        AddLabel(left, "WIM image", 0, 0)
+        Dim fileRow As New TableLayoutPanel With {
+            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 1,
+            .Margin = Padding.Empty, .BackColor = Color.White
+        }
+        fileRow.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        fileRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+        fileRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 157))
+        left.Controls.Add(fileRow, 0, 1)
+        fileRow.Controls.Add(wim, 0, 0)
+        chooseWim.Margin = New Padding(7, 3, 0, 4)
+        fileRow.Controls.Add(chooseWim, 1, 0)
+
+        Dim indexRow As New TableLayoutPanel With {
+            .Dock = DockStyle.Fill, .ColumnCount = 4, .RowCount = 1,
+            .Margin = Padding.Empty, .BackColor = Color.White
+        }
+        indexRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 116))
+        indexRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 100))
+        indexRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+        indexRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 185))
+        indexRow.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        left.Controls.Add(indexRow, 0, 2)
+        AddLabel(indexRow, "Image index", 0, 0)
+        imageIndex.Margin = New Padding(0, 10, 8, 13)
+        imageIndex.DropDownWidth = 112
+        imageIndex.Font = ModernTheme.UiFont(10, True)
+        imageIndex.FlatStyle = FlatStyle.Flat
+        indexRow.Controls.Add(imageIndex, 1, 0)
+        info.Margin = New Padding(6, 9, 0, 12)
+        indexRow.Controls.Add(info, 3, 0)
+
+        AddLabel(left, "Mount folder", 0, 3)
+        Dim mountRow As New TableLayoutPanel With {
+            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 1,
+            .Margin = Padding.Empty, .BackColor = Color.White
+        }
+        mountRow.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        mountRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+        mountRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 157))
+        left.Controls.Add(mountRow, 0, 4)
+        mountRow.Controls.Add(mount, 0, 0)
+        chooseMount.Margin = New Padding(7, 3, 0, 4)
+        mountRow.Controls.Add(chooseMount, 1, 0)
+
+        readOnly.Margin = New Padding(3, 12, 0, 6)
+        left.Controls.Add(readOnly, 0, 5)
+
+        Dim actions As New TableLayoutPanel With {
+            .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 4,
+            .Margin = New Padding(0, 25, 0, 0), .Padding = Padding.Empty,
+            .BackColor = Color.White
+        }
+        actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+        For Each size In {61, 61, 61}
+            actions.RowStyles.Add(New RowStyle(SizeType.Absolute, size))
+        Next
+        actions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        root.Controls.Add(actions, 1, 0)
+
+        mountButton.Text = "Mount WIM"
+        ModernTheme.StyleButton(mountButton, "primary")
+        mountButton.Dock = DockStyle.Fill
+        mountButton.Margin = New Padding(0, 4, 0, 8)
+        actions.Controls.Add(mountButton, 0, 0)
+        dismountButton.Text = "Dismount WIM"
+        ModernTheme.StyleButton(dismountButton, "secondary")
+        dismountButton.Dock = DockStyle.Fill
+        dismountButton.Margin = New Padding(0, 4, 0, 8)
+        actions.Controls.Add(dismountButton, 0, 1)
+        openMounted.Text = "Open mounted folder"
+        ModernTheme.StyleButton(openMounted, "neutral")
+        openMounted.Dock = DockStyle.Fill
+        openMounted.Margin = New Padding(0, 4, 0, 8)
+        actions.Controls.Add(openMounted, 0, 2)
+
+        page.ResumeLayout(True)
+    End Sub
+
     Public Shared Sub Install(tabs As TabControl)
         Pages.Clear()
         For Each page As TabPage In tabs.TabPages
-            Dim layout As New PageLayout(page)
-            Pages(page) = layout
-            page.AutoScroll = True
-            AddHandler page.SizeChanged, Sub(sender, e) UpdateLayout(layout)
+            If page.Name = "TabPage1" Then
+                BuildMountPage(page)
+            Else
+                Dim layout As New PageLayout(page)
+                Pages(page) = layout
+                page.AutoScroll = True
+                AddHandler page.SizeChanged, Sub(sender, e) UpdateLayout(layout)
+            End If
         Next
         AddHandler tabs.SizeChanged, Sub(sender, e) UpdateVisible(tabs)
         AddHandler tabs.SelectedIndexChanged, Sub(sender, e) UpdateVisible(tabs)
@@ -142,11 +291,7 @@ Public NotInheritable Class ResponsiveSectionLayout
                 ElseIf TypeOf control Is Label Then
                     Dim label = DirectCast(control, Label)
                     label.AutoEllipsis = True
-                    If label.AutoSize Then
-                        ' Keep labels at their designer origin; their natural height
-                        ' is already auto-scaled by the parent.
-                        Continue For
-                    End If
+                    If label.AutoSize Then Continue For
                 End If
                 MoveResize(control, x, y, w, h)
             Next
@@ -179,25 +324,6 @@ Public NotInheritable Class ResponsiveSectionLayout
                     End If
                 Next
             Next
-
-            ' Do not rearrange the WIM file / Choose WIM row. Only give the
-            ' original index selector a legible edit area and breathing room
-            ' between its value, arrow and neighbouring action buttons.
-            If page.Name = "TabPage1" Then
-                Dim indexLabel = TryCast(page.Controls("Label3"), Label)
-                Dim indexCombo = TryCast(page.Controls("cmbIndex"), ComboBox)
-                Dim labelX = If(compact, Math.Max(148, width - 166), rightX - 149)
-                Dim comboX = If(compact, Math.Max(207, width - 107), rightX - 91)
-                If indexLabel IsNot Nothing Then
-                    indexLabel.AutoSize = False
-                    indexLabel.TextAlign = ContentAlignment.MiddleLeft
-                    indexLabel.ForeColor = ModernTheme.TextInk
-                    MoveResize(indexLabel, labelX, 57, 49, 28)
-                End If
-                If indexCombo IsNot Nothing Then
-                    MoveResize(indexCombo, comboX, 56, 78, 30)
-                End If
-            End If
 
             layout.LastWidth = width
             page.ResumeLayout(True)
