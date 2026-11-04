@@ -451,10 +451,10 @@ Public NotInheritable Class DriverStudioPanel
             grid.ResumeLayout(True)
         End Try
         totalMetric.Text = results.Count.ToString()
-        newMetric.Text = results.Count(Function(d)
-            d.Status = "New" OrElse d.Status = "Newer").ToString()
-        sameMetric.Text = results.Count(Function(d)
-            d.Status = "Same version").ToString()
+        newMetric.Text = results.Where(Function(d)
+            d.Status = "New" OrElse d.Status = "Newer").Count().ToString()
+        sameMetric.Text = results.Where(Function(d)
+            d.Status = "Same version").Count().ToString()
         statusLabel.Text = If(results.Count = 0,
             "No INF files found. Select a folder with driver INF packages.",
             "Preview ready. Choose an INF to see the comparison explanation.")
