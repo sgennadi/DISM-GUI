@@ -1,0 +1,304 @@
+#!/usr/bin/env python3
+"""Apply the DISM GUI modern picker and foreground unmount UX patch.
+
+Fail closed on unrecognized upstream changes. No changes to the original GitHub repository.
+"""
+from pathlib import Path
+import sys
+
+
+def replace_once(data, old, new, label):
+    count = data.count(old)
+    if count != 1:
+        raise RuntimeError(f"{label}: expected one source match, found {count}")
+    return data.replace(old, new, 1)
+
+
+def replace_block(data, begin, end, replacement, label):
+    start = data.find(begin)
+    stop = data.find(end, start + len(begin))
+    if start < 0 or stop < 0 or data.find(begin, start + 1) != -1:
+        raise RuntimeError(f"{label}: upstream markers missing or ambiguous")
+    return data[:start] + replacement.rstrip() + "\n\n" + data[stop:]
+
+
+def main():
+    if len(sys.argv) != 2:
+        raise SystemExit("Usage: apply_fix.py REPOSITORY_PATH")
+    file = Path(sys.argv[1]).resolve() / "DISM GUI" / "frmMain.vb"
+    if not file.is_file():
+        raise RuntimeError(f"Original source missing: {file}")
+    original = file.read_text(encoding="utf-8-sig")
+    if "Private Function ChooseFolderModern(" in original:
+        print("Modern dialogs already applied.")
+        return
+    newline = "\r\n" if "\r\n" in original else "\n"
+    data = original.replace("\r\n", "\n")
+    data = replace_once(data, "Imports System.ComponentModel\n",
+                        "Imports System.ComponentModel\nImports System.Linq\n", "Linq import")
+
+    helpers = '''    ' Persist last locations separately for each kind of picker.
+    Private Const RecentKey As String = "Software\\DISMGUI\\RecentPaths"
+    Private closeAfterUnmount As Boolean = False
+
+    Private Function RecentDirectory(ByVal category As String) As String
+        Try
+            Using k = Registry.CurrentUser.OpenSubKey(RecentKey, False)
+                If k IsNot Nothing Then
+                    Dim dir = TryCast(k.GetValue(category), String)
+                    If Not String.IsNullOrWhiteSpace(dir) AndAlso System.IO.Directory.Exists(dir) Then
+                        Return dir
+                    End If
+                End If
+            End Using
+        Catch
+            ' Settings are optional.
+        End Try
+        Return Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
+    End Function
+
+    Private Sub RememberDirectory(ByVal category As String, ByVal dir As String)
+        If String.IsNullOrWhiteSpace(dir) Then Return
+        Try
+            Using k = Registry.CurrentUser.CreateSubKey(RecentKey)
+                k.SetValue(category, dir, RegistryValueKind.String)
+            End Using
+        Catch
+            ' Lack of registry write access must not block DISM.
+        End Try
+    End Sub
+
+    Private Function ChooseFolderModern(ByVal category As String, ByVal caption As String) As String
+        Using picker As New FolderBrowserDialog()
+            picker.Description = caption
+            picker.UseDescriptionForTitle = True
+            picker.AutoUpgradeEnabled = True
+            picker.ShowNewFolderButton = True
+            picker.SelectedPath = RecentDirectory(category)
+            If picker.ShowDialog(Me) <> DialogResult.OK Then Return Nothing
+            If Not System.IO.Directory.Exists(picker.SelectedPath) Then Return Nothing
+            RememberDirectory(category, picker.SelectedPath)
+            Return picker.SelectedPath
+        End Using
+    End Function
+
+    Private Function ChooseWIM(ByVal category As String) As String
+        Using picker As New OpenFileDialog()
+            picker.Title = "Choose a WIM file"
+            picker.Filter = "WIM files (*.wim)|*.wim|All files (*.*)|*.*"
+            picker.InitialDirectory = RecentDirectory(category)
+            picker.AutoUpgradeEnabled = True
+            picker.CheckFileExists = True
+            picker.Multiselect = False
+            If picker.ShowDialog(Me) <> DialogResult.OK Then Return Nothing
+            RememberDirectory(category, System.IO.Path.GetDirectoryName(picker.FileName))
+            Return picker.FileName
+        End Using
+    End Function
+
+    Private Function IsEmptyFolder(ByVal path As String) As Boolean
+        Return Not System.IO.Directory.EnumerateFileSystemEntries(path).Any()
+    End Function
+
+    Private Function AskUnmountAction() As Boolean?
+        Dim response = MessageBox.Show(Me,
+            "Save the changes to the WIM before dismounting?" & Environment.NewLine &
+            "Yes - Commit" & Environment.NewLine &
+            "No - Discard" & Environment.NewLine &
+            "Cancel - Keep the image mounted",
+            "Dismount WIM", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question)
+        If response = DialogResult.Cancel Then Return Nothing
+        Return response = DialogResult.Yes
+    End Function
+
+    Private Sub StartUnmount()
+        If BackgroundWorkerDisMount.IsBusy Then Return
+        Dim commit = AskUnmountAction()
+        If Not commit.HasValue Then Return
+        Dim folder = txtMount.Text.Trim().Trim(""""c)
+        If String.IsNullOrWhiteSpace(folder) OrElse Not System.IO.Directory.Exists(folder) Then
+            MessageBox.Show(Me, "Please select a valid mount folder.", "DISM GUI",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return
+        End If
+        blnDISMCommit = commit.Value
+        strFolderName = folder
+        strIndex = cmbIndex.Text
+        strWIM = txtWIM.Text
+        txtOutput.Text = ""
+        strDISMExitCode = ""
+        BackgroundWorkerDisMount.RunWorkerAsync()
+        frmProgress.ShowDialog(Me)
+        txtOutput.Text = strOutput
+    End Sub
+
+    Private Sub ShowUnmountResult(ByVal success As Boolean, ByVal failure As String)
+        If Me.IsDisposed OrElse Me.Disposing Then Return
+        Dim caption = "DISM GUI - Dismount WIM"
+        Dim message = If(success, "WIM image successfully dismounted.",
+                         "WIM could not be dismounted. " & failure & Environment.NewLine &
+                         "See the DISM output for details.")
+        Me.Activate()
+        MessageBox.Show(Me, message, caption, MessageBoxButtons.OK,
+                        If(success, MessageBoxIcon.Information, MessageBoxIcon.Error))
+    End Sub
+
+'''
+    data = replace_once(data, "    Private Sub btnOpenWIM_Click",
+                        helpers + "    Private Sub btnOpenWIM_Click", "helper insertion")
+
+    data = replace_block(data, "    Private Sub btnOpenWIM_Click",
+                         "    Private Sub btnOpenMount_Click", '''    Private Sub btnOpenWIM_Click(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles btnOpenWIM.Click
+        Dim fileName = ChooseWIM("WIM")
+        If fileName IsNot Nothing Then txtWIM.Text = fileName
+    End Sub''', "WIM browser")
+    data = replace_block(data, "    Private Sub btnOpenMount_Click",
+                         "    Private Sub btnMount_Click", '''    Private Sub btnOpenMount_Click(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles btnOpenMount.Click
+        Dim folder = ChooseFolderModern("Mount", "Choose an empty WIM mount folder")
+        If folder Is Nothing Then Return
+        Try
+            If Not IsEmptyFolder(folder) Then
+                MessageBox.Show(Me, "Please select an empty mount folder.", "DISM GUI",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                Return
+            End If
+            txtMount.Text = folder
+        Catch ex As Exception
+            MessageBox.Show(Me, ex.Message, "Cannot access folder",
+                MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub''', "mount folder browser")
+
+    data = replace_block(data, "    Private Sub frmMain_FormClosing",
+                         "    Private Sub btnDismount_Click", '''    Private Sub frmMain_FormClosing(ByVal sender As Object, ByVal e As System.Windows.Forms.FormClosingEventArgs) Handles Me.FormClosing
+        If closeAfterUnmount Then Return
+        If MessageBox.Show(Me, "Are you sure you want to exit?", "Exit?",
+                           MessageBoxButtons.YesNo, MessageBoxIcon.Question) <> DialogResult.Yes Then
+            e.Cancel = True
+            Return
+        End If
+        If WIMMounted Then
+            Dim response = MessageBox.Show(Me, "A WIM is mounted. Dismount it before exiting?",
+                                           "WIM Mounted", MessageBoxButtons.YesNoCancel,
+                                           MessageBoxIcon.Warning)
+            If response = DialogResult.Cancel Then
+                e.Cancel = True
+            ElseIf response = DialogResult.Yes Then
+                e.Cancel = True
+                closeAfterUnmount = True
+                StartUnmount()
+                If WIMMounted AndAlso Not BackgroundWorkerDisMount.IsBusy Then closeAfterUnmount = False
+            End If
+        End If
+    End Sub''', "form exit")
+    data = replace_block(data, "    Private Sub btnDismount_Click",
+                         "    Private Sub btnOpenFolder_Click", '''    Private Sub btnDismount_Click(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles btnDismount.Click
+        StartUnmount()
+    End Sub''', "unmount button")
+
+    data = replace_once(data, '''        If MessageBox.Show("Do you want to commit changes?", "WIM Mounted", MessageBoxButtons.YesNo, MessageBoxIcon.Question) = DialogResult.Yes Then
+            blnDISMCommit = True
+        Else
+            blnDISMCommit = False
+        End If
+''', "", "worker thread prompt")
+    # Always consume both redirected streams: a full stderr pipe must not deadlock DISM.
+    data = replace_once(data, '''        strOutput = strOutput & vbCr & vbCr & DISM.StandardOutput.ReadToEnd()
+        DISM.WaitForExit()
+        strDISMExitCode = DISM.ExitCode
+    End Sub
+
+    Private Sub BackgroundWorkerDisMount_RunWorkerCompleted''',
+'''        Dim stdoutTask = DISM.StandardOutput.ReadToEndAsync()
+        Dim stderrTask = DISM.StandardError.ReadToEndAsync()
+        DISM.WaitForExit()
+        strOutput &= Environment.NewLine & stdoutTask.GetAwaiter().GetResult()
+        Dim stderr = stderrTask.GetAwaiter().GetResult()
+        If Not String.IsNullOrWhiteSpace(stderr) Then strOutput &= Environment.NewLine & stderr
+        strDISMExitCode = DISM.ExitCode.ToString()
+    End Sub
+
+    Private Sub BackgroundWorkerDisMount_RunWorkerCompleted''', "unmount streams")
+    data = replace_block(data, "    Private Sub BackgroundWorkerDisMount_RunWorkerCompleted",
+                         "    Private Sub btnOpnDriverFolder_Click", '''    Private Sub BackgroundWorkerDisMount_RunWorkerCompleted(ByVal sender As Object, ByVal e As System.ComponentModel.RunWorkerCompletedEventArgs) Handles BackgroundWorkerDisMount.RunWorkerCompleted
+        Dim success = (e.Error Is Nothing AndAlso Not e.Cancelled AndAlso strDISMExitCode = "0")
+        If success Then
+            btnMount.Enabled = True
+            btnDismount.Enabled = False
+            WIMMounted = False
+            strMountedImageLocation = ""
+        End If
+        frmProgress.Close()
+        Dim details = If(e.Error IsNot Nothing, e.Error.Message, "DISM exit code: " & strDISMExitCode)
+        ' Post the modal result AFTER the progress window is closed.
+        Me.BeginInvoke(New MethodInvoker(Sub()
+            ShowUnmountResult(success, details)
+            If closeAfterUnmount Then
+                closeAfterUnmount = False
+                If success Then Me.Close()
+            End If
+        End Sub))
+    End Sub''', "unmount result")
+
+    data = replace_once(data, "        txtDriverLocation.Text = OpenFolder()",
+                        '''        Dim selected = OpenFolder("Drivers")
+        If selected IsNot Nothing Then txtDriverLocation.Text = selected''', "driver folder cancel")
+    data = replace_once(data, "        txtPackageFile.Text = OpenFolder()",
+                        '''        Dim selected = OpenFolder("Packages")
+        If selected IsNot Nothing Then txtPackageFile.Text = selected''', "package folder cancel")
+    data = replace_block(data, "    Private Function OpenFolder()",
+                         "    Private Sub btnGetAllDriverInfo_Click", '''    Private Function OpenFolder(ByVal category As String) As String
+        Return ChooseFolderModern(category, "Choose " & category & " folder")
+    End Function''', "generic folder browser")
+    data = replace_block(data, "    Private Sub btnCaptureSrc_Click",
+                         "    Private Sub btnCaptureDest_Click", '''    Private Sub btnCaptureSrc_Click(sender As System.Object, e As System.EventArgs) Handles btnCaptureSrc.Click
+        Dim folder = ChooseFolderModern("CaptureSource", "Choose a source folder to capture")
+        If folder Is Nothing Then Return
+        Try
+            If IsEmptyFolder(folder) Then
+                MessageBox.Show(Me, "You must choose a non-empty capture source folder.",
+                    "DISM GUI", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                Return
+            End If
+            txtCaptureSource.Text = folder
+        Catch ex As Exception
+            MessageBox.Show(Me, ex.Message, "Cannot access folder",
+                MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub''', "capture source")
+    data = replace_block(data, "    Private Sub btnCaptureDest_Click",
+                         "    Private Sub btnAppend_Click", '''    Private Sub btnCaptureDest_Click(sender As System.Object, e As System.EventArgs) Handles btnCaptureDest.Click
+        Dim fileName = ChooseWIM("CaptureWIM")
+        If fileName IsNot Nothing Then txtCaptureDest.Text = fileName
+    End Sub''', "capture WIM")
+    data = replace_block(data, "    Private Sub btnBrowseSource_Click",
+                         "    Private Sub btnBrowseDest_Click", '''    Private Sub btnBrowseSource_Click(sender As System.Object, e As System.EventArgs) Handles btnBrowseSource.Click
+        Dim fileName = ChooseWIM("ApplyWIM")
+        If fileName IsNot Nothing Then txtxApplySource.Text = fileName
+    End Sub''', "apply source WIM")
+    data = replace_block(data, "    Private Sub btnBrowseDest_Click",
+                         "    Private Sub btnApply_Click", '''    Private Sub btnBrowseDest_Click(sender As System.Object, e As System.EventArgs) Handles btnBrowseDest.Click
+        Dim folder = ChooseFolderModern("ApplyDestination", "Choose an empty apply destination folder")
+        If folder Is Nothing Then Return
+        Try
+            If Not IsEmptyFolder(folder) Then
+                MessageBox.Show(Me, "Please select an empty apply destination folder.",
+                    "DISM GUI", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                Return
+            End If
+            txtApplyDest.Text = folder
+        Catch ex As Exception
+            MessageBox.Show(Me, ex.Message, "Cannot access folder",
+                MessageBoxButtons.OK, MessageBoxIcon.Error)
+        End Try
+    End Sub''', "apply destination")
+
+    backup = file.with_suffix(".vb.before-modern-dialogs.bak")
+    if not backup.exists():
+        backup.write_text(original, encoding="utf-8-sig")
+    file.write_text(data.replace("\n", newline), encoding="utf-8-sig")
+    print("PATCHED:", file)
+
+
+if __name__ == "__main__":
+    main()
