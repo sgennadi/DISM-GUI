@@ -105,9 +105,9 @@ Public NotInheritable Class ResponsiveForms
             Dim browse As Button = Nothing
             If Not String.IsNullOrWhiteSpace(browseName) Then
                 browse = DirectCast(Extract(browseName), Button)
-                Dim label = If(String.IsNullOrWhiteSpace(browseCaption),
-                               browse.Text.Replace("&", ""), browseCaption)
-                browse.Text = label
+                Dim browseText = If(String.IsNullOrWhiteSpace(browseCaption),
+                                    browse.Text.Replace("&", ""), browseCaption)
+                browse.Text = browseText
                 browse.AutoEllipsis = False
                 ModernTheme.StyleButton(browse, "browse")
                 browse.Font = ModernTheme.UiFont(9.3F, True)
