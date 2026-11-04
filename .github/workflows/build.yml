@@ -10,6 +10,11 @@ on:
 permissions:
   contents: read
 
+# Keep only the newest push build; obsolete queued builds must not block the release.
+concurrency:
+  group: dism-gui-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: windows-2025
