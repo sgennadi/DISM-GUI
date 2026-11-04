@@ -198,6 +198,66 @@ internal static class LayoutSmoke
         Console.WriteLine("PASS window size/position persistence and off-screen recovery");
     }
 
+    private const string WIM_METADATA_FIXTURE =
+        "<WIM>" +
+        "<TOTALBYTES>1048576</TOTALBYTES>" +
+        "<IMAGE INDEX=\"1\">" +
+        "<NAME>Microsoft Windows PE</NAME>" +
+        "<DESCRIPTION>Windows PE for deployment</DESCRIPTION>" +
+        "<TOTALBYTES>12456789</TOTALBYTES>" +
+        "<WINDOWS><ARCH>9</ARCH><EDITIONID>WindowsPE</EDITIONID>" +
+        "<INSTALLATIONTYPE>WindowsPE</INSTALLATIONTYPE>" +
+        "<PRODUCTNAME>Microsoft Windows PE</PRODUCTNAME>" +
+        "<LANGUAGES><LANGUAGE>en-US</LANGUAGE><LANGUAGE>he-IL</LANGUAGE></LANGUAGES>" +
+        "<VERSION><MAJOR>10</MAJOR><MINOR>0</MINOR><BUILD>26100</BUILD></VERSION>" +
+        "</WINDOWS></IMAGE>" +
+        "<IMAGE INDEX=\"2\"><NAME>Microsoft Windows Setup</NAME>" +
+        "<FLAGS>Setup</FLAGS><TOTALBYTES>23456789</TOTALBYTES>" +
+        "<WINDOWS><ARCH>12</ARCH><EDITIONID>WindowsSetup</EDITIONID>" +
+        "<VERSION><MAJOR>10</MAJOR><MINOR>0</MINOR><BUILD>26100</BUILD></VERSION>" +
+        "</WINDOWS></IMAGE></WIM>";
+
+    private static void VerifyWimMetadata()
+    {
+        var report = Wim360Reader.ParseMetadataXml(
+            WIM_METADATA_FIXTURE, @"C:\Images\boot.wim", 87654321);
+        Require(report.ImageCount == 2 &&
+                report.Images[0].Index == 1 && report.Images[1].Index == 2,
+                "WIM metadata did not preserve all image indexes");
+        Require(report.Images[0].Architecture == "x64" &&
+                report.Images[1].Architecture == "ARM64",
+                "WIM XML architecture mapping failed");
+        Require(report.Images[0].Version == "10.0.26100" &&
+                report.Images[0].Edition == "WindowsPE" &&
+                report.Images[0].Languages.Contains("he-IL"),
+                "WIM XML OS version, edition or languages were lost");
+        Require(report.FileSizeBytes == 87654321 &&
+                Wim360Reader.FormatReport(report).Contains("Index 2:"),
+                "WIM 360 report generation is incomplete");
+        Require(Wim360Reader.HumanSize(1073741824) == "1 GB",
+                "WIM file size formatting is incorrect");
+
+        bool dtdRejected = false;
+        try {
+            Wim360Reader.ParseMetadataXml(
+                "<!DOCTYPE WIM [<!ENTITY x SYSTEM 'file:///C:/Windows/win.ini'>]>" +
+                "<WIM><IMAGE INDEX='1'><NAME>&x;</NAME></IMAGE></WIM>",
+                "untrusted.wim", 0);
+        } catch (System.Xml.XmlException) {
+            dtdRejected = true;
+        }
+        Require(dtdRejected, "WIM XML parser must forbid external entities");
+        bool duplicateRejected = false;
+        try {
+            Wim360Reader.ParseMetadataXml(
+                "<WIM><IMAGE INDEX='1'/><IMAGE INDEX='1'/></WIM>", "bad.wim", 0);
+        } catch (System.IO.InvalidDataException) {
+            duplicateRejected = true;
+        }
+        Require(duplicateRejected, "WIM XML parser must reject duplicate indexes");
+        Console.WriteLine("PASS WIM 360 metadata, architecture, report and XML safety tests");
+    }
+
     [STAThread]
     private static int Main()
     {
@@ -217,6 +277,47 @@ internal static class LayoutSmoke
             Require(tabs is not null, "Original DISM TabControl was not preserved");
             tabs!.SelectedIndex = 0;
             Application.DoEvents();
+            VerifyWimMetadata();
+            Require(tabs.TabPages.Count == 10 &&
+                    tabs.TabPages[9].Name == "TabPageWim360",
+                    "WIM 360 must be a separate embedded 10th workspace");
+            var wimNav = Find(form, "navWim360") as Button;
+            Require(wimNav is not null && wimNav.Text.Contains("WIM 360"),
+                    "WIM 360 entry must be visible in top navigation");
+            var dashboard = Find(tabs.TabPages[9], "Wim360Dashboard") as Wim360Dashboard;
+            Require(dashboard is not null &&
+                    Find(dashboard, "Wim360Layout") is TableLayoutPanel &&
+                    Find(dashboard, "grid360Indexes") is DataGridView,
+                    "WIM 360 dashboard controls must exist in the main window");
+            var wimPathField = Find(dashboard!, "txt360Path") as TextBox;
+            Require(wimPathField is not null, "WIM 360 file chooser missing");
+            wimPathField!.Text = @"C:	estoot.wim";
+            dashboard!.PreviewMetadataForTest(WIM_METADATA_FIXTURE);
+            var indexGrid = Find(dashboard, "grid360Indexes") as DataGridView;
+            Require(indexGrid!.Rows.Count == 2,
+                    "WIM 360 should display both indexes from the fixture");
+            var selectedDetails = Find(dashboard, "txt360Details") as TextBox;
+            Require(selectedDetails!.Text.Contains("WindowsPE") &&
+                    selectedDetails.Text.Contains("10.0.26100"),
+                    "WIM 360 detail panel missing the selected index metadata");
+            tabs.SelectedIndex = 9;
+            Application.DoEvents();
+            var selectedWimButton = Find(dashboard, "btn360UseInMount") as Button;
+            Require(selectedWimButton is not null && selectedWimButton.Enabled,
+                    "WIM 360 Use in Mount action should be available after metadata load");
+            indexGrid.Rows[1].Selected = true;
+            Application.DoEvents();
+            selectedWimButton.PerformClick();
+            Application.DoEvents();
+            Require(tabs.SelectedIndex == 0 &&
+                    ((TextBox)Find(tabs.TabPages[0], "txtWIM")!).Text == @"C:	estoot.wim" &&
+                    ((ComboBox)Find(tabs.TabPages[0], "cmbIndex")!).Text == "2",
+                    "WIM 360 selected index must populate existing Mount controls without mounting");
+            ((TextBox)Find(tabs.TabPages[0], "txtWIM")!).Text = "";
+            wimPathField.Text = "";
+            tabs.SelectedIndex = 0;
+            Application.DoEvents();
+            Console.WriteLine("PASS WIM 360 embedded UI, two indexes and safe Mount handoff");
             var page = tabs.TabPages[0];
             Require(Find(page, "MountResponsiveRoot") is TableLayoutPanel,
                 "Mount page is not using the responsive grid");
@@ -319,6 +420,13 @@ internal static class LayoutSmoke
                     Snapshot(form, $"DISM-GUI-Section-{section + 1}-{form.ClientSize.Width}x{form.ClientSize.Height}");
                 }
             }
+            tabs.SelectedIndex = 9;
+            Application.DoEvents();
+            wimPathField.Text = @"C:	estoot.wim";
+            dashboard.PreviewMetadataForTest(WIM_METADATA_FIXTURE);
+            Snapshot(form, "DISM-GUI-WIM-360");
+            tabs.SelectedIndex = 0;
+            Application.DoEvents();
             form.Hide();
             form.Dispose();
 
