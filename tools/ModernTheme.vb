@@ -2,6 +2,7 @@ Imports System
 Imports System.Collections.Generic
 Imports System.Drawing
 Imports System.Drawing.Drawing2D
+Imports System.Linq
 Imports System.Runtime.InteropServices
 Imports System.Windows.Forms
 
@@ -334,6 +335,15 @@ Public NotInheritable Class ModernTheme
         ' Quiet one-shot check: no popup, no repeated MFA or background polling.
         ' The menu signals newer stable versions without interrupting DISM work.
         AddHandler frm.Shown, Sub(sender, e)
+            ' The legacy form sets cmbIndex.Text during Load. Clear the
+            ' default blue text selection only after this initialization.
+            Dim selector = TryCast(tabs.TabPages(0).Controls.Find("cmbIndex", True).
+                                   FirstOrDefault(), ComboBox)
+            If selector IsNot Nothing AndAlso
+               selector.DropDownStyle <> ComboBoxStyle.DropDownList Then
+                selector.SelectionStart = selector.Text.Length
+                selector.SelectionLength = 0
+            End If
             NotifyUpdateInMenuAsync(toolsButton, updatesMenuItem)
         End Sub
 
