@@ -81,7 +81,8 @@ Public NotInheritable Class DriverStudioEngine
     Private Shared Function DateForComparison(input As String) As DateTime?
         Dim dateValue As DateTime
         Dim patterns As String() = {"M/d/yyyy", "MM/dd/yyyy",
-            "yyyy-MM-dd", "yyyy-MM-ddTHH:mm:ss", "yyyy-MM-ddTHH:mm:ssZ"}
+            "MM-dd-yyyy", "yyyy-MM-dd", "yyyy-MM-ddTHH:mm:ss",
+            "yyyy-MM-ddTHH:mm:ssZ"}
         If DateTime.TryParseExact(If(input, "").Trim(), patterns,
                                   CultureInfo.InvariantCulture,
                                   DateTimeStyles.AllowWhiteSpaces Or
@@ -98,10 +99,10 @@ Public NotInheritable Class DriverStudioEngine
         Return String.Equals(Simplify(a), Simplify(b), StringComparison.Ordinal)
     End Function
 
-    Public Shared Function ReadInf(file As String) As DriverPackage
+    Public Shared Function ReadInf(infFilePath As String) As DriverPackage
         Dim item As New DriverPackage With {
-            .FilePath = Path.GetFullPath(file),
-            .InfName = Path.GetFileName(file)
+            .FilePath = Path.GetFullPath(infFilePath),
+            .InfName = Path.GetFileName(infFilePath)
         }
         If Not File.Exists(item.FilePath) Then
             Throw New FileNotFoundException("Driver INF not found.", item.FilePath)
@@ -197,11 +198,11 @@ Public NotInheritable Class DriverStudioEngine
         Return item
     End Function
 
-    Public Shared Function ScanSource(path As String, recurse As Boolean) As List(Of DriverPackage)
-        If String.IsNullOrWhiteSpace(path) Then
+    Public Shared Function ScanSource(sourcePath As String, recurse As Boolean) As List(Of DriverPackage)
+        If String.IsNullOrWhiteSpace(sourcePath) Then
             Throw New ArgumentException("Choose an INF file or driver directory.")
         End If
-        Dim full = Path.GetFullPath(path)
+        Dim full = Path.GetFullPath(sourcePath)
         Dim files As IEnumerable(Of String)
         If File.Exists(full) Then
             files = {full}
