@@ -80,6 +80,10 @@ internal static class LayoutSmoke
             var tools = Find(form, "btnToolsMenu") as Button;
             Require(tools is not null && tools.Visible && tools.Width >= 100,
                 "Tools must be a readable button, not a menu-strip caption");
+            Require(tools!.ContextMenuStrip is not null &&
+                    tools.ContextMenuStrip.Items.Cast<ToolStripItem>()
+                         .Any(item => item.Text == "About"),
+                    "Tools button must contain the original About and DISM commands");
             var wim = Find(page, "txtWIM")!;
             var browseWim = Find(page, "btnOpenWIM")!;
             var mount = Find(page, "txtMount")!;
