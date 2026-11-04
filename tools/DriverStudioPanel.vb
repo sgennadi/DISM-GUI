@@ -394,8 +394,9 @@ Public NotInheritable Class DriverStudioPanel
         Dim mount = currentMount()
         WorkState(True)
         statusLabel.Text = "Checking selected WIM index and reading driver versions..."
+        Dim sourceItems As New List(Of DriverStudioEngine.DriverPackage)()
         Try
-            Dim sourceItems = Await Task.Run(
+            sourceItems = Await Task.Run(
                 Function() DriverStudioEngine.ScanSource(selectedPath, includeSubfolders))
             If IsDisposed Then Return
             Dim installed = Await DriverStudioInventory.ReadMountedAsync(
@@ -410,15 +411,10 @@ Public NotInheritable Class DriverStudioPanel
         Catch ex As Exception
             If IsDisposed Then Return
             ' Never turn an unavailable inventory into "New" decisions.
-            Dim results As New List(Of DriverStudioEngine.Decision)()
-            Try
-                Dim sourceItems = Await Task.Run(
-                    Function() DriverStudioEngine.ScanSource(selectedPath, includeSubfolders))
-                results = DriverStudioEngine.CompareCandidates(
-                    sourceItems, New List(Of DriverStudioEngine.DriverPackage)(), False)
-            Catch
-            End Try
-            If IsDisposed Then Return
+            ' VB.NET forbids Await inside Catch; use the source INF scan already
+            ' completed before reading the installed-driver inventory.
+            Dim results = DriverStudioEngine.CompareCandidates(
+                sourceItems, New List(Of DriverStudioEngine.DriverPackage)(), False)
             ShowDecisions(results, "Inventory NOT verified")
             statusLabel.Text = "Not checked: " & ex.Message
         Finally
