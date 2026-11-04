@@ -48,6 +48,7 @@ subprocess.run([sys.executable, str(root / "tools" / "apply_modern.py"), str(roo
 s = project.read_text(encoding="utf-8-sig")
 s = s.replace("<TargetFramework>net9.0-windows</TargetFramework>", "<TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>")
 s = s.replace('<Platform Condition=" \'$(Platform)\' == \'\' ">x86</Platform>', '<Platform Condition=" \'$(Platform)\' == \'\' ">AnyCPU</Platform>')
+s = s.replace("<GenerateAssemblyInfo>false</GenerateAssemblyInfo>", "<GenerateAssemblyInfo>true</GenerateAssemblyInfo>")
 s = s.replace("<AssemblyVersion>4.0.0.0</AssemblyVersion>", "<AssemblyVersion>4.1.0.0</AssemblyVersion>")
 s = s.replace("<FileVersion>4.0.0.0</FileVersion>", "<FileVersion>4.1.0.0</FileVersion>")
 if "<DebugType>none</DebugType>" not in s:
