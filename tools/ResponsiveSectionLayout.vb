@@ -114,9 +114,9 @@ Public NotInheritable Class ResponsiveSectionLayout
                                 sequence += 1
                             End If
                         Next
-                        Dim columnWidth = Math.Max(135, (width - 42)  2)
+                        Dim columnWidth = Math.Max(135, (width - 42) \ 2)
                         x = 12 + (sequence Mod 2) * (columnWidth + 12)
-                        y = compactStart + (sequence  2) * 61
+                        y = compactStart + (sequence \ 2) * 61
                         w = columnWidth
                         h = 53
                     Else
