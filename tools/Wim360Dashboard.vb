@@ -41,6 +41,7 @@ Public NotInheritable Class Wim360Dashboard
         Me.Padding = Padding.Empty
         Me.BackColor = Color.White
         Me.Font = ModernTheme.UiFont(10)
+        Me.AutoScaleMode = AutoScaleMode.Font
 
         canvas = New Panel With {.Name = "Wim360Viewport",
                                  .Dock = DockStyle.Fill,
@@ -51,12 +52,12 @@ Public NotInheritable Class Wim360Dashboard
         layout = New TableLayoutPanel With {
             .Name = "Wim360Layout",
             .ColumnCount = 1, .RowCount = 7,
-            .Dock = DockStyle.Top, .Height = 740, .Width = 710,
+            .Dock = DockStyle.Top, .Height = 655, .Width = 710,
             .BackColor = Color.White,
             .Margin = Padding.Empty, .Padding = New Padding(17, 13, 17, 18)
         }
         layout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        For Each height As Integer In {64, 67, 86, 30, 230, 175, 70}
+        For Each height As Integer In {53, 57, 72, 27, 205, 145, 63}
             layout.RowStyles.Add(New RowStyle(SizeType.Absolute, height))
         Next
         canvas.Controls.Add(layout)
@@ -394,6 +395,9 @@ Public NotInheritable Class Wim360Dashboard
                                             StringComparison.OrdinalIgnoreCase)
         If selected Is Nothing Then Return
         details.Text = "Index " & selected.Index.ToString() & "  |  " & selected.Name &
+                       Environment.NewLine &
+                       "Description: " & If(selected.Description.Length > 0,
+                                             selected.Description, "Not listed") &
                        Environment.NewLine &
                        "Edition: " & If(selected.Edition.Length > 0, selected.Edition, "Not listed") &
                        "     Architecture: " & selected.Architecture &
