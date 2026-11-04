@@ -271,7 +271,7 @@ Public NotInheritable Class UpdateManager
         Private busy As Boolean
 
         Public Sub New()
-            Me.Text = "DISM GUI - Updates - v" & CurrentVersion().ToString(3)
+            Me.Text = "DISM GUI " & CurrentVersion().ToString(3) & " - Updates"
             Me.StartPosition = FormStartPosition.CenterParent
             Me.FormBorderStyle = FormBorderStyle.FixedDialog
             Me.MaximizeBox = False

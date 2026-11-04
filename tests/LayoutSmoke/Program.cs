@@ -69,6 +69,9 @@ internal static class LayoutSmoke
             using var form = new frmMain();
             form.Show();
             Application.DoEvents();
+            var appVersion = typeof(ModernTheme).Assembly.GetName().Version!.ToString(3);
+            Require(form.Text.StartsWith($"DISM GUI {appVersion}", StringComparison.Ordinal),
+                    "Main title must display actual EXE version without v prefix");
             var tabs = form.Controls.Find("TabControl1", true)
                 .OfType<TabControl>().FirstOrDefault();
             Require(tabs is not null, "Original DISM TabControl was not preserved");
@@ -164,6 +167,8 @@ internal static class LayoutSmoke
             {
                 about.Show();
                 Application.DoEvents();
+                Require(about.Text == $"About DISM GUI {appVersion}",
+                        "About title must show actual version without v prefix");
                 var aboutTitle = FindLabel(about, "DISM GUI");
                 var aboutSub = FindLabel(about, "Windows Image Toolkit");
                 Require(aboutTitle is not null && aboutSub is not null,
@@ -180,6 +185,8 @@ internal static class LayoutSmoke
             {
                 updateForm.Show();
                 Application.DoEvents();
+                Require(updateForm.Text == $"DISM GUI {appVersion} - Updates",
+                        "Update Center title must show actual version without v prefix");
                 var updatesTitle = FindLabel(updateForm, "UPDATES");
                 var updatesSub = FindLabel(updateForm,
                     "Stable releases  ·  SHA-256 verified");

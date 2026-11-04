@@ -9,7 +9,7 @@ Public NotInheritable Class frmAbout
     Inherits Form
 
     Public Sub New()
-        Me.Text = "About DISM GUI"
+        Me.Text = "About DISM GUI " & GetType(frmAbout).Assembly.GetName().Version.ToString(3)
         Me.StartPosition = FormStartPosition.CenterParent
         Me.FormBorderStyle = FormBorderStyle.FixedDialog
         Me.MaximizeBox = False

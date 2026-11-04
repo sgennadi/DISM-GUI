@@ -210,7 +210,7 @@ Public NotInheritable Class ModernTheme
         frm.BackColor = Backdrop
         frm.StartPosition = FormStartPosition.CenterScreen
         frm.MinimumSize = New Size(850, 585)
-        frm.Text = "DISM GUI  •  Modern Edition"
+        frm.Text = "DISM GUI " & GetType(ModernTheme).Assembly.GetName().Version.ToString(3) & " - Modern Edition"
         Try
             frm.Icon = MakeAppIcon()
         Catch
