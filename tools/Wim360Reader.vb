@@ -228,8 +228,12 @@ Public NotInheritable Class Wim360Reader
         ' First call computes the buffer size; ERROR_INSUFFICIENT_BUFFER is normal.
         Dim found = WIMGetMountedImageInfo(1, count, IntPtr.Zero, 0UI, required)
         If required = 0UI Then
-            If found OrElse count = 0UI Then Return New List(Of MountInfoNative)()
-            Throw New Win32Exception(Marshal.GetLastWin32Error(),
+            Dim nativeError = Marshal.GetLastWin32Error()
+            If found OrElse (count = 0UI AndAlso
+                             (nativeError = 0 OrElse nativeError = 122)) Then
+                Return New List(Of MountInfoNative)()
+            End If
+            Throw New Win32Exception(nativeError,
                                      "Cannot query mounted-image registry.")
         End If
         Dim stride = Marshal.SizeOf(Of MountInfoNative)()
@@ -368,7 +372,9 @@ Public NotInheritable Class Wim360Reader
         }
         For Each item As ImageInfo In report.Images
             lines.Add("Index " & item.Index.ToString() & ": " & item.Name)
+            lines.Add("  Description: " & item.Description)
             lines.Add("  Edition: " & item.Edition)
+            lines.Add("  Flags: " & item.Flags)
             lines.Add("  Architecture: " & item.Architecture)
             lines.Add("  OS build: " & item.Version)
             lines.Add("  Image bytes: " & HumanSize(item.UncompressedBytes))
