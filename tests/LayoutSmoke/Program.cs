@@ -598,6 +598,54 @@ internal static class LayoutSmoke
         }
     }
 
+    private static void VerifyUniversalDiagnosticsBridge()
+    {
+        var payload = UniversalDiagnosticsBridge.BuildCapturePayload(
+            "WIM 360", "4.3.10", "Mount failed (87)",
+            "Password: PRIVATE_TEST_SECRET\nC:\\Users\\tester\\Private\\image.wim");
+        using (var parsed = System.Text.Json.JsonDocument.Parse(payload))
+        {
+            var root = parsed.RootElement;
+            Require(root.GetProperty("project").GetString() == "sgennadi/DISM-GUI" &&
+                    root.GetProperty("component").GetString() == "WIM 360" &&
+                    root.GetProperty("version").GetString() == "4.3.10" &&
+                    root.GetProperty("code").GetString() == "MANUAL" &&
+                    root.GetProperty("level").GetString() == "error" &&
+                    !root.TryGetProperty("excerpt", out _) &&
+                    !payload.Contains("PRIVATE_TEST_SECRET") &&
+                    !payload.Contains("tester") &&
+                    !payload.Contains("image.wim") &&
+                    !payload.Contains("GH_TOKEN"),
+                    "UniversalDiagnostics payload must be schema v1 and redact secrets/logs");
+        }
+        var previous = Environment.GetEnvironmentVariable("UNIVERSAL_DIAGNOSTICS_EXE");
+        var oldStub = Environment.GetEnvironmentVariable("DISMGUI_TEST_UNIVERSAL_COLLECTOR");
+        var oldToken = Environment.GetEnvironmentVariable("GH_TOKEN");
+        try
+        {
+            var appHost = System.IO.Path.Combine(AppContext.BaseDirectory, "LayoutSmoke.exe");
+            Require(System.IO.File.Exists(appHost),
+                "Windows layout smoke EXE is required for local collector protocol testing");
+            Environment.SetEnvironmentVariable("UNIVERSAL_DIAGNOSTICS_EXE", appHost);
+            Environment.SetEnvironmentVariable("DISMGUI_TEST_UNIVERSAL_COLLECTOR", "1");
+            Environment.SetEnvironmentVariable("GH_TOKEN", "MUST_NOT_REACH_COLLECTOR");
+            var result = UniversalDiagnosticsBridge.CaptureAsync(payload).
+                GetAwaiter().GetResult();
+            Require(result.Success &&
+                    Guid.TryParse(result.ReportId, out _) &&
+                    result.Message.Contains("local queue") &&
+                    result.Message.Contains("Nothing was sent"),
+                "UniversalDiagnostics local capture handshake failed");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("UNIVERSAL_DIAGNOSTICS_EXE", previous);
+            Environment.SetEnvironmentVariable("DISMGUI_TEST_UNIVERSAL_COLLECTOR", oldStub);
+            Environment.SetEnvironmentVariable("GH_TOKEN", oldToken);
+        }
+        Console.WriteLine("PASS UniversalDiagnostics capture-json subprocess, private metadata and explicit local queue.");
+    }
+
     private static void VerifyErrorDiagnostics()
     {
         var raw = "Password: DO_NOT_UPLOAD_123\n" +
@@ -652,20 +700,23 @@ internal static class LayoutSmoke
         var description = Find(dialog, "txtSupportDescription") as TextBox;
         var copy = Find(dialog, "btnSupportCopy") as Button;
         var draft = Find(dialog, "btnSupportGitHub") as Button;
+        var queue = Find(dialog, "btnSupportUniversalQueue") as Button;
         var close = Find(dialog, "btnSupportClose") as Button;
         Require(include is not null && reviewed is not null && preview is not null &&
                 history is not null && openHistory is not null && clearHistory is not null &&
                 title is not null && description is not null &&
-                copy is not null && draft is not null && close is not null,
+                copy is not null && draft is not null && queue is not null &&
+                close is not null,
                 "Error report UI is missing required preview, consent or export controls");
         Require(preview!.WordWrap && preview.ScrollBars == ScrollBars.Vertical,
                 "Diagnostics preview must wrap long report lines without requiring horizontal scrolling");
         Require(!include!.Checked && !history!.Checked &&
-                !reviewed!.Checked && !draft!.Enabled,
+                !reviewed!.Checked && !draft!.Enabled && !queue!.Enabled,
                 "Diagnostic logs must opt-in and GitHub action must require review");
         NoOverlap(openHistory!, clearHistory!, "Open / Clear diagnostic logs");
         NoOverlap(clearHistory, copy!, "Clear diagnostic logs / Copy");
         NoOverlap(copy, draft, "Diagnostics Copy / GitHub draft actions");
+        NoOverlap(queue, draft, "Universal queue / GitHub draft actions");
         NoOverlap(draft, close!, "Diagnostics GitHub draft / Close actions");
 
         include.Checked = true;
@@ -1329,8 +1380,28 @@ internal static class LayoutSmoke
     }
 
     [STAThread]
-    private static int Main()
+    private static int Main(string[] args)
     {
+        if (args.Length == 1 && args[0] == "capture-json" &&
+            Environment.GetEnvironmentVariable("DISMGUI_TEST_UNIVERSAL_COLLECTOR") == "1")
+        {
+            try
+            {
+                using var request = System.Text.Json.JsonDocument.Parse(
+                    Console.In.ReadToEnd());
+                var root = request.RootElement;
+                if (root.GetProperty("project").GetString() != "sgennadi/DISM-GUI" ||
+                    root.TryGetProperty("excerpt", out _) ||
+                    !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("GH_TOKEN")))
+                    return 6;
+                Console.WriteLine("{\"id\":\"212a7fd0-b0d6-486b-8f32-9443ce65fa00\"}");
+                return 0;
+            }
+            catch
+            {
+                return 7;
+            }
+        }
         try
         {
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
@@ -1355,6 +1426,7 @@ internal static class LayoutSmoke
             VerifyThreeIndexComparison(form);
             VerifyMountedAudit();
             VerifyRuntimeDiagnostics();
+            VerifyUniversalDiagnosticsBridge();
             VerifyErrorDiagnostics();
             VerifyIntegratedTestCenter(form);
             var detailFixture = VerifyDetailedInventory();
