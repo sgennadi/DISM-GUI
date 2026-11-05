@@ -21,6 +21,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
     Private ReadOnly searchBox As TextBox
     Private ReadOnly compareButton As Button
     Private ReadOnly exportButton As Button
+    Private ReadOnly hashButton As Button
     Private ReadOnly closeButton As Button
     Private ReadOnly summaryLabel As Label
     Private ReadOnly hintLabel As Label
@@ -231,12 +232,13 @@ Public NotInheritable Class Wim360CompareIndexesForm
         root.Controls.Add(statusPanel, 0, 4)
 
         Dim actions As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 4, .RowCount = 1,
+            .Dock = DockStyle.Fill, .ColumnCount = 5, .RowCount = 1,
             .Margin = Padding.Empty
         }
         actions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 170))
+        actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 205))
+        actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 165))
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 180))
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 132))
         root.Controls.Add(actions, 0, 5)
@@ -246,22 +248,30 @@ Public NotInheritable Class Wim360CompareIndexesForm
         }
         ModernTheme.StyleButton(compareButton, "primary")
         actions.Controls.Add(compareButton, 1, 0)
+        hashButton = New Button With {
+            .Name = "btn360IndexCompareHash", .Text = "Verify SHA-256",
+            .Dock = DockStyle.Fill, .Margin = New Padding(4, 7, 6, 4),
+            .Enabled = False
+        }
+        ModernTheme.StyleButton(hashButton, "secondary")
+        actions.Controls.Add(hashButton, 2, 0)
         exportButton = New Button With {
             .Name = "btn360IndexCompareCsv", .Text = "Export filtered CSV",
             .Dock = DockStyle.Fill, .Margin = New Padding(4, 7, 6, 4),
             .Enabled = False
         }
         ModernTheme.StyleButton(exportButton, "browse")
-        actions.Controls.Add(exportButton, 2, 0)
+        actions.Controls.Add(exportButton, 3, 0)
         closeButton = New Button With {
             .Name = "btn360IndexCompareClose", .Text = "Close",
             .Dock = DockStyle.Fill, .Margin = New Padding(4, 7, 0, 4)
         }
         ModernTheme.StyleButton(closeButton, "neutral")
-        actions.Controls.Add(closeButton, 3, 0)
+        actions.Controls.Add(closeButton, 4, 0)
         Me.CancelButton = closeButton
 
         AddHandler compareButton.Click, AddressOf CompareClicked
+        AddHandler hashButton.Click, AddressOf HashClicked
         AddHandler exportButton.Click, AddressOf ExportClicked
         AddHandler closeButton.Click, Sub(sender, e)
             If job IsNot Nothing Then job.Cancel()
@@ -273,6 +283,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
             visibleRows.Clear()
             grid.RowCount = 0
             exportButton.Enabled = False
+            hashButton.Enabled = False
             summaryLabel.Text = "Selection changed. Click Compare selected indexes."
         End Sub
         AddHandler modeBox.SelectedIndexChanged, Sub(sender, e)
@@ -280,11 +291,13 @@ Public NotInheritable Class Wim360CompareIndexesForm
             visibleRows.Clear()
             grid.RowCount = 0
             exportButton.Enabled = False
+            hashButton.Enabled = False
             summaryLabel.Text = "Mode changed. Click Compare selected indexes."
         End Sub
         AddHandler categoryBox.SelectedIndexChanged, Sub(sender, e) ApplyFilter()
         AddHandler stateBox.SelectedIndexChanged, Sub(sender, e) ApplyFilter()
         AddHandler searchBox.TextChanged, Sub(sender, e) ApplyFilter()
+        AddHandler grid.SelectionChanged, Sub(sender, e) UpdateHashButton()
         AddHandler reset.Click, Sub(sender, e)
             categoryBox.SelectedIndex = 0
             stateBox.SelectedIndex = 0
@@ -329,6 +342,10 @@ Public NotInheritable Class Wim360CompareIndexesForm
         working = True
         compareButton.Enabled = False
         exportButton.Enabled = False
+        hashButton.Enabled = False
+        comparison = Nothing
+        visibleRows.Clear()
+        grid.RowCount = 0
         selectedIndexes.Enabled = False
         modeBox.Enabled = False
         summaryLabel.Text = "Comparing indexes " & String.Join(", ", indexes) & "..."
@@ -368,6 +385,68 @@ Public NotInheritable Class Wim360CompareIndexesForm
                 compareButton.Enabled = True
                 selectedIndexes.Enabled = True
                 modeBox.Enabled = True
+            End If
+        End Try
+    End Sub
+
+    Private Sub UpdateHashButton()
+        hashButton.Enabled = Not working AndAlso
+            comparison IsNot Nothing AndAlso
+            comparison.Mode = "Mounted file paths / sizes" AndAlso
+            grid.SelectedRows.Count > 0 AndAlso grid.SelectedRows(0).Index >= 0 AndAlso
+            grid.SelectedRows(0).Index < visibleRows.Count AndAlso
+            visibleRows(grid.SelectedRows(0).Index).Kind = "Files"
+    End Sub
+
+    Private Async Sub HashClicked(sender As Object, e As EventArgs)
+        If working OrElse comparison Is Nothing OrElse
+           comparison.Mode <> "Mounted file paths / sizes" OrElse
+           grid.SelectedRows.Count = 0 Then Return
+        Dim rowNumber = grid.SelectedRows(0).Index
+        If rowNumber < 0 OrElse rowNumber >= visibleRows.Count Then Return
+        Dim original = visibleRows(rowNumber)
+        Dim selected = comparison.Indexes.ToArray()
+        working = True
+        compareButton.Enabled = False
+        hashButton.Enabled = False
+        exportButton.Enabled = False
+        selectedIndexes.Enabled = False
+        modeBox.Enabled = False
+        summaryLabel.Text = "Computing SHA-256 for " & original.Name & "..."
+        Dim tokenSource As New CancellationTokenSource()
+        job = tokenSource
+        Try
+            Dim verified = Await Task.Run(Function()
+                Return Wim360IndexComparer.VerifyFileHashes(
+                    source, selected, original, tokenSource.Token)
+            End Function)
+            If Me.IsDisposed OrElse tokenSource.IsCancellationRequested Then Return
+            Dim position = comparison.Rows.FindIndex(Function(x)
+                Return x.Kind = original.Kind AndAlso x.Name = original.Name
+            End Function)
+            If position >= 0 Then comparison.Rows(position) = verified
+            ApplyFilter()
+            hintLabel.Text = "SHA-256 verified for selected path. " &
+                "Other paths were compared by presence and size only."
+        Catch ex As OperationCanceledException
+            If Not Me.IsDisposed Then summaryLabel.Text = "Hash verification canceled."
+        Catch ex As Exception
+            ErrorDiagnostics.RememberFailure("WIM 360 SHA-256 verification", ex)
+            If Not Me.IsDisposed Then
+                summaryLabel.Text = "Unable to verify SHA-256."
+                hintLabel.Text = ex.Message
+                detailsTip.SetToolTip(hintLabel, ex.Message)
+            End If
+        Finally
+            If Object.ReferenceEquals(job, tokenSource) Then job = Nothing
+            tokenSource.Dispose()
+            working = False
+            If Not Me.IsDisposed Then
+                compareButton.Enabled = True
+                exportButton.Enabled = comparison IsNot Nothing
+                selectedIndexes.Enabled = True
+                modeBox.Enabled = True
+                UpdateHashButton()
             End If
         End Try
     End Sub
@@ -412,6 +491,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
         searchBox.Clear()
         exportButton.Enabled = True
         ApplyFilter()
+        UpdateHashButton()
         hintLabel.Text = If(String.IsNullOrWhiteSpace(result.Notes),
             "Read-only. Missing means an item is absent from a complete comparison.",
             result.Notes)
@@ -432,6 +512,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
             Convert.ToString(categoryBox.SelectedItem),
             Convert.ToString(stateBox.SelectedItem), searchBox.Text)
         grid.RowCount = visibleRows.Count
+        UpdateHashButton()
         Dim missing = visibleRows.Where(Function(x)
             Return x.State = "Missing in some" OrElse
                    x.State.StartsWith("Only in Index ", StringComparison.Ordinal)
