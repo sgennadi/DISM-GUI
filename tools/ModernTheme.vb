@@ -593,7 +593,7 @@ Public NotInheritable Class ModernTheme
             Dim index As Integer = i
             Dim navBtn As New Button With {
                 .Name = "nav" & i.ToString(), .Text = "  " & (i + 1).ToString("00") &
-                   "    " & sectionNames(Math.Min(i, sectionNames.Length - 1)).Replace("&", "&&"),
+                   "    " & If(i = 0, "Mount", sectionNames(Math.Min(i, sectionNames.Length - 1)).Replace("&", "&&")),
                 .Size = New Size(211, 43), .Margin = New Padding(2, 1, 2, 6),
                 .FlatStyle = FlatStyle.Flat, .TextAlign = ContentAlignment.MiddleLeft,
                 .Font = UiFont(10, True), .ForeColor = TextInk, .BackColor = Color.White,
@@ -776,13 +776,13 @@ Public NotInheritable Class ModernTheme
             toolsButton.Text = "Tools  " & ChrW(&H2022) & " " & ChrW(&H25BE)
             toolsButton.ForeColor = Color.FromArgb(12, 110, 67)
             toolsButton.BackColor = Color.FromArgb(233, 250, 240)
-            statusItem.Text = "New stable release: v" & available
+            statusItem.Text = "New stable release: " & available
             statusItem.ForeColor = Color.FromArgb(12, 124, 75)
-            menuItem.Text = "Update to v" & available & "..."
+            menuItem.Text = "Update to " & available & "..."
             menuItem.ForeColor = Color.FromArgb(12, 124, 75)
             menuItem.Font = UiFont(10, True)
             Dim tips As New ToolTip()
-            tips.SetToolTip(toolsButton, "DISM GUI v" & available &
+            tips.SetToolTip(toolsButton, "DISM GUI " & available &
                                           " is available. Open Tools > Update.")
         Catch
             If Not statusItem.IsDisposed Then
