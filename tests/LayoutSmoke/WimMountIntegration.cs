@@ -161,7 +161,10 @@ internal static class WimMountIntegration
             var src = Path.Combine(root, "offline-source-" + index);
             Directory.CreateDirectory(Path.Combine(src, "Windows", "System32"));
             Directory.CreateDirectory(Path.Combine(src, "Documents", "Shared"));
+            Directory.CreateDirectory(Path.Combine(src, "Documents", "מסמכים"));
             File.WriteAllText(Path.Combine(src, "Windows", "System32", "common.txt"), "same");
+            File.WriteAllText(Path.Combine(src, "Windows", "System32", "Тест-драйвер.txt"), "unicode");
+            File.WriteAllText(Path.Combine(src, "Documents", "מסמכים", "שלום.txt"), "utf8");
             if (index != 2)
                 File.WriteAllText(Path.Combine(src, "Windows", "System32", "not-in-2.txt"), "exists");
             if (index == 3)
@@ -190,10 +193,16 @@ internal static class WimMountIntegration
                                             x.Name.EndsWith("index3.txt", StringComparison.Ordinal));
         var emptyOnly3 = diff.Rows.Single(x => x.Kind == "Folders" &&
                                                x.Name.EndsWith("Only3Empty", StringComparison.Ordinal));
+        var russianName = diff.Rows.Single(x => x.Kind == "Files" &&
+                         x.Name.EndsWith("Тест-драйвер.txt", StringComparison.Ordinal));
+        var hebrewName = diff.Rows.Single(x => x.Kind == "Files" &&
+                         x.Name.EndsWith("שלום.txt", StringComparison.Ordinal));
         if (common.State != "Present in all" ||
             absent2.State != "Missing in some" || absent2.At(2) != "—" ||
             unique3.State != "Only in Index 3" ||
             emptyOnly3.State != "Only in Index 3" ||
+            russianName.State != "Present in all" ||
+            hebrewName.State != "Present in all" ||
             diff.Rows.Any(x => x.Values.Values.Any(v => v != "Present")))
             throw new InvalidOperationException("Offline three-index file/folder presence is wrong.");
         if (before != Digest(wim) ||
@@ -201,7 +210,8 @@ internal static class WimMountIntegration
                                                 StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Offline index comparison modified or mounted the WIM.");
         Console.WriteLine("PASS real 3-index DISM /List-Image offline file/folder presence, " +
-                          "unique/missing/empty-folder filters and unchanged WIM SHA-256.");
+                          "Russian/Hebrew Unicode, unique/missing/empty-folder filters " +
+                          "and unchanged WIM SHA-256.");
     }
 
     public static void Verify(string image, string root)
