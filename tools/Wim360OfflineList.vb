@@ -4,6 +4,7 @@ Imports System.ComponentModel
 Imports System.Diagnostics
 Imports System.IO
 Imports System.Linq
+Imports System.Security.Cryptography
 Imports System.Text
 Imports System.Threading
 
@@ -186,6 +187,38 @@ Public NotInheritable Class Wim360OfflineList
         End Using
     End Function
 
+    ' Full-file SHA-256 is intentionally used rather than a sampled fingerprint.
+    ' The DISM PowerShell reader may touch LastWriteTime on some Windows builds:
+    ' restore that timestamp ONLY after proving that all bytes remain identical.
+    Private Shared Function ImageDigest(path As String, token As CancellationToken,
+                                        progress As IProgress(Of String),
+                                        stage As String) As Byte()
+        Using source As New FileStream(path, FileMode.Open, FileAccess.Read,
+                                       FileShare.ReadWrite, 1048576,
+                                       FileOptions.SequentialScan)
+            Using hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256)
+                Dim buffer(1048575) As Byte
+                Dim total As Long = 0
+                Dim reportNext As Long = 0
+                While True
+                    token.ThrowIfCancellationRequested()
+                    Dim count = source.Read(buffer, 0, buffer.Length)
+                    If count <= 0 Then Exit While
+                    hash.AppendData(buffer, 0, count)
+                    total += count
+                    If progress IsNot Nothing AndAlso total >= reportNext Then
+                        progress.Report(stage & ": " &
+                            (total \ 1048576L).ToString("N0") & "/" &
+                            (source.Length \ 1048576L).ToString("N0") &
+                            " MiB verified (SHA-256)")
+                        reportNext = total + 268435456L
+                    End If
+                End While
+                Return hash.GetHashAndReset()
+            End Using
+        End Using
+    End Function
+
     ' Enumerate one index at a time. Prior to this change, the comparison
     ' retained all per-index catalogs plus LINQ grouping in memory at once.
     ' Yield completed batches and let CompareRecords aggregate one pass.
@@ -238,40 +271,56 @@ Public NotInheritable Class Wim360OfflineList
             Throw New InvalidOperationException(
                 "The image changed after Inspect. Inspect the image again before comparing.")
         End If
-        ' Confirm that all selected indexes still exist before listing a potentially
-        ' very large image; never compare stale or incomplete per-index data.
-        ' Get-WindowsImageContent requires its own WIMAPI access handle.
-        ' A FileShare.Read-only lock is not compatible with that reader.
-        ' Check source identity and timestamps before/after each catalog scan.
+        ' Confirm that all selected indexes still exist before reading them.
         Dim current = Wim360Reader.Inspect(imagePath)
-            If current.ImageCount <> report.ImageCount OrElse
-               current.Images.Any(Function(x) Not report.Images.Any(
-                   Function(old) old.Index = x.Index AndAlso
-                                  old.Name = x.Name)) Then
-                Throw New InvalidOperationException(
-                    "The WIM index catalog changed. Inspect again.")
-            End If
-            original.Refresh()
-        Dim lastWriteBeforeListing = original.LastWriteTimeUtc
-        Dim sizeBeforeListing = original.Length
+        If current.ImageCount <> report.ImageCount OrElse
+           current.Images.Any(Function(x) Not report.Images.Any(
+               Function(old) old.Index = x.Index AndAlso old.Name = x.Name)) Then
+            Throw New InvalidOperationException(
+                "The WIM index catalog changed. Inspect again.")
+        End If
+
+        original.Refresh()
+        Dim originalTimestamp = original.LastWriteTimeUtc
+        Dim originalLength = original.Length
+        Dim hashBefore = ImageDigest(imagePath, token, progress,
+                                    "Checking original WIM")
         Dim result = Wim360IndexComparer.CompareRecords(imagePath,
-                        "Offline file/folder presence (no mount)",
-                        chosen.Select(Function(x) x.Index),
-                        EnumerateIndexBatches(imagePath, chosen, token, progress))
-            original.Refresh()
-            If original.Length <> sizeBeforeListing OrElse
-               original.LastWriteTimeUtc <> lastWriteBeforeListing Then
+                    "Offline file/folder presence (no mount)",
+                    chosen.Select(Function(x) x.Index),
+                    EnumerateIndexBatches(imagePath, chosen, token, progress))
+        Dim hashAfter = ImageDigest(imagePath, token, progress,
+                                   "Verifying original WIM")
+        original.Refresh()
+        If original.Length <> originalLength OrElse
+           Not CryptographicOperations.FixedTimeEquals(hashBefore, hashAfter) Then
+            Throw New IOException(
+                "The WIM contents changed during comparison. Results were discarded; " &
+                "the original timestamp was not overwritten.")
+        End If
+
+        ' Some DISM API versions update LastWriteTime even for a read-only
+        ' listing. Restore only the timestamp, and only after FULL SHA-256
+        ' confirms every byte is unchanged. Never silently hide real edits.
+        If original.LastWriteTimeUtc <> originalTimestamp Then
+            Try
+                File.SetLastWriteTimeUtc(imagePath, originalTimestamp)
+                original.Refresh()
+                If original.LastWriteTimeUtc <> originalTimestamp Then
+                    Throw New IOException("The original timestamp was not restored.")
+                End If
+            Catch ex As Exception
                 Throw New IOException(
-                    "Source WIM metadata changed while listing. Inspected " &
-                    report.ModifiedUtc.ToString("o") & "; before listing " &
-                    lastWriteBeforeListing.ToString("o") & ", " &
-                    sizeBeforeListing.ToString() & " bytes; after listing " &
-                    original.LastWriteTimeUtc.ToString("o") & ", " &
-                    original.Length.ToString() & " bytes. Results discarded.")
-            End If
-            result.Notes = "Read from the source WIM without mounting. " &
-                "Presence/absence only; no file sizes or SHA-256 hashes. " &
-                "Files with identical names may have different contents."
-            Return result
+                    "WIM bytes passed SHA-256 verification, but Windows updated " &
+                    "its modification time and it could not be restored. " &
+                    "No image contents were changed.", ex)
+            End Try
+        End If
+
+        result.Notes = "Source WIM SHA-256 verified before and after offline " &
+            "comparison. Source file timestamp preserved. " &
+            "Presence/absence only; no per-file sizes or hashes. " &
+            "Files with identical names may have different contents."
+        Return result
     End Function
 End Class
