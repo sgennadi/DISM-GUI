@@ -78,6 +78,22 @@ Unsupported servicing APIs on specialized WinPE images produce a warning
 instead of falsely reporting a complete inventory. Nothing in this viewer
 changes the image. Run Scan mounted index again after servicing changes.
 
+**Compare JSON snapshots** opens a separate read-only diff viewer. Choose a
+baseline inventory JSON export and a newer export. The tool compares matching
+drivers, packages, features and capabilities; shows Added, Removed and Changed
+items with old/new state, version, provider and relevant fields; and supports
+filtering, sorting and CSV/JSON export. The comparison is local/offline and
+does not run DISM or require a WIM to be mounted.
+
+**Important:** v4.3.5 exports use **snapshot schema 2**, which records total
+inventory rows and whether the export contains the complete inventory.
+Added/Removed are only reported when **both snapshots are complete**; filtered
+exports and legacy v4.3.4 schema-1 exports can reliably compare shared
+records but not membership. Missing optional features/capabilities are also
+suppressed when the related inventory returned a warning. Duplicate identities
+are reported as ambiguous, rather than silently treated as a change. Always
+export with cleared Type/State/Search filters to get a complete comparison.
+
 WIM 360 still cannot inspect split `.swm` sets. For actual image servicing,
 use the existing DISM sections only after verifying image backups.
 
