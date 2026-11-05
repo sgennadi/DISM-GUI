@@ -1,0 +1,40 @@
+name: DISM GUI - Recurring CI Diagnostics
+
+on:
+  workflow_run:
+    workflows: ['DISM GUI - VS2026 x86 x64 ARM64']
+    types: [completed]
+  schedule:
+    - cron: '27 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+concurrency:
+  group: dism-gui-recurring-ci-diagnostics
+  cancel-in-progress: false
+
+jobs:
+  analyze:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out trusted main branch
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Verify error analyzer tests
+        run: python -m unittest discover -s tests -p test_ci_analysis.py
+      - name: Analyze recent failures and create/update one issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: python tools/ci_failure_analysis.py

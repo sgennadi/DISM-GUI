@@ -147,3 +147,34 @@ For DISM GUI questions or bug reports, use **About → Email Support** or
 opens a draft addressed to **[sgennadi@hotmail.com](mailto:sgennadi@hotmail.com?subject=DISM%20GUI%20Support)**,
 including the installed version and architecture. No message is sent
 automatically.
+
+## Error diagnostics and GitHub issue workflow (4.3.7)
+
+Use **Tools > Report error to GitHub** or **About > Report error to GitHub**.
+DISM GUI prepares a local diagnostic preview with app version, .NET/Windows
+environment, architecture and DPI. Recent DISM output is **off by default**,
+and including the last 60 lines requires an explicit checkbox. The preview
+redacts recognizable credentials, recovery passwords, identities, addresses,
+URLs and local/network paths. You must still inspect it yourself, check the
+review checkbox, and click **Open GitHub Issue draft**. The application copies
+the sanitized report and opens the new-Issue page in your browser; you sign
+in and click Submit. **Nothing is uploaded automatically from the desktop.**
+The existing support email remains available: sgennadi@hotmail.com.
+
+CI now runs fail-fast source checks **before** building each architecture.
+The separate GitHub Actions workflow **Recurring CI Diagnostics** runs after
+a failed build and daily. It aggregates only known failed-step names and
+compiler error codes over the past 14 days. The same signature must occur
+in at least two separate builds before a single recurring-diagnostics Issue
+is created or updated. It never publishes raw GitHub Actions logs. A private
+source/build log must not be pasted into a public Issue without review.
+
+## WIM 360 partial audit (4.3.7)
+
+Driver, Windows package, optional-feature and capability reads report errors
+independently. A failure of one category no longer hides the others or
+misrepresents missing data as zero items. Scan progress, per-category timings,
+sanitized warnings and a PARTIAL AUDIT indicator appear in the report.
+Snapshot exports preserve driver/package error flags; comparison suppresses
+false Added/Removed events from failed inventories. Mount validation failures
+remain fatal, and no image is committed or discarded by the inventory viewer.

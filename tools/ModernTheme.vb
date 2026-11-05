@@ -396,6 +396,16 @@ Public NotInheritable Class ModernTheme
             SupportContact.OpenSupportEmail(frm)
         End Sub
         toolsMenu.Items.Add(emailSupportMenu)
+        Dim reportProblemMenu As New ToolStripMenuItem("Report error to GitHub...") With {
+            .Name = "mnuReportError",
+            .ToolTipText = "Review and sanitize diagnostics before opening a GitHub Issue draft."
+        }
+        AddHandler reportProblemMenu.Click, Sub(sender, e)
+            Using viewer As New ErrorReportForm(output.Text, "DISM output / Tools")
+                viewer.ShowDialog(frm)
+            End Using
+        End Sub
+        toolsMenu.Items.Add(reportProblemMenu)
         toolsMenu.Items.Add(New ToolStripSeparator())
         toolsMenu.Items.Add(updatesStatus)
         toolsMenu.Items.Add(updatesMenuItem)

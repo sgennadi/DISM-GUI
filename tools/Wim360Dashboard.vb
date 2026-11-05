@@ -385,11 +385,12 @@ Public NotInheritable Class Wim360Dashboard
             End If
             ShowReport(loaded)
         Catch ex As Exception
+            ErrorDiagnostics.RememberFailure("WIM 360 metadata inspection", ex)
             If Me.IsDisposed OrElse generation <> scanGeneration Then Return
             mounts.Text = "Unavailable"
-            status.Text = "Cannot inspect image: " & ex.Message
+            status.Text = "Cannot inspect image; open Tools > Report error to GitHub."
             details.Text = "No files were modified." & Environment.NewLine &
-                           ex.GetType().Name & ": " & ex.Message
+                           ErrorDiagnostics.Redact(ex.GetType().Name & ": " & ex.Message)
         Finally
             If Not Me.IsDisposed AndAlso generation = scanGeneration Then
                 scan.Enabled = True
@@ -522,25 +523,35 @@ Public NotInheritable Class Wim360Dashboard
         auditMounted.Enabled = False
         status.Text = "Scanning mounted index " & selected.Index.ToString() &
                       ": drivers and Windows packages (read-only)..."
+        Dim progress As IProgress(Of String) = New Progress(Of String)(Sub(message)
+            If Not Me.IsDisposed AndAlso Not auditToken.IsCancellationRequested AndAlso
+               generation = scanGeneration AndAlso
+               Object.ReferenceEquals(report, imageReport) Then
+                status.Text = message
+            End If
+        End Sub)
         Dim errorMessage As String = Nothing
         Try
             Dim audit = Await Wim360Servicing.InspectMountedAsync(
-                path, selected.Index, selected.MountFolder, auditToken.Token)
+                path, selected.Index, selected.MountFolder, auditToken.Token, progress)
             If Me.IsDisposed OrElse auditToken.IsCancellationRequested OrElse
                generation <> scanGeneration OrElse
                Not Object.ReferenceEquals(report, imageReport) OrElse
                Not String.Equals(fileBox.Text.Trim(), path, StringComparison.OrdinalIgnoreCase) Then Return
             selected.ServicingAudit = audit
             status.Text = "Mounted index " & selected.Index.ToString() &
-                " audited: " & audit.DriverCount.ToString() & " drivers, " &
-                audit.PackageCount.ToString() & " packages, " &
-                audit.Components.Count.ToString() & " components. No changes."
+                If(audit.HasWarnings,
+                   " PARTIAL (some categories unavailable) — open Inventory details.",
+                   " audited: " & audit.DriverCount.ToString() & " drivers, " &
+                   audit.PackageCount.ToString() & " packages, " &
+                   audit.Components.Count.ToString() & " components. No changes.")
         Catch ex As OperationCanceledException
             If Not Me.IsDisposed AndAlso Object.ReferenceEquals(report, imageReport) Then
                 status.Text = "Mounted audit canceled; no image changes were made."
             End If
         Catch ex As Exception
-            errorMessage = ex.Message
+            ErrorDiagnostics.RememberFailure("WIM 360 mounted audit", ex)
+            errorMessage = ErrorDiagnostics.Redact(ex.Message)
         Finally
             If Object.ReferenceEquals(auditCancellation, auditToken) Then
                 auditCancellation = Nothing

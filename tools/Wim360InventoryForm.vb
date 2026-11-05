@@ -194,12 +194,9 @@ Public NotInheritable Class Wim360InventoryForm
             .Name = "lbl360CatalogWarnings", .Dock = DockStyle.Fill,
             .ForeColor = ModernTheme.Muted, .AutoEllipsis = True,
             .TextAlign = ContentAlignment.MiddleLeft,
-            .Text = If(audit.FeatureWarning.Length = 0 AndAlso
-                audit.CapabilityWarning.Length = 0,
-                "Inventory is a snapshot; refresh Scan mounted index after changing the image.",
-                "Partial component inventory: " &
-                    If(audit.FeatureWarning.Length > 0, "Features: " & audit.FeatureWarning & "  ", "") &
-                    If(audit.CapabilityWarning.Length > 0, "Capabilities: " & audit.CapabilityWarning, ""))
+            .Text = If(audit.HasWarnings,
+                       "PARTIAL INVENTORY — " & audit.WarningSummary,
+                       "Inventory snapshot. Re-scan after servicing changes.")
         }
         detailsTip.SetToolTip(warningLabel, warningLabel.Text)
         footer.Controls.Add(warningLabel, 0, 1)
