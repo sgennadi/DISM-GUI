@@ -1055,6 +1055,7 @@ internal static class LayoutSmoke
             VerifyWimMetadata();
             VerifyMountedAudit();
             VerifyRuntimeDiagnostics();
+            DirectGitHubContractTests.Run();
             VerifyErrorDiagnostics();
             VerifyIntegratedTestCenter(form);
             var detailFixture = VerifyDetailedInventory();
