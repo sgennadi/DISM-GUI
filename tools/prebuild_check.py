@@ -8,7 +8,7 @@ modules = (
     "ErrorDiagnostics.vb", "ErrorReportForm.vb", "RuntimeDiagnostics.vb",
     "Wim360SplitSet.vb", "IntegratedTestChecks.vb", "IntegratedTestCenterForm.vb",
     "Wim360Servicing.vb", "Wim360MetadataExport.vb",
-    "Wim360IndexComparer.vb", "Wim360CompareIndexesForm.vb",
+    "Wim360IndexComparer.vb", "Wim360OfflineList.vb", "Wim360CompareIndexesForm.vb",
     "DriverStudioInstaller.vb",
 )
 prepared = (ROOT / "tools" / "apply_modern.py").read_text(encoding="utf-8")
