@@ -66,9 +66,9 @@ Public NotInheritable Class DriverStudioInstaller
                Not seen.Add(full) Then
                 Throw New InvalidOperationException("Duplicate or invalid INF path in selected plan.")
             End If
-            Dim matching = current.Where(Function(d)
-                 String.Equals(Path.GetFullPath(d.Candidate.FilePath), full,
-                               StringComparison.OrdinalIgnoreCase)).ToList()
+            Dim matching = current.Where(
+                Function(d) String.Equals(Path.GetFullPath(d.Candidate.FilePath),
+                                          full, StringComparison.OrdinalIgnoreCase)).ToList()
             If matching.Count <> 1 OrElse Not IsAllowed(matching(0)) OrElse
                Not String.Equals(matching(0).Status, reviewedDecision.Status,
                                  StringComparison.Ordinal) Then
