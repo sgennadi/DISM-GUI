@@ -107,6 +107,18 @@ internal static class LayoutSmoke
             $"{context}: button '{button.Text}' is vertically clipped");
     }
 
+    private static void VerifyScrollableDialog(Form form, string context)
+    {
+        var scrollHost = AllControls(form).OfType<Panel>()
+            .FirstOrDefault(p => p.AutoScroll &&
+                p.Controls.OfType<TableLayoutPanel>().Any());
+        Require(scrollHost is not null,
+            context + ": dialog must scroll at high DPI rather than clip controls");
+        foreach (var button in AllControls(form).OfType<Button>()
+                     .Where(b => b.Visible && b.Width > 0 && b.Height > 0))
+            VerifyReadableButton(button, context);
+    }
+
     private static void ValidateSection(Control page, int section, string dimension)
     {
         Require(Find(page, "SectionResponsiveRoot") is TableLayoutPanel,
@@ -359,6 +371,12 @@ internal static class LayoutSmoke
         using var dialog = new Wim360CompareIndexesForm(report);
         dialog.Show(owner);
         Application.DoEvents();
+        VerifyScrollableDialog(dialog, "WIM 360 index comparison");
+        var offlineMode = Find(dialog, "cmb360IndexCompareMode") as ComboBox;
+        Require(offlineMode is not null && offlineMode.Items.Count == 4 &&
+                offlineMode.Items[1]!.ToString()!.Contains("no mounting") &&
+                offlineMode.Items[2]!.ToString()!.Contains("mounted"),
+                "WIM 360 needs a separate direct offline file listing mode");
         dialog.PreviewForTest(comparison);
         Application.DoEvents();
         var matrix = Find(dialog, "grid360IndexComparison") as DataGridView;
@@ -548,6 +566,7 @@ internal static class LayoutSmoke
         using var dialog = new ErrorReportForm(raw, "WIM 360 diagnostics");
         dialog.Show();
         Application.DoEvents();
+        VerifyScrollableDialog(dialog, "GitHub diagnostics");
         var include = Find(dialog, "chkSupportIncludeLog") as CheckBox;
         var reviewed = Find(dialog, "chkSupportReviewed") as CheckBox;
         var history = Find(dialog, "chkSupportIncludeHistory") as CheckBox;
@@ -740,6 +759,7 @@ internal static class LayoutSmoke
         using var window = new Wim360InventoryForm(audit);
         window.Show(owner);
         Application.DoEvents();
+        VerifyScrollableDialog(window, "WIM 360 inventory");
         var grid = Find(window, "grid360Catalog") as DataGridView;
         var type = Find(window, "cmb360CatalogType") as ComboBox;
         var state = Find(window, "cmb360CatalogState") as ComboBox;
@@ -903,6 +923,7 @@ internal static class LayoutSmoke
         using var window = new Wim360CompareForm();
         window.Show(owner);
         Application.DoEvents();
+        VerifyScrollableDialog(window, "WIM 360 snapshot comparison");
         var baselineField = Find(window, "txt360Baseline") as TextBox;
         var currentField = Find(window, "txt360Current") as TextBox;
         var runButton = Find(window, "btn360CompareRun") as Button;
@@ -973,6 +994,7 @@ internal static class LayoutSmoke
         using var window = new IntegratedTestCenterForm();
         window.Show(owner);
         Application.DoEvents();
+        VerifyScrollableDialog(window, "Integrated Test Center");
         var grid = Find(window, "gridTestCenterResults") as DataGridView;
         var browse = Find(window, "btnTestCenterBrowse") as Button;
         var image = Find(window, "txtTestCenterImage") as TextBox;
@@ -1608,6 +1630,7 @@ internal static class LayoutSmoke
                 Require(updatesTitle is not null && updatesSub is not null,
                         "Update Center heading labels missing");
                 NoOverlap(updatesTitle!, updatesSub!, "Update Center title and subtitle");
+                VerifyScrollableDialog(updateForm, "Update Center");
                 Snapshot(updateForm, "DISM-GUI-Update-Center");
                 updateForm.Hide();
             }
