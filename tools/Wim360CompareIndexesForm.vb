@@ -432,9 +432,11 @@ Public NotInheritable Class Wim360CompareIndexesForm
             Convert.ToString(categoryBox.SelectedItem),
             Convert.ToString(stateBox.SelectedItem), searchBox.Text)
         grid.RowCount = visibleRows.Count
-        Dim missing = visibleRows.Count(Function(x) x.State = "Missing in some" OrElse
-                 x.State.StartsWith("Only in Index ", StringComparison.Ordinal))
-        Dim changed = visibleRows.Count(Function(x) x.State = "Different")
+        Dim missing = visibleRows.Where(Function(x)
+            Return x.State = "Missing in some" OrElse
+                   x.State.StartsWith("Only in Index ", StringComparison.Ordinal)
+        End Function).Count()
+        Dim changed = visibleRows.Where(Function(x) x.State = "Different").Count()
         summaryLabel.Text = visibleRows.Count.ToString("N0") & " of " &
             comparison.Rows.Count.ToString("N0") & " rows  |  " &
             missing.ToString("N0") & " missing/unique  |  " &
