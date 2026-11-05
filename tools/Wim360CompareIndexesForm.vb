@@ -366,7 +366,15 @@ Public NotInheritable Class Wim360CompareIndexesForm
     End Function
 
     Private Async Sub CompareClicked(sender As Object, e As EventArgs)
-        If working Then Return
+        If working Then
+            Try
+                If job IsNot Nothing Then job.Cancel()
+            Catch ex As ObjectDisposedException
+            End Try
+            compareButton.Enabled = False
+            summaryLabel.Text = "Canceling the current comparison..."
+            Return
+        End If
         Dim indexes = CurrentSelection()
         If indexes.Length < 2 OrElse indexes.Length > 8 Then
             MessageBox.Show(Me, "Choose between 2 and 8 indexes to compare.",
@@ -376,7 +384,8 @@ Public NotInheritable Class Wim360CompareIndexesForm
         End If
         Dim mode = modeBox.SelectedIndex
         working = True
-        compareButton.Enabled = False
+        compareButton.Text = "Cancel scan"
+        compareButton.Enabled = True
         exportButton.Enabled = False
         hashButton.Enabled = False
         comparison = Nothing
@@ -428,6 +437,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
             tokenSource.Dispose()
             working = False
             If Not Me.IsDisposed Then
+                compareButton.Text = "Compare selected indexes"
                 compareButton.Enabled = True
                 selectedIndexes.Enabled = True
                 modeBox.Enabled = True
@@ -453,7 +463,8 @@ Public NotInheritable Class Wim360CompareIndexesForm
         Dim original = visibleRows(rowNumber)
         Dim selected = comparison.Indexes.ToArray()
         working = True
-        compareButton.Enabled = False
+        compareButton.Text = "Cancel scan"
+        compareButton.Enabled = True
         hashButton.Enabled = False
         exportButton.Enabled = False
         selectedIndexes.Enabled = False
@@ -488,6 +499,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
             tokenSource.Dispose()
             working = False
             If Not Me.IsDisposed Then
+                compareButton.Text = "Compare selected indexes"
                 compareButton.Enabled = True
                 exportButton.Enabled = comparison IsNot Nothing
                 selectedIndexes.Enabled = True
