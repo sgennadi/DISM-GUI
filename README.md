@@ -215,3 +215,27 @@ CI creates an independent random-data WIM, splits it into multiple SWM parts,
 inspects both part 1 and part 2, verifies missing-part rejection, and compares
 SHA-256 checksums after testing. Real production OS-image servicing and
 interactive DPI scaling at 125%, 150% and 200% still require an operator test.
+
+## Runtime diagnostics from installed DISM GUI copies (4.3.9)
+
+DISM GUI records real application failures for the current Windows profile in
+%LOCALAPPDATA%\DISMGUI\Diagnostics\events.log. It records failed DISM exit
+codes from Mount, Unmount and command workers, WIM 360 errors, and unhandled
+UI/process/task exceptions. Entries are redacted before writing to disk and
+contain timestamp, version, operation, error code and coarse signature.
+No full DISM console is collected automatically. Journals rotate at
+256 KiB, keeping current and previous files only.
+
+In Tools > Report error to GitHub, enable Include 15 local errors to
+include an optional sanitized excerpt. This is independent of
+Include last 60 DISM lines, also off by default. Open log folder lets
+users view locally recorded errors, and Clear history erases them after
+confirmation. Editing the report or changing either checkbox revokes
+prior approval. User must sign in and click Submit on GitHub. No automatic
+user diagnostics upload or embedded GitHub token is present.
+
+CI error aggregation now ignores compiler warnings and isolated error-code
+mentions; only actual compiler errors and failed build steps count.
+
+Test checklist: TESTING_4.3.9.md. Windows 11/Server servicing and physical
+125%-200% DPI still require manual workstation testing.
