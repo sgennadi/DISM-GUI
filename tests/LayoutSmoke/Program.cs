@@ -96,6 +96,17 @@ internal static class LayoutSmoke
         }
     }
 
+    private static void VerifyReadableButton(Button button, string context)
+    {
+        if (button.Width < 1 || button.Height < 1 || !button.Visible) return;
+        var text = button.Text.Replace("&&", "&").Replace("&", "");
+        var measured = TextRenderer.MeasureText(text, button.Font,
+            new Size(Math.Max(48, button.ClientSize.Width - 16), 1000),
+            TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl);
+        Require(measured.Height + 4 <= button.ClientSize.Height,
+            $"{context}: button '{button.Text}' is vertically clipped");
+    }
+
     private static void ValidateSection(Control page, int section, string dimension)
     {
         Require(Find(page, "SectionResponsiveRoot") is TableLayoutPanel,
@@ -1261,6 +1272,8 @@ internal static class LayoutSmoke
                 NoOverlap(mountAction, dismountAction, "Mount / Dismount");
                 NoOverlap(dismountAction, info, "Dismount / Image info");
                 NoOverlap(index, browseWim, "Numeric image index / Choose WIM");
+                foreach (var button in new[] { expandLog!, copyLog!, clearLog!, exitApp! }.OfType<Button>())
+                    VerifyReadableButton(button, "DISM output");
                 NoOverlap(copyLog!, clearLog!, "Copy log / Clear");
                 NoOverlap(clearLog!, exitApp!, "Clear / Exit");
                 NoOverlap(expandLog!, copyLog!, "Expand / Copy log");
