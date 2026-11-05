@@ -439,7 +439,8 @@ Public NotInheritable Class Wim360Servicing
     Private Shared Function Diagnostic(ex As Exception) As String
         ' Failures are shown to the operator and exported with the snapshot.
         Dim description = ex.GetType().Name & ": " & ex.Message
-        Return description.Substring(0, Math.Min(description.Length, 480))
+        Return ErrorDiagnostics.Redact(description.Substring(0,
+            Math.Min(description.Length, 480)))
     End Function
 
     Public Shared Async Function InspectMountedAsync(wimFile As String,
@@ -490,8 +491,8 @@ Public NotInheritable Class Wim360Servicing
         If progress IsNot Nothing Then progress.Report("WIM 360 [3/3]: reading optional features and capabilities...")
         Try
             components = Await ReadComponentsAsync(root, cancellation)
-            featureWarning = components.FeatureWarning
-            capabilityWarning = components.CapabilityWarning
+            featureWarning = ErrorDiagnostics.Redact(components.FeatureWarning)
+            capabilityWarning = ErrorDiagnostics.Redact(components.CapabilityWarning)
         Catch ex As OperationCanceledException
             Throw
         Catch ex As Exception
