@@ -1,25 +1,24 @@
-# DISM GUI 4.3.3
+# DISM GUI 4.3.4
 
-## WIM 360 — Mounted Image Servicing Audit
+## WIM 360 — Detailed Mounted Inventory
 
-- Added **Scan mounted index** for an already-mounted WIM image index, including read-only mounts; this is separate from ordinary metadata inspection.
-- Shows driver inventory totals, including inbox/third-party breakdown, top driver classes and providers.
-- Reads Windows package inventory and displays Installed, Pending and Staged totals, highlighting up to four pending package names.
-- Stores each audit under its selected WIM index, with a UTC scan timestamp, and includes results in the existing **Copy report** export.
-- Uses read-only DISM PowerShell commands Get-WindowsDriver -Path -All and Get-WindowsPackage -Path; no image modification, automatic mount, commit or discard.
-- Validates the WIM/index/mount path before and after auditing, and cancels stale reads when the source is changed; three-minute timeout per inventory step.
-- Fits the additional audit button on a second actions row for legibility on high-DPI and narrow screens.
-- Extended parser, reporting and WinForms smoke tests.
+- Added an **Inventory details** window for an already-scanned WIM index, kept separate from destructive servicing.
+- Full driver table (INF, provider, driver class, published INF, version/date), Windows package table (identity, release type, state), optional Windows features and Windows capabilities (names/states).
+- Uses read-only Get-WindowsOptionalFeature -Path and Get-WindowsCapability -Path queries. Failures are isolated per optional component category and a visible warning preserves partial inventory.
+- Responsive, resizable high-DPI inventory window; virtualized table, horizontal scrolling and tooltips for long values. Window position and dimensions are saved independently of the main window.
+- Combined Type/State/substring filtering, column-header sorting and Clear filters.
+- Export displayed filtered rows to **CSV** (UTF-8 BOM, quote escaping and spreadsheet-formula safeguards) or **JSON** (versioned schema, source image/index, UTC timestamp and partial scan warnings).
+- Shows features/capabilities counts in the WIM 360 summary and copied report.
+- Adds Windows CI regression coverage for parsing, filtering, invalid JSON, exports, complete/partial results and the inventory window.
 
-## Existing Driver Studio — 4.3.2
+## Retained from 4.3.3
 
-- Retains selective per-INF install, only verified New / Newer entries on read/write-mounted indexes.
-- Preflight validates the mount and incoming source-INF hashes; Stop after current ensures an in-flight DISM write finishes safely.
-- Same/Older/Review/Not checked sources remain blocked; no implicit Commit or Discard.
+- Image/index/mount validation before and after scanning; read-only driver/package inventory.
+- Driver Studio selective per-INF write remains separate and requires explicit user confirmation.
 
 ## Testing and limitations
 
-- Windows CI checks parser/report invariants, WinForms layout and portable .NET 10 builds for x86, x64 and ARM64.
-- CI cannot validate the mounted servicing inventory against a full real Windows image. First test with a disposable mounted WIM.
-- Requires Windows PowerShell with DISM module and suitable read permissions for the mounted image; split .swm unsupported.
-- Original DISM GUI by Mike Celone (mikecel79/DISMGUI); attribution retained.
+- The real mounted-image audit still requires testing against disposable Windows/WinPE WIM files; Windows CI validates mocks, compilation and the WinForms UI.
+- Some image types do not expose feature/capability information. Partial results are labeled; do not treat an absent list as proof the image has no features.
+- Split .swm files are not supported in WIM 360; re-scan after changing an image.
+- Attribution: Mike Celone (mikecel79/DISMGUI).
