@@ -1114,6 +1114,7 @@ internal static class LayoutSmoke
                 inventory.Images[0].Name + ", " + inventory.FileSizeBytes + " bytes");
             WimMountIntegration.ProbeOfflineList(image);
             WimMountIntegration.VerifyOfflineThreeIndexes(root);
+            WimMountIntegration.VerifyLargeThreeIndexWim(root);
             WimMountIntegration.Verify(image, root);
             WimMountIntegration.VerifySplit(image, root);
         }
