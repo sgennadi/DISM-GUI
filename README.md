@@ -202,6 +202,20 @@ opens a draft addressed to **[sgennadi@hotmail.com](mailto:sgennadi@hotmail.com?
 including the installed version and architecture. No message is sent
 automatically.
 
+## Shared UniversalDiagnostics local queue (4.3.10 integration)
+
+The optional `UniversalDiagnostics 0.1.0-rc.1` collector can be installed
+once for all Windows applications. In **Tools → Report error**, review the
+existing preview and choose **Save to shared queue** to store a redacted
+error summary locally. It does **not** upload anything or require GitHub
+credentials. The existing DISM logs and GitHub Issue draft remain available.
+
+The independent collector executable is distributed from
+[UniversalDiagnocticsModule](https://github.com/sgennadi/UniversalDiagnocticsModule).
+See [full setup and security details](docs/UNIVERSAL-DIAGNOSTICS.md).
+This integration **does not change the DISM GUI 4.3.10 version number** or
+silently replace an existing release.
+
 ## Error diagnostics and GitHub issue workflow (4.3.7)
 
 Use **Tools > Report error to GitHub** or **About > Report error to GitHub**.
