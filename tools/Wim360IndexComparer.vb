@@ -297,12 +297,18 @@ Public NotInheritable Class Wim360IndexComparer
                 Return False
             End If
             If stateText = "Missing / only in some" Then
-                If x.PresentCount = 0 Then Return False
                 If Not (x.State.StartsWith("Only in Index ", StringComparison.Ordinal) OrElse
                         x.State = "Missing in some") Then Return False
+            ElseIf stateText.StartsWith("Missing from Index ", StringComparison.Ordinal) Then
+                Dim value As Integer
+                If Not Integer.TryParse(stateText.Substring("Missing from Index ".Length),
+                                        value) OrElse x.Values.ContainsKey(value) Then Return False
+            ElseIf stateText.StartsWith("Present in Index ", StringComparison.Ordinal) Then
+                Dim value As Integer
+                If Not Integer.TryParse(stateText.Substring("Present in Index ".Length),
+                                        value) OrElse Not x.Values.ContainsKey(value) Then Return False
             ElseIf stateText = "Present in all" Then
-                If x.PresentCount < x.Values.Count OrElse
-                   x.State <> "Present in all" Then Return False
+                If x.State <> "Present in all" Then Return False
             ElseIf stateText <> "" AndAlso stateText <> "All results" AndAlso
                    Not String.Equals(x.State, stateText, StringComparison.OrdinalIgnoreCase) Then
                 Return False
