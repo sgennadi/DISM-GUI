@@ -97,7 +97,7 @@ Public NotInheritable Class Wim360Dashboard
 
         fileBox = New TextBox With {
             .Name = "txt360Path", .Dock = DockStyle.Fill,
-            .PlaceholderText = "Choose boot.wim or install.wim",
+            .PlaceholderText = "Choose boot.wim, install.wim or install.swm",
             .Font = ModernTheme.UiFont(10), .BackColor = Color.White,
             .ForeColor = ModernTheme.TextInk,
             .BorderStyle = BorderStyle.FixedSingle,
@@ -323,8 +323,8 @@ Public NotInheritable Class Wim360Dashboard
 
     Private Sub BrowseClicked(sender As Object, e As EventArgs)
         Using picker As New OpenFileDialog With {
-            .Title = "Choose WIM image for WIM 360",
-            .Filter = "Windows images (*.wim;*.esd)|*.wim;*.esd|All files (*.*)|*.*",
+            .Title = "Choose WIM/ESD or split SWM for read-only inventory",
+            .Filter = "Windows images (*.wim;*.esd;*.swm)|*.wim;*.esd;*.swm|All files (*.*)|*.*",
             .CheckFileExists = True, .Multiselect = False,
             .RestoreDirectory = True
         }
@@ -363,7 +363,7 @@ Public NotInheritable Class Wim360Dashboard
         auditMounted.Enabled = False
         inventoryButton.Enabled = False
         If String.IsNullOrWhiteSpace(path) Then
-            status.Text = "Choose a .wim or .esd file first."
+            status.Text = "Choose a .wim, .esd or .swm file first."
             details.Text = "WIM 360 only reads image metadata."
             mounts.Text = "Not checked"
             Return
@@ -413,7 +413,10 @@ Public NotInheritable Class Wim360Dashboard
                          If(mounted = 0, "No mounts", mounted.ToString() & " mounted"))
         status.Text = If(value.MountScanWarning.Length > 0,
                          value.MountScanWarning,
-                         "Metadata loaded. Select an index to inspect its details.")
+                         If(value.IsSplitSet,
+                            "Split WIM: " & Wim360SplitSet.Describe(value.SplitSet) &
+                                "  Read-only; no mounting or servicing.",
+                            "Metadata loaded. Select an index to inspect its details."))
         indexTable.SuspendLayout()
         Try
             indexTable.Rows.Clear()
@@ -456,11 +459,13 @@ Public NotInheritable Class Wim360Dashboard
     Private Sub UpdateSelection()
         Dim selected = SelectedImage()
         useSelected.Enabled = selected IsNot Nothing AndAlso
+                               report IsNot Nothing AndAlso Not report.IsSplitSet AndAlso
                               Not String.IsNullOrWhiteSpace(fileBox.Text) AndAlso
                               report IsNot Nothing AndAlso
                               String.Equals(fileBox.Text.Trim(), report.ImageFile,
                                             StringComparison.OrdinalIgnoreCase)
         auditMounted.Enabled = Not isAuditing AndAlso selected IsNot Nothing AndAlso
+            report IsNot Nothing AndAlso Not report.IsSplitSet AndAlso
             report IsNot Nothing AndAlso
             String.Equals(fileBox.Text.Trim(), report.ImageFile,
                           StringComparison.OrdinalIgnoreCase) AndAlso
@@ -471,7 +476,11 @@ Public NotInheritable Class Wim360Dashboard
             String.Equals(fileBox.Text.Trim(), report.ImageFile,
                           StringComparison.OrdinalIgnoreCase)
         If selected Is Nothing Then Return
-        details.Text = "Index " & selected.Index.ToString() & "  |  " & selected.Name &
+        details.Text = If(report IsNot Nothing AndAlso report.IsSplitSet,
+                          "SPLIT WIM: " & report.SplitSet.PartCount.ToString() &
+                          " verified parts (headers). Viewing only." &
+                          Environment.NewLine & Environment.NewLine, "") &
+                       "Index " & selected.Index.ToString() & "  |  " & selected.Name &
                        Environment.NewLine &
                        "Description: " & If(selected.Description.Length > 0,
                                              selected.Description, "Not listed") &
@@ -586,7 +595,7 @@ Public NotInheritable Class Wim360Dashboard
 
     Private Sub UseClicked(sender As Object, e As EventArgs)
         Dim selected = SelectedImage()
-        If selected Is Nothing OrElse report Is Nothing Then Return
+        If selected Is Nothing OrElse report Is Nothing OrElse report.IsSplitSet Then Return
         ' Only fills existing selectors. It does NOT mount or modify the WIM.
         useInMount(report.ImageFile, selected.Index)
     End Sub
