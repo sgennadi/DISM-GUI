@@ -144,8 +144,25 @@ Public NotInheritable Class Wim360Catalog
                      rows As IEnumerable(Of CatalogRow)) As String
         If audit Is Nothing Then Throw New ArgumentNullException(NameOf(audit))
         If rows Is Nothing Then Throw New ArgumentNullException(NameOf(rows))
+        Dim filteredRows = rows.ToArray()
+        Dim allRows = BuildRows(audit)
+        ' A row-count match alone is unsafe: verify exact record multisets.
+        ' This marks old/filtered exports as incomplete and prevents false
+        ' Added/Removed reports in Snapshot Compare.
+        Dim signature As Func(Of CatalogRow, String) = Function(item)
+            Return String.Join(ChrW(0).ToString(),
+                Enumerable.Range(0, ColumnHeaders.Length).
+                    Select(Function(i) item.CellAt(i)))
+        End Function
+        Dim selectedKeys = filteredRows.Select(Function(x) signature(x)).
+            OrderBy(Function(x) x, StringComparer.Ordinal).ToArray()
+        Dim completeKeys = allRows.Select(Function(x) signature(x)).
+            OrderBy(Function(x) x, StringComparer.Ordinal).ToArray()
+        Dim isComplete = selectedKeys.SequenceEqual(completeKeys, StringComparer.Ordinal)
         Dim snapshot = New With {
-            .SchemaVersion = 1,
+            .SchemaVersion = 2,
+            .InventoryRowCount = allRows.Count,
+            .IsCompleteInventory = isComplete,
             .Source = "DISM GUI WIM 360 (read-only export)",
             .ImageFile = audit.ImageFile,
             .ImageIndex = audit.Index,
@@ -153,7 +170,7 @@ Public NotInheritable Class Wim360Catalog
             .ScannedUtc = audit.ScannedUtc,
             .FeatureWarning = audit.FeatureWarning,
             .CapabilityWarning = audit.CapabilityWarning,
-            .Rows = rows.ToArray()
+            .Rows = filteredRows
         }
         Return JsonSerializer.Serialize(snapshot, New JsonSerializerOptions With {
             .WriteIndented = True

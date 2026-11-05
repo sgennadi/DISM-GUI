@@ -28,6 +28,7 @@ Public NotInheritable Class Wim360Dashboard
     Private ReadOnly copyReport As Button
     Private ReadOnly auditMounted As Button
     Private ReadOnly inventoryButton As Button
+    Private ReadOnly compareSnapshotsButton As Button
     Private report As Wim360Reader.WimReport
     Private scanGeneration As Integer
     Private isAuditing As Boolean
@@ -57,12 +58,12 @@ Public NotInheritable Class Wim360Dashboard
         dashboardLayout = New TableLayoutPanel With {
             .Name = "Wim360Layout",
             .ColumnCount = 1, .RowCount = 7,
-            .Dock = DockStyle.Top, .Height = 686, .Width = 710,
+            .Dock = DockStyle.Top, .Height = 731, .Width = 710,
             .BackColor = Color.White,
             .Margin = Padding.Empty, .Padding = New Padding(17, 13, 17, 18)
         }
         dashboardLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        For Each height As Integer In {53, 57, 72, 27, 205, 145, 94}
+        For Each height As Integer In {53, 57, 72, 27, 205, 145, 139}
             dashboardLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, height))
         Next
         canvas.Controls.Add(dashboardLayout)
@@ -200,15 +201,15 @@ Public NotInheritable Class Wim360Dashboard
         info.Controls.Add(details, 0, 1)
 
         Dim actions As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 3, .RowCount = 2,
+            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 3,
             .Margin = New Padding(0, 5, 0, 0),
             .BackColor = Color.White
         }
-        actions.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
-        actions.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
-        actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 210))
-        actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 155))
-        actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+        For i As Integer = 1 To 3
+            actions.RowStyles.Add(New RowStyle(SizeType.Percent, CSng(100.0 / 3.0)))
+        Next
+        actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
+        actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
         dashboardLayout.Controls.Add(actions, 0, 6)
 
         useSelected = New Button With {
@@ -247,9 +248,17 @@ Public NotInheritable Class Wim360Dashboard
         AddHandler inventoryButton.Click, AddressOf InventoryClicked
         actions.Controls.Add(inventoryButton, 1, 1)
 
-        Dim hint = MakeText("Read-only • no changes", 8.4F, False, ModernTheme.Muted)
+        compareSnapshotsButton = New Button With {
+            .Name = "btn360CompareSnapshots", .Text = "Compare JSON snapshots",
+            .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 9, 4)
+        }
+        ModernTheme.StyleButton(compareSnapshotsButton, "secondary")
+        AddHandler compareSnapshotsButton.Click, AddressOf CompareSnapshotsClicked
+        actions.Controls.Add(compareSnapshotsButton, 0, 2)
+
+        Dim hint = MakeText("Saved snapshots  •  read-only", 8.4F, False, ModernTheme.Muted)
         hint.TextAlign = ContentAlignment.MiddleLeft
-        actions.Controls.Add(hint, 2, 1)
+        actions.Controls.Add(hint, 1, 2)
         AddHandler fileBox.TextChanged, Sub(sender, e)
             CancelMountedAudit()
             useSelected.Enabled = False
@@ -548,6 +557,12 @@ Public NotInheritable Class Wim360Dashboard
                 End If
             End If
         End Try
+    End Sub
+
+    Private Sub CompareSnapshotsClicked(sender As Object, e As EventArgs)
+        Using viewer As New Wim360CompareForm()
+            viewer.ShowDialog(Me.FindForm())
+        End Using
     End Sub
 
     Private Sub InventoryClicked(sender As Object, e As EventArgs)
