@@ -132,6 +132,35 @@ Public NotInheritable Class ModernTheme
         Next
     End Sub
 
+    Private Shared Sub ScaleDialogTables(control As Control, scale As Single)
+        Dim table = TryCast(control, TableLayoutPanel)
+        If table IsNot Nothing Then
+            If scale > 1.01F Then
+                For Each row As RowStyle In table.RowStyles
+                    If row.SizeType = SizeType.Absolute AndAlso row.Height > 0 Then
+                        row.Height = CSng(Math.Ceiling(row.Height * scale))
+                    End If
+                Next
+                For Each col As ColumnStyle In table.ColumnStyles
+                    If col.SizeType = SizeType.Absolute AndAlso col.Width > 0 Then
+                        col.Width = CSng(Math.Ceiling(col.Width * scale))
+                    End If
+                Next
+            End If
+            FitTableButtonCells(table)
+        End If
+        Dim grid = TryCast(control, DataGridView)
+        If grid IsNot Nothing Then
+            grid.RowTemplate.Height = Math.Max(grid.RowTemplate.Height,
+                                               grid.Font.Height + 12)
+            grid.ColumnHeadersHeight = Math.Max(grid.ColumnHeadersHeight,
+                                                grid.ColumnHeadersDefaultCellStyle.Font.Height + 18)
+        End If
+        For Each child As Control In control.Controls
+            ScaleDialogTables(child, scale)
+        Next
+    End Sub
+
     ' Large dialogs must scroll at 125-200% Windows scaling instead of clipping
     ' their buttons or falling off screen. Call after all dialog controls exist.
     Public Shared Sub MakeDialogScrollable(frm As Form, root As TableLayoutPanel,
@@ -143,6 +172,7 @@ Public NotInheritable Class ModernTheme
         Dim uiScale = Math.Max(1.0F, frm.Font.Height / 17.0F)
         Dim scaledMinWidth = CInt(Math.Ceiling(minimumWidth * uiScale))
         Dim scaledMinHeight = CInt(Math.Ceiling(minimumHeight * uiScale))
+        ScaleDialogTables(root, uiScale)
         Dim viewport As New Panel With {
             .Name = root.Name & "Viewport",
             .Dock = DockStyle.Fill, .AutoScroll = True,
