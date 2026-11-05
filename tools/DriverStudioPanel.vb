@@ -80,12 +80,17 @@ Public NotInheritable Class DriverStudioPanel
         }
         rootLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         ' Show the driver decision grid earlier in short windows.
-        For Each h As Integer In {53, 54, 40, 32, 235, 66, 135, 65, 70}
-            rootLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, h))
+        ' Scale rows to the real UI font instead of clipping content at high DPI.
+        Dim layoutScale As Single = Math.Max(1.0F, Me.Font.Height / 16.0F)
+        For Each h As Integer In {60, 64, 52, 42, 235, 72, 155, 74, 80}
+            rootLayout.RowStyles.Add(New RowStyle(SizeType.Absolute,
+                CInt(Math.Ceiling(h * layoutScale))))
         Next
+        rootLayout.Height = rootLayout.RowStyles.Cast(Of RowStyle)().
+            Sum(Function(row) CInt(row.Height)) + rootLayout.Padding.Vertical + 8
         viewport.Controls.Add(rootLayout)
         AddHandler viewport.ClientSizeChanged, Sub(sender, e)
-            Dim wanted = Math.Max(400, viewport.ClientSize.Width - 1)
+            Dim wanted = Math.Max(760, viewport.ClientSize.Width - 1)
             If rootLayout.Width <> wanted Then rootLayout.Width = wanted
         End Sub
 
@@ -108,8 +113,8 @@ Public NotInheritable Class DriverStudioPanel
         }
         sourceRow.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 144))
-        sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 116))
+        sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 176))
+        sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 128))
         rootLayout.Controls.Add(sourceRow, 0, 1)
         sourceBox = New TextBox With {
             .Name = "txtStudioSource", .Dock = DockStyle.Fill,
@@ -125,6 +130,7 @@ Public NotInheritable Class DriverStudioPanel
             .Dock = DockStyle.Fill, .Margin = New Padding(3, 6, 5, 7)
         }
         ModernTheme.StyleButton(browse, "browse")
+        browse.AutoEllipsis = False
         AddHandler browse.Click, Sub(sender, e)
             Using picker As New FolderBrowserDialog With {
                 .Description = "Select a folder containing INF driver packages",
@@ -146,6 +152,7 @@ Public NotInheritable Class DriverStudioPanel
             .Dock = DockStyle.Fill, .Margin = New Padding(2, 6, 0, 7)
         }
         ModernTheme.StyleButton(scanButton, "primary")
+        scanButton.AutoEllipsis = False
         AddHandler scanButton.Click, AddressOf ScanClicked
         sourceRow.Controls.Add(scanButton, 2, 0)
 
@@ -169,6 +176,7 @@ Public NotInheritable Class DriverStudioPanel
             .Dock = DockStyle.Fill, .Margin = New Padding(1, 3, 0, 4)
         }
         ModernTheme.StyleButton(compareButton, "secondary")
+        compareButton.AutoEllipsis = False
         AddHandler compareButton.Click, AddressOf CompareClicked
         settings.Controls.Add(compareButton, 1, 0)
 
@@ -278,8 +286,8 @@ Public NotInheritable Class DriverStudioPanel
             .Margin = New Padding(0, 11, 0, 0), .BackColor = Color.White
         }
         footer.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 155))
-        footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 206))
+        footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 185))
+        footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 235))
         footer.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         rootLayout.Controls.Add(footer, 0, 7)
         copyButton = New Button With {
@@ -288,6 +296,7 @@ Public NotInheritable Class DriverStudioPanel
             .Margin = New Padding(0, 3, 10, 4)
         }
         ModernTheme.StyleButton(copyButton, "browse")
+        copyButton.AutoEllipsis = False
         AddHandler copyButton.Click, Sub(sender, e)
             Try
                 Clipboard.SetText(DriverStudioEngine.FormatReport(decisions, lastTarget) &
@@ -307,6 +316,7 @@ Public NotInheritable Class DriverStudioPanel
             .Margin = New Padding(0, 3, 10, 4)
         }
         ModernTheme.StyleButton(transferButton, "neutral")
+        transferButton.AutoEllipsis = False
         AddHandler transferButton.Click, AddressOf OpenDriversClicked
         footer.Controls.Add(transferButton, 1, 0)
         Dim warning = WriteLabel("No automatic Commit / Discard",
@@ -320,8 +330,8 @@ Public NotInheritable Class DriverStudioPanel
             .Margin = New Padding(0, 6, 0, 0), .BackColor = Color.White
         }
         importActions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        importActions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 183))
-        importActions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 183))
+        importActions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 215))
+        importActions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 215))
         importActions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         rootLayout.Controls.Add(importActions, 0, 8)
 
@@ -332,6 +342,7 @@ Public NotInheritable Class DriverStudioPanel
             .Margin = New Padding(0, 4, 10, 5)
         }
         ModernTheme.StyleButton(installButton, "primary")
+        installButton.AutoEllipsis = False
         AddHandler installButton.Click, AddressOf InstallSelectedClicked
         importActions.Controls.Add(installButton, 0, 0)
 
@@ -342,6 +353,7 @@ Public NotInheritable Class DriverStudioPanel
             .Margin = New Padding(0, 4, 10, 5)
         }
         ModernTheme.StyleButton(stopButton, "neutral")
+        stopButton.AutoEllipsis = False
         AddHandler stopButton.Click, Sub(sender, e)
             stopAfterCurrent = True
             stopButton.Enabled = False
@@ -716,16 +728,53 @@ Public NotInheritable Class DriverStudioPanel
         Dim folderPath = sourceBox.Text.Trim()
         If File.Exists(folderPath) Then folderPath = Path.GetDirectoryName(folderPath)
         If Not Directory.Exists(folderPath) Then Return
-        Dim prompt = "Open the existing Drivers section with this source folder?" &
+        ' This command only navigates; it never imports drivers by itself.
+        Dim prompt = "Open this source folder in the Drivers section?" &
                      Environment.NewLine & Environment.NewLine &
-                     "Important: the legacy Add drivers action adds the ENTIRE folder, " &
-                     "including drivers marked Same / Older / Review here." &
+                     "The standard Add Drivers command imports the entire folder," &
                      Environment.NewLine &
-                     "This comparison is a preview and does not filter legacy imports."
-        If MessageBox.Show(Me.FindForm(), prompt, "Driver Studio - Safe handoff",
-                           MessageBoxButtons.YesNo, MessageBoxIcon.Warning) =
-                           DialogResult.Yes Then
-            openDrivers(folderPath)
-        End If
+                     "including same-version or older drivers." &
+                     Environment.NewLine &
+                     "Smart Version Detection does not filter that command."
+        Using confirm As New Form With {
+            .Text = "Open Drivers section",
+            .StartPosition = FormStartPosition.CenterParent,
+            .FormBorderStyle = FormBorderStyle.FixedDialog,
+            .MaximizeBox = False, .MinimizeBox = False,
+            .ShowInTaskbar = False, .AutoScaleMode = AutoScaleMode.Font,
+            .Font = ModernTheme.UiFont(10.0F),
+            .ClientSize = New Size(510, 205)
+        }
+            Dim message As New Label With {
+                .Dock = DockStyle.Fill, .Text = prompt,
+                .Font = ModernTheme.UiFont(10.0F),
+                .ForeColor = ModernTheme.TextInk,
+                .Padding = New Padding(12), .AutoSize = False
+            }
+            Dim actions As New FlowLayoutPanel With {
+                .Dock = DockStyle.Bottom, .Height = 54,
+                .FlowDirection = FlowDirection.RightToLeft,
+                .Padding = New Padding(8), .WrapContents = False
+            }
+            Dim cancel As New Button With {
+                .Text = "Cancel", .DialogResult = DialogResult.Cancel,
+                .Width = 112, .Height = 34
+            }
+            Dim proceed As New Button With {
+                .Text = "Open Drivers", .DialogResult = DialogResult.OK,
+                .Width = 145, .Height = 34
+            }
+            ModernTheme.StyleButton(cancel, "neutral")
+            ModernTheme.StyleButton(proceed, "primary")
+            actions.Controls.Add(cancel)
+            actions.Controls.Add(proceed)
+            confirm.Controls.Add(message)
+            confirm.Controls.Add(actions)
+            confirm.AcceptButton = proceed
+            confirm.CancelButton = cancel
+            If confirm.ShowDialog(Me.FindForm()) = DialogResult.OK Then
+                openDrivers(folderPath)
+            End If
+        End Using
     End Sub
 End Class
