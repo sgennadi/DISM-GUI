@@ -299,9 +299,17 @@ Public NotInheritable Class ModernTheme
             ElseIf TypeOf c Is Label Then
                 c.ForeColor = Muted
                 c.Font = UiFont(9.7F)
+                ' Tooltip preserves the full caption where a narrow legacy
+                ' layout cannot display the entire dynamic status label.
+                tips.SetToolTip(c, c.Text)
+                AddHandler c.TextChanged, Sub(sender, e)
+                    Dim label = DirectCast(sender, Control)
+                    If Not label.IsDisposed Then tips.SetToolTip(label, label.Text)
+                End Sub
             ElseIf TypeOf c Is CheckBox Then
                 c.ForeColor = TextInk
                 c.Font = UiFont(9.7F)
+                tips.SetToolTip(c, c.Text)
             ElseIf TypeOf c Is GroupBox Then
                 c.BackColor = Color.White
                 c.ForeColor = TextInk
