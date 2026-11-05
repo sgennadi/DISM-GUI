@@ -1,6 +1,7 @@
 Imports System
 Imports System.Drawing
 Imports System.IO
+Imports System.Text
 Imports System.Linq
 Imports System.Threading
 Imports System.Threading.Tasks
@@ -29,6 +30,8 @@ Public NotInheritable Class Wim360Dashboard
     Private ReadOnly auditMounted As Button
     Private ReadOnly inventoryButton As Button
     Private ReadOnly compareSnapshotsButton As Button
+    Private ReadOnly exportIndexesCsv As Button
+    Private ReadOnly exportIndexesJson As Button
     Private report As Wim360Reader.WimReport
     Private scanGeneration As Integer
     Private isAuditing As Boolean
@@ -65,7 +68,7 @@ Public NotInheritable Class Wim360Dashboard
         dashboardLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         ' Scroll rather than truncate content on high-DPI or short viewports.
         Dim factor As Single = Math.Max(1.0F, Me.Font.Height / 16.0F)
-        For Each height As Integer In {62, 66, 85, 36, 215, 163, 186}
+        For Each height As Integer In {62, 66, 85, 36, 215, 163, 254}
             dashboardLayout.RowStyles.Add(New RowStyle(SizeType.Absolute,
                 CInt(Math.Ceiling(height * factor))))
         Next
@@ -206,12 +209,12 @@ Public NotInheritable Class Wim360Dashboard
         info.Controls.Add(details, 0, 1)
 
         Dim actions As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 3,
+            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 4,
             .Margin = New Padding(0, 5, 0, 0),
             .BackColor = Color.White
         }
-        For i As Integer = 1 To 3
-            actions.RowStyles.Add(New RowStyle(SizeType.Percent, CSng(100.0 / 3.0)))
+        For i As Integer = 1 To 4
+            actions.RowStyles.Add(New RowStyle(SizeType.Percent, 25.0F))
         Next
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
@@ -272,12 +275,33 @@ Public NotInheritable Class Wim360Dashboard
             End Using
         End Sub
         actions.Controls.Add(testCenter, 1, 2)
+
+        exportIndexesCsv = New Button With {
+            .Name = "btn360ExportIndexCsv", .Text = "Export indexes CSV",
+            .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 9, 4),
+            .Enabled = False
+        }
+        ModernTheme.StyleButton(exportIndexesCsv, "browse")
+        AddHandler exportIndexesCsv.Click, Sub(sender, e) ExportIndexMetadata(False)
+        actions.Controls.Add(exportIndexesCsv, 0, 3)
+
+        exportIndexesJson = New Button With {
+            .Name = "btn360ExportIndexJson", .Text = "Export indexes JSON",
+            .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 8, 4),
+            .Enabled = False
+        }
+        ModernTheme.StyleButton(exportIndexesJson, "browse")
+        AddHandler exportIndexesJson.Click, Sub(sender, e) ExportIndexMetadata(True)
+        actions.Controls.Add(exportIndexesJson, 1, 3)
+
         AddHandler fileBox.TextChanged, Sub(sender, e)
             CancelMountedAudit()
             useSelected.Enabled = False
             copyReport.Enabled = False
             auditMounted.Enabled = False
             inventoryButton.Enabled = False
+            exportIndexesCsv.Enabled = False
+            exportIndexesJson.Enabled = False
         End Sub
         AddHandler Me.Disposed, Sub(sender, e) CancelMountedAudit()
     End Sub
@@ -375,6 +399,8 @@ Public NotInheritable Class Wim360Dashboard
         copyReport.Enabled = False
         auditMounted.Enabled = False
         inventoryButton.Enabled = False
+        exportIndexesCsv.Enabled = False
+        exportIndexesJson.Enabled = False
         If String.IsNullOrWhiteSpace(path) Then
             status.Text = "Choose a .wim, .esd or .swm file first."
             details.Text = "WIM 360 only reads image metadata."
@@ -440,6 +466,8 @@ Public NotInheritable Class Wim360Dashboard
             indexTable.ResumeLayout(True)
         End Try
         copyReport.Enabled = True
+        exportIndexesCsv.Enabled = value.ImageCount > 0
+        exportIndexesJson.Enabled = value.ImageCount > 0
         If indexTable.Rows.Count > 0 Then
             indexTable.ClearSelection()
             indexTable.Rows(0).Selected = True
@@ -611,6 +639,40 @@ Public NotInheritable Class Wim360Dashboard
         If selected Is Nothing OrElse report Is Nothing OrElse report.IsSplitSet Then Return
         ' Only fills existing selectors. It does NOT mount or modify the WIM.
         useInMount(report.ImageFile, selected.Index)
+    End Sub
+
+    Private Sub ExportIndexMetadata(asJson As Boolean)
+        Dim inspected = report
+        If inspected Is Nothing OrElse inspected.ImageCount = 0 OrElse
+           Not String.Equals(fileBox.Text.Trim(), inspected.ImageFile,
+                             StringComparison.OrdinalIgnoreCase) Then Return
+        Dim extension = If(asJson, "json", "csv")
+        Dim name = Path.GetFileNameWithoutExtension(inspected.ImageFile) &
+                   "-indexes." & extension
+        Using picker As New SaveFileDialog With {
+            .Title = "Export WIM 360 index metadata (no mounting)",
+            .Filter = If(asJson,
+                         "JSON index metadata (*.json)|*.json",
+                         "CSV index metadata (*.csv)|*.csv"),
+            .DefaultExt = extension, .AddExtension = True,
+            .OverwritePrompt = True, .RestoreDirectory = True,
+            .FileName = name
+        }
+            If picker.ShowDialog(Me.FindForm()) <> DialogResult.OK Then Return
+            Try
+                Dim content = If(asJson,
+                    Wim360MetadataExport.ToJson(inspected),
+                    Wim360MetadataExport.ToCsv(inspected))
+                File.WriteAllText(picker.FileName, content, New UTF8Encoding(True))
+                status.Text = "Exported " & inspected.ImageCount.ToString() &
+                    " indexes to " & picker.FileName & " (metadata only; no WIM changes)."
+            Catch ex As Exception
+                ErrorDiagnostics.RememberFailure("WIM 360 metadata export", ex)
+                MessageBox.Show(Me.FindForm(),
+                    "Could not export index metadata: " & ex.Message,
+                    "WIM 360 - Export", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            End Try
+        End Using
     End Sub
 
     Private Sub CopyClicked(sender As Object, e As EventArgs)
