@@ -151,6 +151,91 @@ internal static class WimMountIntegration
 
     // Real 3-index WIM regression: DISM enumerates contents without mounting.
     // All sources are temporary files created only by the CI test itself.
+    // CI-only stress fixture. This is a >1 GiB synthetic WIM, not an actual
+    // Microsoft install.wim. All three indexes are captured with Windows DISM.
+    // No real OS images, partitions or mounted production folders are touched.
+    public static void VerifyLargeThreeIndexWim(string root)
+    {
+        if (Environment.GetEnvironmentVariable("DISMGUI_TEST_LARGE_WIM") != "1")
+        {
+            Console.WriteLine("SKIP large synthetic 3-index WIM stress test (opt-in)");
+            return;
+        }
+
+        var timer = Stopwatch.StartNew();
+        var folder = Path.Combine(root, "large-install-fixture");
+        Directory.CreateDirectory(folder);
+        var wim = Path.Combine(folder, "install.wim");
+        var input = Path.Combine(folder, "index-1");
+        Directory.CreateDirectory(Path.Combine(input, "Windows", "System32"));
+        var payload = Path.Combine(input, "Windows", "System32", "large-resource.bin");
+
+        // 1,152 MiB. Fixed-size buffers avoid allocating gigabytes of RAM.
+        // /Compress:none produces a genuine large WIM rather than a tiny
+        // highly-compressed placeholder full of zeros.
+        var block = new byte[4 * 1024 * 1024];
+        new Random(360224).NextBytes(block);
+        using (var writer = new FileStream(payload, FileMode.CreateNew,
+                                           FileAccess.Write, FileShare.None, block.Length))
+        {
+            for (var n = 0; n < 288; n++)
+                writer.Write(block);
+            writer.Flush(flushToDisk: true);
+        }
+        File.WriteAllText(Path.Combine(input, "Windows", "System32", "shared.txt"),
+                          "large-WIM stress index 1");
+
+        CheckDism(new[] {
+            "/English", "/Capture-Image", "/ImageFile:" + wim,
+            "/CaptureDir:" + input, "/Name:Windows 11 Pro",
+            "/Compress:none", "/CheckIntegrity"
+        }, 900000);
+
+        for (var index = 2; index <= 3; index++)
+        {
+            var source = Path.Combine(folder, "index-" + index);
+            Directory.CreateDirectory(Path.Combine(source, "Windows", "System32"));
+            File.WriteAllText(Path.Combine(source, "Windows", "System32", "shared.txt"),
+                              "large-WIM stress index " + index);
+            File.WriteAllText(Path.Combine(source, "Windows", "System32",
+                                            "only-index-" + index + ".txt"), "unique");
+            CheckDism(new[] {
+                "/English", "/Append-Image", "/ImageFile:" + wim,
+                "/CaptureDir:" + source, "/Name:Windows 11 Index " + index
+            }, 300000);
+        }
+
+        var report = Wim360Reader.Inspect(wim);
+        var totalBytes = new FileInfo(wim).Length;
+        if (report.ImageCount != 3 || totalBytes < 1024L * 1024 * 1024)
+            throw new InvalidOperationException(
+                "Stress fixture did not create a >1 GiB three-index WIM. " +
+                "Size: " + totalBytes.ToString("N0") + " bytes.");
+        var digest = Digest(wim);
+        var modified = File.GetLastWriteTimeUtc(wim);
+        var result = Wim360OfflineList.Compare(report, new[] { 1, 2, 3 },
+                                                CancellationToken.None);
+        if (!result.Rows.Any(x => x.Name.EndsWith("large-resource.bin",
+                              StringComparison.OrdinalIgnoreCase) &&
+                            x.State == "Only in Index 1") ||
+            !result.Rows.Any(x => x.Name.EndsWith("only-index-3.txt",
+                              StringComparison.OrdinalIgnoreCase) &&
+                            x.State == "Only in Index 3") ||
+            digest != Digest(wim) ||
+            modified != File.GetLastWriteTimeUtc(wim))
+            throw new InvalidOperationException(
+                "Large real-DISM-created three-index WIM comparison or preservation failed.");
+
+        timer.Stop();
+        var memory = Process.GetCurrentProcess().PeakWorkingSet64;
+        Console.WriteLine("PASS 1+ GiB synthetic install.wim stress: " +
+            totalBytes.ToString("N0") + " bytes, 3 indexes, " +
+            result.Rows.Count.ToString("N0") + " compared paths, " +
+            "elapsed=" + timer.Elapsed.TotalSeconds.ToString("F1") + " s, " +
+            "peak process RAM=" + (memory / 1048576L).ToString("N0") +
+            " MiB; SHA-256 and timestamp unchanged.");
+    }
+
     public static void VerifyOfflineThreeIndexes(string root)
     {
         if (Environment.GetEnvironmentVariable("DISMGUI_TEST_WIM_MOUNT") != "1")
