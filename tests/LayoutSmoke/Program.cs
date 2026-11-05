@@ -406,6 +406,19 @@ internal static class LayoutSmoke
                 offlineMode.Items[1]!.ToString()!.Contains("no mounting") &&
                 offlineMode.Items[2]!.ToString()!.Contains("mounted"),
                 "WIM 360 needs a separate direct offline file listing mode");
+        if (Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_ONLY") == "1" &&
+            float.TryParse(Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_FONT_SCALE"),
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var scale) &&
+            scale > 1.15f)
+        {
+            var optionsViewport = Find(dialog, "Wim360CompareIndexesViewport") as Panel;
+            var optionBounds = offlineMode!.RectangleToScreen(offlineMode.ClientRectangle);
+            var viewportBounds = optionsViewport!.RectangleToScreen(optionsViewport.ClientRectangle);
+            Require(optionBounds.Left >= viewportBounds.Left - 5 &&
+                    optionBounds.Right <= viewportBounds.Right + 5,
+                    "Compare Indexes mode must be horizontally visible at high font scaling");
+        }
         dialog.PreviewForTest(comparison);
         Application.DoEvents();
         var matrix = Find(dialog, "grid360IndexComparison") as DataGridView;
@@ -1471,6 +1484,9 @@ internal static class LayoutSmoke
             Require(visibleScan.Width >= 85 && visibleCompare.Width >= 130 &&
                     studioGrid.Height >= 145,
                     "Driver Studio must have readable scan buttons and comparison grid");
+            if (Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_ONLY") == "1")
+                Require(studioSource.Width >= 200,
+                    "Driver Studio source path was squeezed under high font scaling");
             Snapshot(form, "DISM-GUI-Driver-Studio");
             tabs.SelectedIndex = 0;
             Application.DoEvents();
@@ -1588,6 +1604,9 @@ internal static class LayoutSmoke
             Application.DoEvents();
             wimPathField.Text = @"C:\test\boot.wim";
             dashboard.PreviewMetadataForTest(WIM_METADATA_FIXTURE);
+            if (Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_ONLY") == "1")
+                Require(wimPathField.Width >= 200,
+                    "WIM 360 image path field was squeezed under high font scaling");
             Snapshot(form, "DISM-GUI-WIM-360");
             tabs.SelectedIndex = 0;
             Application.DoEvents();
@@ -1668,6 +1687,12 @@ internal static class LayoutSmoke
                         "Update Center heading labels missing");
                 NoOverlap(updatesTitle!, updatesSub!, "Update Center title and subtitle");
                 VerifyScrollableDialog(updateForm, "Update Center");
+                var updateViewport = AllControls(updateForm).OfType<Panel>()
+                    .FirstOrDefault(p => p.AutoScroll);
+                Require(updateViewport is not null &&
+                        updateViewport.HorizontalScroll.Value <= 5 &&
+                        updateViewport.VerticalScroll.Value <= 5,
+                    "Update Center should open at the top-left rather than focus-scroll to footer");
                 Snapshot(updateForm, "DISM-GUI-Update-Center");
                 updateForm.Hide();
             }
