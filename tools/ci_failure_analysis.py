@@ -19,7 +19,7 @@ KNOWN = {
     "Publish portable EXE": "Portable EXE publication",
     "Verify embedded EXE icon and no PDB/config clutter": "Artifact validation",
 }
-ERROR_CODE = re.compile(r"\b(?:BC|CS|MSB|NETSDK|NU)[0-9]{4,6}\b", re.I)
+ERROR_CODE = re.compile(r"\berror\s+((?:BC|CS|MSB|NETSDK|NU)[0-9]{4,6})\b", re.I)
 ADVICE = {
     "BC": "Check VB source, imports, name shadowing and overloads.",
     "CS": "Check C# smoke tests and source contracts.",
@@ -40,6 +40,8 @@ def json_gh(*args):
 
 def parse_codes(log_text):
     # Only known compiler codes, never a raw log line or untrusted path.
+    # Require the compiler's actual 'error BC12345' wording: do not
+    # classify warnings, suggestions or plain mentions of error codes as failures.
     return set(x.upper() for x in ERROR_CODE.findall(log_text))
 
 def signature(run_id):

@@ -12,6 +12,7 @@ Public NotInheritable Class ErrorReportForm
     Private ReadOnly titleBox As TextBox
     Private ReadOnly descriptionBox As TextBox
     Private ReadOnly includeLog As CheckBox
+    Private ReadOnly includeHistory As CheckBox
     Private ReadOnly previewBox As TextBox
     Private ReadOnly reviewed As CheckBox
     Private ReadOnly sendButton As Button
@@ -79,8 +80,10 @@ Public NotInheritable Class ErrorReportForm
             .Dock = DockStyle.Fill, .ColumnCount = 2,
             .RowCount = 1, .Margin = Padding.Empty
         }
-        choices.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 65))
-        choices.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 35))
+        choices.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 44))
+        choices.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 32))
+        choices.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 24))
+        choices.ColumnCount = 3
         choices.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         layout.Controls.Add(choices, 0, 3)
 
@@ -91,6 +94,13 @@ Public NotInheritable Class ErrorReportForm
             .AutoSize = False, .Margin = New Padding(0, 5, 5, 7)
         }
         choices.Controls.Add(includeLog, 0, 0)
+        includeHistory = New CheckBox With {
+            .Name = "chkSupportIncludeHistory",
+            .Text = "Include last 15 local errors",
+            .Checked = False, .Dock = DockStyle.Fill,
+            .AutoSize = False, .Margin = New Padding(2, 5, 5, 7)
+        }
+        choices.Controls.Add(includeHistory, 1, 0)
         Dim refresh As New Button With {
             .Name = "btnSupportGenerate",
             .Text = "Generate sanitized preview",
@@ -98,7 +108,7 @@ Public NotInheritable Class ErrorReportForm
         }
         ModernTheme.StyleButton(refresh, "browse")
         AddHandler refresh.Click, Sub(sender, e) GeneratePreview()
-        choices.Controls.Add(refresh, 1, 0)
+        choices.Controls.Add(refresh, 2, 0)
 
         previewBox = New TextBox With {
             .Name = "txtSupportPreview",
@@ -136,15 +146,53 @@ Public NotInheritable Class ErrorReportForm
         footer.Controls.Add(reviewed, 0, 1)
 
         Dim actions As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 4, .RowCount = 1,
+            .Dock = DockStyle.Fill, .ColumnCount = 6, .RowCount = 1,
             .Margin = Padding.Empty
         }
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 145))
-        actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 215))
-        actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 105))
+        For Each width As Integer In {135, 125, 135, 215, 95}
+            actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, width))
+        Next
         actions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         footer.Controls.Add(actions, 0, 2)
+
+        Dim openHistory As New Button With {
+            .Name = "btnSupportOpenHistory",
+            .Text = "Open log folder",
+            .Dock = DockStyle.Fill, .Margin = New Padding(3, 4, 6, 0)
+        }
+        ModernTheme.StyleButton(openHistory, "browse")
+        AddHandler openHistory.Click, Sub(sender, e)
+            Try
+                System.IO.Directory.CreateDirectory(RuntimeDiagnostics.Folder)
+                Process.Start(New ProcessStartInfo(RuntimeDiagnostics.Folder) With {
+                    .UseShellExecute = True
+                })
+            Catch ex As Exception
+                status.Text = "Cannot open local diagnostic folder: " & ex.GetType().Name
+            End Try
+        End Sub
+        actions.Controls.Add(openHistory, 1, 0)
+
+        Dim clearHistory As New Button With {
+            .Name = "btnSupportClearHistory",
+            .Text = "Clear history",
+            .Dock = DockStyle.Fill, .Margin = New Padding(3, 4, 6, 0)
+        }
+        ModernTheme.StyleButton(clearHistory, "neutral")
+        AddHandler clearHistory.Click, Sub(sender, e)
+            If MessageBox.Show(Me, "Delete all locally recorded diagnostic errors?",
+                "Clear local diagnostics", MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question) <> DialogResult.Yes Then Return
+            Try
+                RuntimeDiagnostics.ClearHistory()
+                GeneratePreview()
+                status.Text = "Local diagnostic history cleared."
+            Catch ex As IOException
+                status.Text = ex.Message
+            End Try
+        End Sub
+        actions.Controls.Add(clearHistory, 2, 0)
 
         Dim copy As New Button With {
             .Name = "btnSupportCopy", .Text = "Copy report",
@@ -152,7 +200,7 @@ Public NotInheritable Class ErrorReportForm
         }
         ModernTheme.StyleButton(copy, "browse")
         AddHandler copy.Click, Sub(sender, e) CopyReport()
-        actions.Controls.Add(copy, 1, 0)
+        actions.Controls.Add(copy, 3, 0)
 
         sendButton = New Button With {
             .Name = "btnSupportGitHub", .Text = "Open GitHub Issue draft",
@@ -161,7 +209,7 @@ Public NotInheritable Class ErrorReportForm
         }
         ModernTheme.StyleButton(sendButton, "primary")
         AddHandler sendButton.Click, AddressOf OpenIssueClicked
-        actions.Controls.Add(sendButton, 2, 0)
+        actions.Controls.Add(sendButton, 4, 0)
 
         Dim close As New Button With {
             .Name = "btnSupportClose", .Text = "Close",
@@ -169,7 +217,7 @@ Public NotInheritable Class ErrorReportForm
         }
         ModernTheme.StyleButton(close, "neutral")
         AddHandler close.Click, Sub(sender, e) Me.Close()
-        actions.Controls.Add(close, 3, 0)
+        actions.Controls.Add(close, 5, 0)
         Me.CancelButton = close
 
         AddHandler reviewed.CheckedChanged, Sub(sender, e)
@@ -179,6 +227,9 @@ Public NotInheritable Class ErrorReportForm
             reviewed.Checked = False
         End Sub
         AddHandler includeLog.CheckedChanged, Sub(sender, e)
+            GeneratePreview()
+        End Sub
+        AddHandler includeHistory.CheckedChanged, Sub(sender, e)
             GeneratePreview()
         End Sub
         AddHandler titleBox.TextChanged, Sub(sender, e)
@@ -195,7 +246,8 @@ Public NotInheritable Class ErrorReportForm
         Try
             previewBox.Text = ErrorDiagnostics.BuildReport(
                 titleBox.Text, descriptionBox.Text, includeLog.Checked,
-                If(includeLog.Checked, rawOutput, ""), area, Me.DeviceDpi)
+                If(includeLog.Checked, rawOutput, ""), area, Me.DeviceDpi,
+                includeHistory.Checked)
             reviewed.Checked = False
             status.Text = "Report redacted locally. Check every line before opening GitHub."
         Catch ex As Exception

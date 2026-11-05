@@ -26,7 +26,7 @@ def edit_once(path, old, new, label):
     path.write_text(s.replace(old, new, 1), encoding="utf-8-sig")
     print("Patched:", label)
 
-for name in ("ModernTheme.vb", "ResponsiveSectionLayout.vb", "ResponsiveForms.vb", "WindowGeometry.vb", "UpdateManager.vb", "SupportContact.vb", "ErrorDiagnostics.vb", "ErrorReportForm.vb",
+for name in ("ModernTheme.vb", "ResponsiveSectionLayout.vb", "ResponsiveForms.vb", "WindowGeometry.vb", "UpdateManager.vb", "SupportContact.vb", "ErrorDiagnostics.vb", "ErrorReportForm.vb", "RuntimeDiagnostics.vb",
              "Wim360Reader.vb", "Wim360SplitSet.vb", "Wim360Dashboard.vb",
              "IntegratedTestChecks.vb", "IntegratedTestCenterForm.vb", "Wim360Servicing.vb",
              "Wim360Catalog.vb", "Wim360InventoryForm.vb",
@@ -57,6 +57,7 @@ edit_once(main,
 
     Private Sub frmMain_Load(sender As System.Object, e As System.EventArgs) Handles MyBase.Load
         If UpdateManager.HandleSelfUpdateMode() Then Return
+        RuntimeDiagnostics.Initialize()
         ModernTheme.ApplyMain(Me, TabControl1, txtOutput, MenuStrip1, btnExit, Label4)
 """, "main form theme and update hook")
 
@@ -65,6 +66,20 @@ edit_once(progress,
           """        ModernTheme.ApplyProgress(Me, Label1, ProgressBar1)
         Timer1.Enabled = True""", "progress dialog visual theme")
 s = main.read_text(encoding="utf-8-sig")
+# Record failed DISM exits from every legacy command, mount and dismount path.
+# Commands can fail without throwing a managed exception; the local journal
+# therefore records nonzero exit codes without copying full DISM output.
+if "RuntimeDiagnostics.RecordDismExit(" not in main.read_text(encoding="utf-8-sig"):
+    original_main = main.read_text(encoding="utf-8-sig")
+    command_exit = "        strDISMExitCode = DISM.ExitCode\n"
+    unmount_exit = "        strDISMExitCode = DISM.ExitCode.ToString()\n"
+    if original_main.count(command_exit) != 2 or original_main.count(unmount_exit) != 1:
+        raise RuntimeError("Expected three legacy DISM exit points for safe instrumentation")
+    original_main = original_main.replace(command_exit,
+        command_exit + '        RuntimeDiagnostics.RecordDismExit("DISM operation", strDISMExitCode)\n')
+    original_main = original_main.replace(unmount_exit,
+        unmount_exit + '        RuntimeDiagnostics.RecordDismExit("DISM dismount", strDISMExitCode)\n')
+    main.write_text(original_main, encoding="utf-8-sig")
 s = s.replace("frmProgress.ShowDialog()", "frmProgress.ShowDialog(Me)")
 s = s.replace("frmAbout.ShowDialog()", "frmAbout.ShowDialog(Me)")
 main.write_text(s, encoding="utf-8-sig")
