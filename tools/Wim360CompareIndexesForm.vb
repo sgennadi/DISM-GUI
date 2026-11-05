@@ -507,7 +507,8 @@ Public NotInheritable Class Wim360CompareIndexesForm
             tokenSource.Dispose()
             working = False
             If Not Me.IsDisposed Then
-                compareButton.Text = If(stackedLayout, "Compare indexes", "Compare selected indexes")
+                compareButton.Text = If(Me.Font.Height / 17.0F > 1.15F,
+                                        "Compare indexes", "Compare selected indexes")
                 compareButton.Enabled = True
                 selectedIndexes.Enabled = True
                 modeBox.Enabled = True
@@ -569,7 +570,8 @@ Public NotInheritable Class Wim360CompareIndexesForm
             tokenSource.Dispose()
             working = False
             If Not Me.IsDisposed Then
-                compareButton.Text = If(stackedLayout, "Compare indexes", "Compare selected indexes")
+                compareButton.Text = If(Me.Font.Height / 17.0F > 1.15F,
+                                        "Compare indexes", "Compare selected indexes")
                 compareButton.Enabled = True
                 exportButton.Enabled = comparison IsNot Nothing
                 selectedIndexes.Enabled = True
