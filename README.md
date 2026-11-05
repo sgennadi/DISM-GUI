@@ -178,3 +178,40 @@ sanitized warnings and a PARTIAL AUDIT indicator appear in the report.
 Snapshot exports preserve driver/package error flags; comparison suppresses
 false Added/Removed events from failed inventories. Mount validation failures
 remain fatal, and no image is committed or discarded by the inventory viewer.
+
+
+## One-click integrated testing (4.3.8)
+
+Choose **Tools > Run complete safe tests...** or **WIM 360 > Run complete safe tests**.
+The new Test Center runs read-only checks for Windows/.NET/runtime, elevation,
+display DPI/window dimensions, DISM mounted-image query, a selected WIM/ESD/SWM
+image, and split-image part consistency. It shows PASS/WARN/FAIL/SKIP results
+in one resizable window. **Copy report** and **Save report** export a locally
+sanitized summary; **Report issue...** opens the existing human-reviewed
+GitHub support form. **No automatic upload or telemetry is performed.**
+
+A selected image is optional for basic environment testing. For a more complete
+test, choose a disposable copy of \`boot.wim\` or \`install.wim\`. If the image
+is **already mounted**, enable **Scan servicing of an ALREADY mounted index**
+before pressing **Run all safe checks**. This optional query can take several
+minutes. It checks drivers, Windows packages, optional features and Windows
+capabilities; the Test Center **never mounts, unmounts, commits or changes**
+a WIM. Run as administrator to test the full servicing APIs.
+
+### Split SWM support and limitations
+
+WIM 360 now accepts \`install.swm\`, \`install2.swm\` etc. It resolves the
+first part, verifies the names, count, GUID and part numbers of the complete
+set from each Microsoft WIM header, and reads image metadata from the first part with query-only WIMGAPI.
+All members of a split set must be in the same directory.
+
+This is **view-only**: WIM 360 disables **Use index in Mount** and mounted
+servicing for SWM images. Split images cannot be edited in place. The header
+comparison and metadata read do **not** guarantee full data integrity; they
+do detect missing or mismatched part headers. Never use the standard Mount
+or Driver Studio write actions on a SWM path.
+
+CI creates an independent random-data WIM, splits it into multiple SWM parts,
+inspects both part 1 and part 2, verifies missing-part rejection, and compares
+SHA-256 checksums after testing. Real production OS-image servicing and
+interactive DPI scaling at 125%, 150% and 200% still require an operator test.

@@ -688,6 +688,58 @@ internal static class LayoutSmoke
         Console.WriteLine("PASS snapshot comparison UI layout and filters");
     }
 
+    private static void VerifyIntegratedTestCenter(Form owner)
+    {
+        var dpi150 = IntegratedTestChecks.InspectDisplay(144, 1100, 780);
+        var dpi200Small = IntegratedTestChecks.InspectDisplay(192, 600, 420);
+        Require(dpi150.Status == "PASS" && dpi150.Details.Contains("150%") &&
+                dpi200Small.Status == "WARN", "DPI diagnostics must flag small layouts");
+        var records = new[] {
+            new IntegratedTestChecks.Result { Status = "PASS", Name = "DISM binary",
+                                                Details = "Available" },
+            new IntegratedTestChecks.Result { Status = "WARN", Name = "DPI / layout",
+                                                Details = "200% scale needs visual check" },
+            new IntegratedTestChecks.Result { Status = "FAIL", Name = "SWM parts",
+                                                Details = @"C:\Users\private-user\install.swm" }
+        };
+        var report = IntegratedTestChecks.FormatReport(records);
+        Require(report.Contains("PASS: 1") && report.Contains("WARN: 1") &&
+                report.Contains("FAIL: 1") && !report.Contains("private-user"),
+                "Test Center must count outcomes and redact private file paths");
+
+        using var window = new IntegratedTestCenterForm();
+        window.Show(owner);
+        Application.DoEvents();
+        var grid = Find(window, "gridTestCenterResults") as DataGridView;
+        var browse = Find(window, "btnTestCenterBrowse") as Button;
+        var image = Find(window, "txtTestCenterImage") as TextBox;
+        var optional = Find(window, "chkTestCenterAuditMounted") as CheckBox;
+        var run = Find(window, "btnTestCenterRun") as Button;
+        var copy = Find(window, "btnTestCenterCopy") as Button;
+        var save = Find(window, "btnTestCenterSave") as Button;
+        var support = Find(window, "btnTestCenterSupport") as Button;
+        var cancel = Find(window, "btnTestCenterCancel") as Button;
+        Require(grid is not null && browse is not null && image is not null &&
+                optional is not null && run is not null && copy is not null &&
+                save is not null && support is not null && cancel is not null,
+                "Integrated Test Center must have all checking/reporting controls");
+        Require(!optional!.Checked && run!.Enabled &&
+                !copy!.Enabled && !save!.Enabled && !support!.Enabled,
+                "Mounted audit must be opt-in and reports disabled until checks complete");
+        NoOverlap(image!, browse!, "Test Center image path and Browse");
+        NoOverlap(copy, save, "Test Center Copy and Save");
+        NoOverlap(save, support, "Test Center Save and Support");
+        NoOverlap(support, cancel!, "Test Center Support and Close");
+        window.PreviewForTest(records);
+        Application.DoEvents();
+        Require(grid!.Rows.Count == 3 && copy.Enabled && save.Enabled && support.Enabled,
+                "Test Center must display results and activate local report controls");
+        Snapshot(window, "DISM-GUI-Integrated-Test-Center");
+        window.Close();
+        Application.DoEvents();
+        Console.WriteLine("PASS integrated Test Center controls, redaction and DPI diagnostics");
+    }
+
     private static void VerifyNativeWimReader()
     {
         var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
@@ -703,6 +755,9 @@ internal static class LayoutSmoke
             System.IO.File.WriteAllText(
                 System.IO.Path.Combine(source, "smoke.txt"),
                 "DISM GUI WIM 360 read-only catalog smoke test");
+            var payload = new byte[9 * 1024 * 1024];
+            System.Security.Cryptography.RandomNumberGenerator.Fill(payload);
+            System.IO.File.WriteAllBytes(System.IO.Path.Combine(source, "payload.bin"), payload);
             var image = System.IO.Path.Combine(root, "tiny.wim");
             var start = new System.Diagnostics.ProcessStartInfo("dism.exe")
             {
@@ -748,6 +803,7 @@ internal static class LayoutSmoke
             Console.WriteLine("PASS native WIMGAPI read-only WIM catalog: " +
                 inventory.Images[0].Name + ", " + inventory.FileSizeBytes + " bytes");
             WimMountIntegration.Verify(image, root);
+            WimMountIntegration.VerifySplit(image, root);
         }
         finally
         {
@@ -929,6 +985,7 @@ internal static class LayoutSmoke
             VerifyWimMetadata();
             VerifyMountedAudit();
             VerifyErrorDiagnostics();
+            VerifyIntegratedTestCenter(form);
             var detailFixture = VerifyDetailedInventory();
             var snapshotReport = VerifySnapshotDiff(detailFixture);
             VerifyNativeWimReader();
@@ -1087,6 +1144,11 @@ internal static class LayoutSmoke
                     .Any(item => item.Text == "Email Support..." &&
                         item.Name == "mnuEmailSupport"),
                     "Tools dropdown must contain Email Support");
+            Require(tools.ContextMenuStrip.Items.Cast<ToolStripItem>()
+                    .Any(item => item.Name == "mnuIntegratedTestCenter"),
+                    "Tools menu must expose the Integrated Test Center");
+            Require(Find(dashboard!, "btn360TestCenter") is Button,
+                    "WIM 360 must provide the direct complete-test shortcut");
             var splitter = Find(form, "mainOutputSplitter") as SplitContainer;
             var copyLog = Find(form, "btnCopyOutput") as Button;
             var clearLog = Find(form, "btnClearOutput") as Button;

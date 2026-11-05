@@ -406,6 +406,16 @@ Public NotInheritable Class ModernTheme
             End Using
         End Sub
         toolsMenu.Items.Add(reportProblemMenu)
+        Dim testCenterMenu As New ToolStripMenuItem("Run complete safe tests...") With {
+            .Name = "mnuIntegratedTestCenter",
+            .ToolTipText = "Test DISM, WIM/SWM, environment, DPI and reporting without image changes."
+        }
+        AddHandler testCenterMenu.Click, Sub(sender, e)
+            Using viewer As New IntegratedTestCenterForm()
+                viewer.ShowDialog(frm)
+            End Using
+        End Sub
+        toolsMenu.Items.Add(testCenterMenu)
         toolsMenu.Items.Add(New ToolStripSeparator())
         toolsMenu.Items.Add(updatesStatus)
         toolsMenu.Items.Add(updatesMenuItem)

@@ -41,6 +41,12 @@ Public NotInheritable Class Wim360Reader
         Public Property ModifiedUtc As DateTime
         Public Property Images As New List(Of ImageInfo)()
         Public Property MountScanWarning As String = ""
+        Public Property SplitSet As Wim360SplitSet.Manifest
+        Public ReadOnly Property IsSplitSet As Boolean
+            Get
+                Return SplitSet IsNot Nothing
+            End Get
+        End Property
         Public ReadOnly Property ImageCount As Integer
             Get
                 Return Images.Count
@@ -275,6 +281,13 @@ Public NotInheritable Class Wim360Reader
     End Function
 
     Private Shared Sub FillMountState(report As WimReport)
+        If report.IsSplitSet Then
+            For Each image As ImageInfo In report.Images
+                image.MountStatus = "Split image (read-only)"
+                image.MountFolder = ""
+            Next
+            Return
+        End If
         Try
             Dim mounts = GetMounts()
             For Each image As ImageInfo In report.Images
@@ -310,14 +323,17 @@ Public NotInheritable Class Wim360Reader
 
     Public Shared Function ReadImage(wimFilePath As String) As WimReport
         If String.IsNullOrWhiteSpace(wimFilePath) Then
-            Throw New ArgumentException("Choose a .wim or .esd image.")
+            Throw New ArgumentException("Choose a .wim, .esd or .swm image.")
         End If
         Dim full = IO.Path.GetFullPath(wimFilePath)
         Dim ext = IO.Path.GetExtension(full)
-        If Not String.Equals(ext, ".wim", StringComparison.OrdinalIgnoreCase) AndAlso
-           Not String.Equals(ext, ".esd", StringComparison.OrdinalIgnoreCase) Then
-            Throw New NotSupportedException(
-                "This read-only preview accepts .wim and .esd files. Split .swm is not supported yet.")
+        Dim split As Wim360SplitSet.Manifest = Nothing
+        If String.Equals(ext, ".swm", StringComparison.OrdinalIgnoreCase) Then
+            split = Wim360SplitSet.Discover(full)
+            full = split.MainFile
+        ElseIf Not String.Equals(ext, ".wim", StringComparison.OrdinalIgnoreCase) AndAlso
+               Not String.Equals(ext, ".esd", StringComparison.OrdinalIgnoreCase) Then
+            Throw New NotSupportedException("WIM 360 accepts .wim, .esd and split .swm files.")
         End If
         Dim source As New FileInfo(full)
         If Not source.Exists Then Throw New FileNotFoundException("Image not found.", full)
@@ -331,6 +347,9 @@ Public NotInheritable Class Wim360Reader
         End If
         Dim xmlBuffer As IntPtr = IntPtr.Zero
         Try
+            ' Only the first SWM part contains XML image metadata.
+            ' All part headers were validated by Discover above. No resource
+            ' reference calls are required for metadata and no write access.
             Dim bytes As UInteger = 0UI
             If Not WIMGetImageInformation(hWim, xmlBuffer, bytes) Then
                 Throw New Win32Exception(Marshal.GetLastWin32Error(),
@@ -342,12 +361,15 @@ Public NotInheritable Class Wim360Reader
             End If
             Dim xml = Marshal.PtrToStringUni(xmlBuffer, CInt(bytes \ 2UI)).
                 TrimStart(ChrW(&HFEFF)).TrimEnd(ChrW(0))
-            Dim report = ParseMetadataXml(xml, full, source.Length)
+            Dim report = ParseMetadataXml(xml, full,
+                If(split Is Nothing, source.Length, split.TotalBytes))
+            report.SplitSet = split
             Dim nativeCount = WIMGetImageCount(hWim)
             If nativeCount = 0 OrElse nativeCount <> CUInt(report.Images.Count) Then
                 Throw New InvalidDataException("Image count disagrees with WIMGAPI metadata.")
             End If
-            report.ModifiedUtc = source.LastWriteTimeUtc
+            report.ModifiedUtc = If(split Is Nothing, source.LastWriteTimeUtc,
+                split.Parts.Select(Function(p) File.GetLastWriteTimeUtc(p)).Max())
             ' Query all mounts only after WIM file handles have been released.
             Return report
         Finally
@@ -369,6 +391,9 @@ Public NotInheritable Class Wim360Reader
             "File size: " & HumanSize(report.FileSizeBytes),
             "Indexes: " & report.ImageCount.ToString(),
             "Modified (UTC): " & report.ModifiedUtc.ToString("u"),
+            If(report.IsSplitSet, "Split WIM: " & Wim360SplitSet.Describe(report.SplitSet),
+               "Standard WIM/ESD container"),
+            If(report.IsSplitSet, "Split WIM is view-only: mount, update and commit disabled.", ""),
             ""
         }
         For Each item As ImageInfo In report.Images

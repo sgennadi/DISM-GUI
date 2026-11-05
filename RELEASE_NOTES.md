@@ -1,30 +1,24 @@
-# DISM GUI 4.3.7
+# DISM GUI 4.3.8
 
-## Error Diagnostics and GitHub Reporting
+## Integrated Test Center — test everything together
 
-- New **Tools > Report error to GitHub** and **About > Report error to GitHub** actions open a dedicated resizable support window with a sanitized, editable report preview.
-- Includes application version, Windows/.NET architecture, display DPI and latest recorded WIM 360 error. DISM output is **opt-in** (last 60 lines), not automatically attached.
-- Scrubs common credentials, BitLocker recovery passwords, URLs, IP/MAC addresses, emails, GUIDs and private paths. Human review checkbox is mandatory, and editing the report revokes approval.
-- Opens a GitHub Issue **draft**, copying the sanitized report to clipboard. User signs in and submits in the browser; no unattended application uploads or GitHub credentials.
-- Remembers support dialog placement independently and retains direct email support at sgennadi@hotmail.com.
+- Added **Tools > Run complete safe tests...** and **WIM 360 > Run complete safe tests**.
+- One resizable, separately remembered WinForms window tests local Windows/.NET environment, administrator rights, physical display DPI, DISM availability, and selected WIM/ESD/SWM image metadata.
+- Optional **already-mounted** servicing audit reads driver packages, Windows packages, optional features and capabilities; it is OFF by default. The Test Center never mounts, edits, commits, discards, installs, or changes images.
+- Consolidated PASS/WARN/FAIL/SKIP results with progress, tooltips, cancel/close, local Copy and Save report (sanitized UTF-8), and the reviewed GitHub Issue-draft workflow. No automatic desktop uploads.
+- Integrated Test Center is accessible directly from both the main Tools menu and WIM 360.
 
-## Automatic GitHub CI Error Analysis
+## WIM 360 — read-only split SWM metadata
 
-- **Pre-build diagnostics** run before code generation/build on x86, x64 and ARM64 to catch missing modules, invalid versions, unsafe WIM code changes and known VB.NET compile regressions.
-- Added a dedicated GitHub workflow that runs **after failed builds and every day**.
-- Groups failed-step names and compiler error codes by signature across independent failed runs in the preceding 14 days. Creates or updates one recurring-failure GitHub Issue only when a signature occurs in two or more builds.
-- Issue contents include only allowlisted step labels, compiler error codes and investigation guidance; never raw logs or machine details.
-- Added parser/redaction and WinForms regression tests. CI error analysis uses the repository's ephemeral GitHub token exclusively in GitHub Actions.
+- Accepts first or later split parts such as \`install.swm\` and \`install2.swm\`.
+- Validates every required part's WIM signature, spanned flag, header part number/count and matching set identity; identifies missing, mismatched or incomplete sets.
+- Uses query-only WIMGAPI access to the first SWM part for image-index metadata, description, architecture and build information; no write/reference operation is performed.
+- Displays the complete part count and combined size. **Mount**, **Use index in Mount**, and mounted servicing are disabled for split sets; this release does **not** edit or apply SWM images.
+- New integration test uses a disposable real DISM /Split-Image set, selects both parts, verifies missing-part detection and asserts stable SHA-256 checksums.
 
-## WIM 360 — Resilient Partial Audit
+## Regression and limitations
 
-- Independent driver, Windows package, optional-feature and capability reads; failures in one category preserve successful inventories from the others.
-- Visible **PARTIAL AUDIT** warnings instead of misleading zero counts, with per-stage progress and timings.
-- Sanitized error diagnostics appear in the inventory and JSON snapshots. Snapshot comparison suppresses false removals from incomplete categories.
-- Existing read-only image/index/mount revalidation, Driver Studio write guards, and real disposable WIM mount tests remain unchanged.
-
-## Testing and limitations
-
-- WinForms and test logic run in Windows x64 CI; portable EXE builds cover x86, x64, ARM64.
-- Full real Windows installation servicing, alternate monitor scaling and SWM support still require further testing/development.
+- Existing Error Diagnostics (user-reviewed GitHub Issue drafts), CI recurring-error diagnostics, WIM 360 partial audit and Driver Studio safety remain intact.
+- Windows CI validates the WinForms Test Center layout, DPI reporting at sample scales, sanitized report output, WIM/SWM metadata and disposable read-only WIM mount; portable archives cover x86, x64 and ARM64.
+- Header/metadata inspection is not equivalent to a complete corruption scan. Windows 11/Server install.wim driver/package enumeration and 125%-200% live DPI should be tested on a separate disposable workstation before production use.
 - Original DISM GUI by Mike Celone (mikecel79/DISMGUI); attribution retained.
