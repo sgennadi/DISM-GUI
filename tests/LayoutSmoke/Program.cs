@@ -322,6 +322,31 @@ internal static class LayoutSmoke
                 allPresent.Any(x => x.Name.EndsWith("common.dll")),
                 "Exists in all must include different-size files still present everywhere");
 
+        // A realistic multi-index catalog must be merged in a single pass.
+        // This deliberately yields records lazily instead of materializing
+        // a cross-product of all index paths in the test harness.
+        var generated = Enumerable.Range(0, 30000).SelectMany(n =>
+            new[] { 1, 2, 3 }.Select(index => new Wim360IndexComparer.Item {
+                Index = index, Kind = "Files",
+                Key = @"Windows\System32\file-" + n.ToString("D6") + ".dll",
+                Value = index == 3 && n % 31 == 0 ? "123 bytes" : "120 bytes"
+            }));
+        var large = Wim360IndexComparer.CompareRecords(
+            report.ImageFile, "large synthetic fixture", new[] { 1, 2, 3 }, generated);
+        Require(large.Rows.Count == 30000 &&
+                large.Rows.Count(x => x.State == "Different") == 968 &&
+                large.Rows.Count(x => x.State == "Present in all") == 29032,
+                "Large streamed multi-index catalog was not merged correctly");
+        var repeated = Wim360IndexComparer.CompareRecords(
+            report.ImageFile, "duplicate fixture", new[] { 1, 2, 3 }, new[] {
+                new Wim360IndexComparer.Item { Index = 1, Kind="Files", Key="same.inf", Value="Present" },
+                new Wim360IndexComparer.Item { Index = 1, Kind="Files", Key="same.inf", Value="Present" },
+                new Wim360IndexComparer.Item { Index = 2, Kind="Files", Key="same.inf", Value="Present" },
+                new Wim360IndexComparer.Item { Index = 3, Kind="Files", Key="same.inf", Value="Present" }
+            });
+        Require(repeated.Rows.Single().State == "Ambiguous duplicates",
+                "Streamed comparer must not hide ambiguous duplicate identities");
+
         var folderComparison = Wim360IndexComparer.CompareRecords(report.ImageFile,
             "Mounted file paths / sizes", new[] { 1, 2, 3 }, new[] {
                 new Wim360IndexComparer.Item { Index=1, Kind="Folders", Key=@"Windows\Policy", Value="Present" },
