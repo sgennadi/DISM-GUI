@@ -298,6 +298,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
         grid.DefaultCellStyle.SelectionForeColor = ModernTheme.TextInk
         AddHandler grid.CellValueNeeded, AddressOf GridValueNeeded
         AddHandler grid.CellToolTipTextNeeded, AddressOf GridTooltipNeeded
+        AddHandler grid.ClientSizeChanged, Sub(sender, e) FitIndexColumns()
         root.Controls.Add(grid, 0, 3)
 
         Dim statusPanel As New TableLayoutPanel With {
@@ -601,6 +602,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
         Finally
             grid.ResumeLayout(True)
         End Try
+        FitIndexColumns()
         categoryBox.Items.Clear()
         categoryBox.Items.Add("All types")
         For Each kind In result.Rows.Select(Function(x) x.Kind).
@@ -629,6 +631,33 @@ Public NotInheritable Class Wim360CompareIndexesForm
             "Read-only. Missing means an item is absent from a complete comparison.",
             result.Notes)
         detailsTip.SetToolTip(hintLabel, hintLabel.Text)
+    End Sub
+
+    ' Keep all three compared indexes on screen at ordinary dialog widths.
+    ' Four to eight indexes retain horizontal scrolling, as necessary.
+    Private Sub FitIndexColumns()
+        If grid.IsDisposed OrElse grid.Columns.Count < 4 OrElse
+           comparison Is Nothing OrElse comparison.Indexes.Count > 3 Then Return
+        Dim available As Integer = grid.ClientSize.Width -
+                                   SystemInformation.VerticalScrollBarWidth - 8
+        If available <= 540 Then Return
+        Dim kindWidth As Integer = Math.Max(86, grid.Font.Height * 4)
+        Dim pathWidth As Integer = Math.Max(214, grid.Font.Height * 8)
+        Dim stateWidth As Integer = Math.Max(144, grid.Font.Height * 6)
+        Dim count As Integer = comparison.Indexes.Count
+        Dim perIndex As Integer = (available - kindWidth - pathWidth -
+                                   stateWidth) \ count
+        If perIndex < 105 Then
+            pathWidth = Math.Max(160, pathWidth - (105 - perIndex) * count)
+            perIndex = (available - kindWidth - pathWidth - stateWidth) \ count
+        End If
+        If perIndex < 92 Then Return
+        grid.Columns(0).Width = kindWidth
+        grid.Columns(1).Width = pathWidth
+        grid.Columns(2).Width = stateWidth
+        For i As Integer = 0 To count - 1
+            grid.Columns(3 + i).Width = perIndex
+        Next
     End Sub
 
     Private Sub AddColumn(caption As String, width As Integer)
