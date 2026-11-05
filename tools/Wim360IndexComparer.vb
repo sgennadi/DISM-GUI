@@ -220,7 +220,16 @@ Public NotInheritable Class Wim360IndexComparer
             Dim hashBytes As Byte()
             Using stream As New FileStream(fullName, FileMode.Open, FileAccess.Read,
                                            FileShare.ReadWrite Or FileShare.Delete)
-                hashBytes = SHA256.HashData(stream)
+                Using hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256)
+                    Dim buffer(131071) As Byte
+                    While True
+                        token.ThrowIfCancellationRequested()
+                        Dim read = stream.Read(buffer, 0, buffer.Length)
+                        If read <= 0 Then Exit While
+                        hash.AppendData(buffer, 0, read)
+                    End While
+                    hashBytes = hash.GetHashAndReset()
+                End Using
             End Using
             records.Add(New Item With {
                 .Index = image.Index, .Kind = "Files", .Key = original.Name,
