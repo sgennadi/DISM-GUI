@@ -63,12 +63,17 @@ Public NotInheritable Class Wim360Dashboard
             .Margin = Padding.Empty, .Padding = New Padding(17, 13, 17, 18)
         }
         dashboardLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        For Each height As Integer In {53, 57, 72, 27, 205, 145, 139}
-            dashboardLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, height))
+        ' Scroll rather than truncate content on high-DPI or short viewports.
+        Dim factor As Single = Math.Max(1.0F, Me.Font.Height / 16.0F)
+        For Each height As Integer In {62, 66, 85, 36, 215, 163, 186}
+            dashboardLayout.RowStyles.Add(New RowStyle(SizeType.Absolute,
+                CInt(Math.Ceiling(height * factor))))
         Next
+        dashboardLayout.Height = dashboardLayout.RowStyles.Cast(Of RowStyle)().
+            Sum(Function(row) CInt(row.Height)) + dashboardLayout.Padding.Vertical + 8
         canvas.Controls.Add(dashboardLayout)
         AddHandler canvas.ClientSizeChanged, Sub(sender, e)
-            Dim newWidth = Math.Max(410, canvas.ClientSize.Width - 1)
+            Dim newWidth = Math.Max(710, canvas.ClientSize.Width - 1)
             If dashboardLayout.Width <> newWidth Then dashboardLayout.Width = newWidth
         End Sub
 
@@ -91,8 +96,8 @@ Public NotInheritable Class Wim360Dashboard
         }
         pathRow.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         pathRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        pathRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 142))
-        pathRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 113))
+        pathRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 165))
+        pathRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 130))
         dashboardLayout.Controls.Add(pathRow, 0, 1)
 
         fileBox = New TextBox With {
