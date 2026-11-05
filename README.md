@@ -202,19 +202,17 @@ opens a draft addressed to **[sgennadi@hotmail.com](mailto:sgennadi@hotmail.com?
 including the installed version and architecture. No message is sent
 automatically.
 
-## Shared UniversalDiagnostics local queue (4.3.10 integration)
+## Embedded UniversalDiagnostics local queue (4.3.10 integration)
 
-The optional `UniversalDiagnostics 0.1.0-rc.1` collector can be installed
-once for all Windows applications. In **Tools → Report error**, review the
-existing preview and choose **Save to shared queue** to store a redacted
-error summary locally. It does **not** upload anything or require GitHub
-credentials. The existing DISM logs and GitHub Issue draft remain available.
+The canonical `universal-diagnostics/v1` source is compiled **into DISM GUI**.
+In **Tools → Report error**, review the preview and use
+**Save locally (built-in)** to write a redacted report to the shared
+per-project queue. Nothing is sent to GitHub without separate review.
 
-The independent collector executable is distributed from
-[UniversalDiagnocticsModule](https://github.com/sgennadi/UniversalDiagnocticsModule).
-See [full setup and security details](docs/UNIVERSAL-DIAGNOSTICS.md).
-This integration **does not change the DISM GUI 4.3.10 version number** or
-silently replace an existing release.
+There is **no required collector EXE, DLL, installer or GitHub token**.
+The original DISM diagnostics, support contact and manual Issue draft remain.
+See [embedded integration details](docs/UNIVERSAL-DIAGNOSTICS.md).
+DISM GUI continues to report version **4.3.10**.
 
 ## Error diagnostics and GitHub issue workflow (4.3.7)
 
