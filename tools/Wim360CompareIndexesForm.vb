@@ -25,6 +25,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
     Private ReadOnly summaryLabel As Label
     Private ReadOnly hintLabel As Label
     Private ReadOnly grid As DataGridView
+    Private ReadOnly detailsTip As ToolTip
     Private comparison As Wim360IndexComparer.Result
     Private visibleRows As New List(Of Wim360IndexComparer.Row)()
     Private job As CancellationTokenSource
@@ -83,8 +84,8 @@ Public NotInheritable Class Wim360CompareIndexesForm
                                  " indexes  |  Read-only comparison", 9, False)
         fileName.ForeColor = ModernTheme.Muted
         heading.Controls.Add(fileName, 0, 1)
-        Dim tips As New ToolTip With {.AutoPopDelay = 18000}
-        tips.SetToolTip(fileName, source.ImageFile)
+        detailsTip = New ToolTip With {.AutoPopDelay = 18000}
+        detailsTip.SetToolTip(fileName, source.ImageFile)
         root.Controls.Add(heading, 0, 0)
 
         Dim settings As New TableLayoutPanel With {
@@ -357,7 +358,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
             If Not Me.IsDisposed Then
                 summaryLabel.Text = "Comparison unavailable. No images were modified."
                 hintLabel.Text = ex.Message
-                tips.SetToolTip(hintLabel, ex.Message)
+                detailsTip.SetToolTip(hintLabel, ex.Message)
             End If
         Finally
             If Object.ReferenceEquals(job, tokenSource) Then job = Nothing
@@ -414,7 +415,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
         hintLabel.Text = If(String.IsNullOrWhiteSpace(result.Notes),
             "Read-only. Missing means an item is absent from a complete comparison.",
             result.Notes)
-        tips.SetToolTip(hintLabel, hintLabel.Text)
+        detailsTip.SetToolTip(hintLabel, hintLabel.Text)
     End Sub
 
     Private Sub AddColumn(caption As String, width As Integer)
