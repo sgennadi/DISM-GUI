@@ -438,6 +438,22 @@ internal static class LayoutSmoke
             $"WIM 360 comparison grid hidden below the fold: " +
             $"visible={visibleMatrix.Height}px, " +
             $"fontScale={Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_FONT_SCALE")}");
+        foreach (var name in new[] { "btn360RunIndexCompare",
+                                     "btn360IndexCompareHash",
+                                     "btn360IndexCompareCsv",
+                                     "btn360IndexCompareClose" })
+        {
+            var footerButton = Find(dialog, name) as Button;
+            Require(footerButton is not null, "WIM comparison footer button missing: " + name);
+            var full = footerButton!.RectangleToScreen(footerButton.ClientRectangle);
+            var clipped = Rectangle.Intersect(full,
+                matrixViewport.RectangleToScreen(matrixViewport.ClientRectangle));
+            Require(clipped.Height >= footerButton.Height - 4 &&
+                    clipped.Width >= footerButton.Width - 4,
+                    $"WIM comparison footer button hidden at simulated DPI: {name}, " +
+                    $"visible={clipped.Height}x{clipped.Width}, " +
+                    $"required={footerButton.Height}x{footerButton.Width}");
+        }
         var thirdIndexRect = matrix.GetColumnDisplayRectangle(5, false);
         Require(thirdIndexRect.Width > 80 &&
                 thirdIndexRect.Right <= matrix.ClientSize.Width,
