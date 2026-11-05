@@ -256,9 +256,17 @@ Public NotInheritable Class Wim360Dashboard
         AddHandler compareSnapshotsButton.Click, AddressOf CompareSnapshotsClicked
         actions.Controls.Add(compareSnapshotsButton, 0, 2)
 
-        Dim hint = MakeText("Saved snapshots  •  read-only", 8.4F, False, ModernTheme.Muted)
-        hint.TextAlign = ContentAlignment.MiddleLeft
-        actions.Controls.Add(hint, 1, 2)
+        Dim testCenter As New Button With {
+            .Name = "btn360TestCenter", .Text = "Run complete safe tests",
+            .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 8, 4)
+        }
+        ModernTheme.StyleButton(testCenter, "browse")
+        AddHandler testCenter.Click, Sub(sender, e)
+            Using viewer As New IntegratedTestCenterForm(fileBox.Text.Trim())
+                viewer.ShowDialog(Me.FindForm())
+            End Using
+        End Sub
+        actions.Controls.Add(testCenter, 1, 2)
         AddHandler fileBox.TextChanged, Sub(sender, e)
             CancelMountedAudit()
             useSelected.Enabled = False
