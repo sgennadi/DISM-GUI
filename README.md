@@ -51,7 +51,14 @@ read all image-index metadata through the Windows WIMGAPI in read-only mode.
 Select an index to view architecture, build, edition, languages and
 mount state. **Use index in Mount** transfers the selected WIM path and
 index to the original Mount form but **never mounts or modifies the image**.
-Use **Copy report** to share the read-only inventory.
+Use **Copy report** to copy the read-only text report. The new
+**Export indexes CSV** and **Export indexes JSON** buttons save an unmounted
+image's index metadata directly to a local file (including WIM/ESD or a
+verified split SWM). These exports include all image indexes, architecture,
+edition, build, languages, size and mount status; they never mount the image.
+CSV text is protected against spreadsheet formula injection. The JSON format
+has `ExportKind: Wim360IndexMetadata` and is **not** an inventory snapshot
+for **Compare JSON snapshots**; those require an actual mounted-index audit.
 
 For an index that is **already mounted**, select it and click **Scan mounted
 index**. WIM 360 validates the exact image file, index and mount directory,
