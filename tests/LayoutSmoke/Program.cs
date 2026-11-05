@@ -293,6 +293,122 @@ internal static class LayoutSmoke
         Console.WriteLine("PASS mounted WIM 360 driver/package audit and read-only report");
     }
 
+    private static Wim360Servicing.AuditResult VerifyDetailedInventory()
+    {
+        const string json = "{\"Features\":[" +
+            "{\"Name\":\"SMB1Protocol\",\"State\":\"Disabled\"}," +
+            "{\"Name\":\"NetFx3\",\"State\":\"Enabled\"}]," +
+            "\"Capabilities\":[" +
+            "{\"Name\":\"OpenSSH.Client~~~~0.0.1.0\",\"State\":\"Installed\"}," +
+            "{\"Name\":\"SomeOptionalCapability\",\"State\":\"NotPresent\"}]," +
+            "\"FeatureWarning\":\"\",\"CapabilityWarning\":\"\"}";
+        var parsed = Wim360Servicing.ParseComponentsJson(json);
+        Require(parsed.Items.Count == 4 &&
+                parsed.Items[0].Kind == "Features" &&
+                parsed.Items[2].Kind == "Capabilities",
+                "WIM 360 feature/capability JSON classification failed");
+        Require(Wim360Servicing.ParseComponentsJson(
+                "{\"Features\":[],\"Capabilities\":[],\"FeatureWarning\":\"Unavailable\",\"CapabilityWarning\":\"\"}")
+                .FeatureWarning == "Unavailable",
+                "Missing optional component APIs should preserve explicit warnings");
+        bool malformedRejected = false;
+        try { Wim360Servicing.ParseComponentsJson("{\"Features\":[]}"); }
+        catch (System.IO.InvalidDataException) { malformedRejected = true; }
+        Require(malformedRejected, "Missing component array must fail rather than report zero entries");
+
+        var drivers = new[] {
+            new DriverStudioEngine.DriverPackage {
+                InfName = "oem1.inf", PublishedName = "oem17.inf",
+                Provider = "Vendor", ClassName = "Net", DriverDate = "2026-03-08",
+                Version = "4.2.0", IsInbox = false },
+            new DriverStudioEngine.DriverPackage {
+                InfName = "=SUM(1,2).inf", PublishedName = "net.inf",
+                Provider = "Microsoft", ClassName = "Net", Version = "1.0",
+                IsInbox = true }
+        };
+        var packages = new[] {
+            new Wim360Servicing.PackageEntry {
+                Name = "Package \"test\", \r\nline", State = "Install Pending", ReleaseType = "Update" }
+        };
+        var audit = Wim360Servicing.Summarize(@"C:\images\install.wim", 2,
+            @"C:\Mounted", drivers, packages, parsed.Items);
+        Require(audit.FeatureCount == 2 && audit.EnabledFeatureCount == 1 &&
+                audit.CapabilityCount == 2 && audit.InstalledCapabilityCount == 1 &&
+                audit.Drivers.Count == 2 && audit.Packages.Count == 1,
+                "Detailed inventory totals are incorrect");
+
+        var all = Wim360Catalog.BuildRows(audit);
+        Require(all.Count == 7 && all.Count(x => x.Kind == "Drivers") == 2,
+                "Detailed catalog does not contain every driver/package/component");
+        var net = Wim360Catalog.FilterRows(all, "Drivers", "Third-party", "VENDOR");
+        Require(net.Count == 1 && net[0].Name == "oem1.inf",
+                "Catalog must combine type, state and case-insensitive keyword filtering");
+        var disabled = Wim360Catalog.FilterRows(all, "Features", "Disabled", "smb");
+        Require(disabled.Count == 1 && disabled[0].Name == "SMB1Protocol",
+                "Features filter must respect both state and search");
+        Require(Wim360Catalog.FilterRows(all, "All types", "All states", "unlikely").Count == 0,
+                "Nonmatching search should give an empty, not stale, result");
+
+        var csv = Wim360Catalog.ToCsv(audit, all);
+        Require(csv.Contains("\"'=SUM(1,2).inf\"") &&
+                csv.Contains("\"Package \"\"test\"\", \r\nline\"") &&
+                csv.Contains("\"Image\",\"Index\",\"Scanned UTC\""),
+                "CSV export must protect spreadsheet formulas and quote newlines");
+        var filteredCsv = Wim360Catalog.ToCsv(audit, net);
+        Require(filteredCsv.Contains("\"oem1.inf\"") && !filteredCsv.Contains("\"SMB1Protocol\""),
+                "CSV must export only currently filtered rows");
+        using var jsonDoc = System.Text.Json.JsonDocument.Parse(Wim360Catalog.ToJson(audit, disabled));
+        Require(jsonDoc.RootElement.GetProperty("SchemaVersion").GetInt32() == 1 &&
+                jsonDoc.RootElement.GetProperty("Rows").GetArrayLength() == 1 &&
+                jsonDoc.RootElement.GetProperty("ImageIndex").GetInt32() == 2,
+                "JSON export must retain source image and filtered records");
+        Console.WriteLine("PASS detailed feature/capability inventory, filters and safe CSV/JSON exports");
+        return audit;
+    }
+
+    private static void VerifyCatalogWindow(Form owner,
+        Wim360Servicing.AuditResult audit)
+    {
+        using var window = new Wim360InventoryForm(audit);
+        window.Show(owner);
+        Application.DoEvents();
+        var grid = Find(window, "grid360Catalog") as DataGridView;
+        var type = Find(window, "cmb360CatalogType") as ComboBox;
+        var state = Find(window, "cmb360CatalogState") as ComboBox;
+        var search = Find(window, "txt360CatalogSearch") as TextBox;
+        var clear = Find(window, "btn360CatalogClear") as Button;
+        var csv = Find(window, "btn360ExportCsv") as Button;
+        var json = Find(window, "btn360ExportJson") as Button;
+        var close = Find(window, "btn360CatalogClose") as Button;
+        Require(grid is not null && type is not null && state is not null &&
+                search is not null && csv is not null && json is not null &&
+                clear is not null && close is not null,
+                "WIM 360 catalog search, grid and export buttons must be present");
+        Require(grid!.VirtualMode && grid.RowCount == 7,
+                "Catalog must show all inventory rows via virtual, read-only grid");
+        NoOverlap(type!, state!, "WIM catalog type and state filters");
+        NoOverlap(state, search!, "WIM catalog state and search filters");
+        NoOverlap(csv!, json!, "WIM catalog CSV / JSON buttons");
+        NoOverlap(json, close!, "WIM catalog JSON / Close buttons");
+
+        type!.SelectedItem = "Features";
+        Application.DoEvents();
+        Require(grid.RowCount == 2, "Feature filter should show only feature rows");
+        state!.SelectedItem = "Disabled";
+        Application.DoEvents();
+        Require(grid.RowCount == 1, "Feature state should further narrow the catalog");
+        search!.Text = "NONMATCH";
+        Application.DoEvents();
+        Require(grid.RowCount == 0, "Catalog search did not hide unmatched feature rows");
+        clear!.PerformClick();
+        Application.DoEvents();
+        Require(grid.RowCount == 7, "Clear filters did not restore complete inventory");
+        Snapshot(window, "DISM-GUI-WIM360-Inventory");
+        window.Close();
+        Application.DoEvents();
+        Console.WriteLine("PASS WIM 360 catalog window layout, filtering, sorting and buttons");
+    }
+
     private static void VerifyNativeWimReader()
     {
         var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
@@ -528,6 +644,7 @@ internal static class LayoutSmoke
             Application.DoEvents();
             VerifyWimMetadata();
             VerifyMountedAudit();
+            var detailFixture = VerifyDetailedInventory();
             VerifyNativeWimReader();
             var driverFixture = VerifyDriverStudioEngine();
             Require(tabs.TabPages.Count == 11 &&
@@ -552,6 +669,9 @@ internal static class LayoutSmoke
             var auditWimButton = Find(dashboard, "btn360AuditMounted") as Button;
             Require(auditWimButton is not null && !auditWimButton.Enabled,
                     "Mounted audit must be disabled for an unmounted WIM index");
+            var inventoryButton = Find(dashboard, "btn360Inventory") as Button;
+            Require(inventoryButton is not null && !inventoryButton.Enabled,
+                    "WIM 360 inventory detail action must require a finished audit");
             var selectedDetails = Find(dashboard, "txt360Details") as TextBox;
             Require(selectedDetails!.Text.Contains("WindowsPE") &&
                     selectedDetails.Text.Contains("10.0.26100"),
@@ -584,6 +704,16 @@ internal static class LayoutSmoke
             Application.DoEvents();
             Require(auditWimButton.Enabled,
                     "A read-only mounted index must enable Scan mounted index");
+            detailFixture.ImageFile = @"C:\test\boot.wim";
+            detailFixture.Index = 1;
+            detailFixture.MountFolder = @"C:\MountAuditFixture";
+            currentReport.Images[0].ServicingAudit = detailFixture;
+            dashboard.ActivateFromMount();
+            Application.DoEvents();
+            Require(inventoryButton!.Enabled &&
+                    selectedDetails.Text.Contains("Optional features: 2"),
+                    "Finished audit must enable details and display component summary");
+            VerifyCatalogWindow(form, detailFixture);
             indexGrid.Rows[1].Selected = true;
             Application.DoEvents();
             selectedWimButton.PerformClick();
