@@ -38,7 +38,11 @@ internal static class LayoutSmoke
             System.IO.Directory.CreateDirectory(folder);
             using var snapshot = new Bitmap(window.Width, window.Height);
             window.DrawToBitmap(snapshot, new Rectangle(Point.Empty, window.Size));
-            snapshot.Save(System.IO.Path.Combine(folder, name + ".png"),
+            var scale = Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_FONT_SCALE");
+            var prefix = Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_ONLY") == "1" &&
+                         !string.IsNullOrWhiteSpace(scale)
+                ? "FontScale-" + scale!.Replace(".", "_") + "-" : "";
+            snapshot.Save(System.IO.Path.Combine(folder, prefix + name + ".png"),
                           System.Drawing.Imaging.ImageFormat.Png);
         }
         catch (Exception ex)
@@ -94,6 +98,29 @@ internal static class LayoutSmoke
             foreach (var nested in AllControls(child))
                 yield return nested;
         }
+    }
+
+    private static void VerifyReadableButton(Button button, string context)
+    {
+        if (button.Width < 1 || button.Height < 1 || !button.Visible) return;
+        var text = button.Text.Replace("&&", "&").Replace("&", "");
+        var measured = TextRenderer.MeasureText(text, button.Font,
+            new Size(Math.Max(48, button.ClientSize.Width - 16), 1000),
+            TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl);
+        Require(measured.Height + 4 <= button.ClientSize.Height,
+            $"{context}: button '{button.Text}' is vertically clipped");
+    }
+
+    private static void VerifyScrollableDialog(Form form, string context)
+    {
+        var scrollHost = AllControls(form).OfType<Panel>()
+            .FirstOrDefault(p => p.AutoScroll &&
+                p.Controls.OfType<TableLayoutPanel>().Any());
+        Require(scrollHost is not null,
+            context + ": dialog must scroll at high DPI rather than clip controls");
+        foreach (var button in AllControls(form).OfType<Button>()
+                     .Where(b => b.Visible && b.Width > 0 && b.Height > 0))
+            VerifyReadableButton(button, context);
     }
 
     private static void ValidateSection(Control page, int section, string dimension)
@@ -217,6 +244,241 @@ internal static class LayoutSmoke
         "<VERSION><MAJOR>10</MAJOR><MINOR>0</MINOR><BUILD>26100</BUILD></VERSION>" +
         "</WINDOWS></IMAGE></WIM>";
 
+    private static void VerifyThreeIndexComparison(Form owner)
+    {
+        var xml = WIM_METADATA_FIXTURE.Replace("</WIM>",
+            "<IMAGE INDEX=\"3\"><NAME>Windows 11 Enterprise</NAME>" +
+            "<WINDOWS><ARCH>9</ARCH><EDITIONID>Enterprise</EDITIONID>" +
+            "<VERSION><MAJOR>10</MAJOR><MINOR>0</MINOR><BUILD>26100</BUILD></VERSION>" +
+            "</WINDOWS></IMAGE></WIM>");
+        var report = Wim360Reader.ParseMetadataXml(
+            xml, @"C:\Images\install.wim", 128000000);
+        report.Images[0].Edition = "Home";
+        report.Images[1].Edition = "Pro";
+        report.Images[2].Edition = "Enterprise";
+        report.Images[0].Architecture = "x64";
+        report.Images[1].Architecture = "x64";
+        report.Images[2].Architecture = "x64";
+        // The offline DISM parser preserves folders (trailing slash) and file
+        // paths and must never accept a truncated/failed command as complete.
+        var rawList = string.Join("\r\n", new[] {
+            "Deployment Image Servicing and Management tool",
+            @"\",
+            @"\Windows\",
+            @"\Windows\System32\",
+            @"\Windows\System32\hello.txt",
+            "The operation completed successfully.",
+            ""
+        });
+        var parsedPaths = Wim360OfflineList.ParseEnglishListing(rawList, 1);
+        Require(parsedPaths.Count == 3 &&
+                parsedPaths.Count(x => x.Kind == "Folders") == 2 &&
+                parsedPaths.Single(x => x.Kind == "Files").Key ==
+                    @"Windows\System32\hello.txt",
+                "DISM offline /List-Image parser lost file/folder path information");
+        bool partialRejected = false;
+        try { Wim360OfflineList.ParseEnglishListing(
+            string.Join("\r\n", new[] { @"\Windows\missing.txt", "Error: 2" }), 1); }
+        catch (System.IO.InvalidDataException) { partialRejected = true; }
+        Require(partialRejected, "Offline WIM compare must refuse incomplete listings");
+        var metadata = Wim360IndexComparer.Metadata(report, new[] { 1, 2, 3 });
+        Require(metadata.Indexes.Count == 3 && metadata.Rows.Count == 10,
+                "Index compare must expose metadata for all three selected indexes");
+        Require(metadata.Rows.Single(x => x.Name == "Edition").State == "Different" &&
+                metadata.Rows.Single(x => x.Name == "Architecture").State == "Present in all",
+                "Index compare must distinguish different and shared metadata");
+
+        var records = new[] {
+            new Wim360IndexComparer.Item { Index=1, Kind="Files", Key=@"Windows\System32\common.dll", Value="100 bytes" },
+            new Wim360IndexComparer.Item { Index=2, Kind="Files", Key=@"Windows\System32\common.dll", Value="100 bytes" },
+            new Wim360IndexComparer.Item { Index=3, Kind="Files", Key=@"Windows\System32\common.dll", Value="100 bytes" },
+            new Wim360IndexComparer.Item { Index=3, Kind="Files", Key=@"Windows\System32\unique.dll", Value="300 bytes" },
+            new Wim360IndexComparer.Item { Index=1, Kind="Files", Key=@"Windows\System32\missing.dll", Value="200 bytes" },
+            new Wim360IndexComparer.Item { Index=2, Kind="Files", Key=@"Windows\System32\missing.dll", Value="200 bytes" },
+            new Wim360IndexComparer.Item { Index=1, Kind="Files", Key=@"Windows\System32\changed.dll", Value="42 bytes" },
+            new Wim360IndexComparer.Item { Index=2, Kind="Files", Key=@"Windows\System32\changed.dll", Value="46 bytes" },
+            new Wim360IndexComparer.Item { Index=3, Kind="Files", Key=@"Windows\System32\changed.dll", Value="42 bytes" },
+            new Wim360IndexComparer.Item { Index=1, Kind="Files", Key="=HYPERLINK()", Value="1 bytes" }
+        };
+        var comparison = Wim360IndexComparer.CompareRecords(report.ImageFile,
+            "Mounted file paths / sizes", new[] { 1, 2, 3 }, records);
+        Require(comparison.Rows.Count == 5 &&
+                comparison.Rows.Single(x => x.Name.EndsWith("unique.dll")).State == "Only in Index 3" &&
+                comparison.Rows.Single(x => x.Name.EndsWith("missing.dll")).State == "Missing in some" &&
+                comparison.Rows.Single(x => x.Name.EndsWith("changed.dll")).State == "Different" &&
+                comparison.Rows.Single(x => x.Name.EndsWith("common.dll")).State == "Present in all",
+                "Presence matrix has incorrect missing/unique/different classifications");
+        Require(Wim360IndexComparer.Filter(comparison.Rows, "All types",
+                    "Missing / only in some", "").Count == 3 &&
+                Wim360IndexComparer.Filter(comparison.Rows, "All types",
+                    "Only in Index 3", "").Count == 1 &&
+                Wim360IndexComparer.Filter(comparison.Rows, "All types",
+                    "Missing from Index 3", "").Count == 2 &&
+                Wim360IndexComparer.Filter(comparison.Rows, "All types",
+                    "Present in Index 3", "").Count == 3 &&
+                Wim360IndexComparer.Filter(comparison.Rows, "Files",
+                    "Different", "changed.dll").Count == 1,
+                "Index comparison filters must combine state, type and search");
+        var allPresent = Wim360IndexComparer.Filter(comparison.Rows, "All types",
+            "Exists in all", "", 3);
+        Require(allPresent.Count == 2 &&
+                allPresent.Any(x => x.Name.EndsWith("changed.dll")) &&
+                allPresent.Any(x => x.Name.EndsWith("common.dll")),
+                "Exists in all must include different-size files still present everywhere");
+
+        // A realistic multi-index catalog must be merged in a single pass.
+        // This deliberately yields records lazily instead of materializing
+        // a cross-product of all index paths in the test harness.
+        var generated = Enumerable.Range(0, 30000).SelectMany(n =>
+            new[] { 1, 2, 3 }.Select(index => new Wim360IndexComparer.Item {
+                Index = index, Kind = "Files",
+                Key = @"Windows\System32\file-" + n.ToString("D6") + ".dll",
+                Value = index == 3 && n % 31 == 0 ? "123 bytes" : "120 bytes"
+            }));
+        var large = Wim360IndexComparer.CompareRecords(
+            report.ImageFile, "large synthetic fixture", new[] { 1, 2, 3 }, generated);
+        Require(large.Rows.Count == 30000 &&
+                large.Rows.Count(x => x.State == "Different") == 968 &&
+                large.Rows.Count(x => x.State == "Present in all") == 29032,
+                "Large streamed multi-index catalog was not merged correctly");
+        var repeated = Wim360IndexComparer.CompareRecords(
+            report.ImageFile, "duplicate fixture", new[] { 1, 2, 3 }, new[] {
+                new Wim360IndexComparer.Item { Index = 1, Kind="Files", Key="same.inf", Value="Present" },
+                new Wim360IndexComparer.Item { Index = 1, Kind="Files", Key="same.inf", Value="Present" },
+                new Wim360IndexComparer.Item { Index = 2, Kind="Files", Key="same.inf", Value="Present" },
+                new Wim360IndexComparer.Item { Index = 3, Kind="Files", Key="same.inf", Value="Present" }
+            });
+        Require(repeated.Rows.Single().State == "Ambiguous duplicates",
+                "Streamed comparer must not hide ambiguous duplicate identities");
+
+        var folderComparison = Wim360IndexComparer.CompareRecords(report.ImageFile,
+            "Mounted file paths / sizes", new[] { 1, 2, 3 }, new[] {
+                new Wim360IndexComparer.Item { Index=1, Kind="Folders", Key=@"Windows\Policy", Value="Present" },
+                new Wim360IndexComparer.Item { Index=2, Kind="Folders", Key=@"Windows\Policy", Value="Present" },
+                new Wim360IndexComparer.Item { Index=3, Kind="Folders", Key=@"Windows\Policy", Value="Present" },
+                new Wim360IndexComparer.Item { Index=1, Kind="Folders", Key=@"Windows\Extra", Value="Present" }
+            });
+        Require(folderComparison.Rows.Count == 2 &&
+                folderComparison.Rows.Single(x => x.Name.EndsWith("Extra")).State == "Only in Index 1" &&
+                folderComparison.Rows.Single(x => x.Name.EndsWith("Policy")).State == "Present in all" &&
+                Wim360IndexComparer.Filter(folderComparison.Rows, "Folders",
+                    "Missing from Index 3", "").Count == 1,
+                "Folder presence must compare independently of files");
+
+        var csv = Wim360IndexComparer.ToCsv(comparison, comparison.Rows);
+        Require(csv.Contains("\"Index 1\",\"Index 2\",\"Index 3\"") &&
+                csv.Contains("\"'=HYPERLINK()\"") &&
+                csv.Contains("\"—\""),
+                "Index comparison CSV missing headers, absent-item markers or formula protection");
+        report.Images[0].ServicingAudit = Wim360Servicing.Summarize(
+            report.ImageFile, 1, @"C:\Mounted1",
+            Array.Empty<DriverStudioEngine.DriverPackage>(),
+            new[] { new Wim360Servicing.PackageEntry {
+                Name="A-Package", State="Installed", ReleaseType="Update"
+            } });
+        report.Images[1].ServicingAudit = Wim360Servicing.Summarize(
+            report.ImageFile, 2, @"C:\Mounted2",
+            Array.Empty<DriverStudioEngine.DriverPackage>(),
+            new[] { new Wim360Servicing.PackageEntry {
+                Name="A-Package", State="Staged", ReleaseType="Update"
+            } });
+        report.Images[2].ServicingAudit = Wim360Servicing.Summarize(
+            report.ImageFile, 3, @"C:\Mounted3",
+            Array.Empty<DriverStudioEngine.DriverPackage>(),
+            Array.Empty<Wim360Servicing.PackageEntry>());
+        var audited = Wim360IndexComparer.AuditedInventory(report, new[] { 1, 2, 3 });
+        Require(audited.Rows.Count == 1 &&
+                audited.Rows[0].State == "Missing in some" &&
+                audited.Rows[0].At(3) == "—",
+                "Audited three-index inventory must show absent packages");
+        report.Images[1].ServicingAudit.PackageWarning = "Partial query";
+        bool blockedPartial = false;
+        try { Wim360IndexComparer.AuditedInventory(report, new[] { 1, 2, 3 }); }
+        catch (InvalidOperationException) { blockedPartial = true; }
+        Require(blockedPartial, "Partial audits must not produce false missing results");
+
+        using var dialog = new Wim360CompareIndexesForm(report);
+        dialog.Show(owner);
+        Application.DoEvents();
+        VerifyScrollableDialog(dialog, "WIM 360 index comparison");
+        var offlineMode = Find(dialog, "cmb360IndexCompareMode") as ComboBox;
+        Require(offlineMode is not null && offlineMode.Items.Count == 4 &&
+                offlineMode.Items[1]!.ToString()!.Contains("no mounting") &&
+                offlineMode.Items[2]!.ToString()!.Contains("mounted"),
+                "WIM 360 needs a separate direct offline file listing mode");
+        if (Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_ONLY") == "1" &&
+            float.TryParse(Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_FONT_SCALE"),
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var scale) &&
+            scale > 1.15f)
+        {
+            var optionsViewport = Find(dialog, "Wim360CompareIndexesViewport") as Panel;
+            var optionBounds = offlineMode!.RectangleToScreen(offlineMode.ClientRectangle);
+            var viewportBounds = optionsViewport!.RectangleToScreen(optionsViewport.ClientRectangle);
+            Require(optionBounds.Left >= viewportBounds.Left - 5 &&
+                    optionBounds.Right <= viewportBounds.Right + 5,
+                    "Compare Indexes mode must be horizontally visible at high font scaling");
+        }
+        dialog.PreviewForTest(comparison);
+        Application.DoEvents();
+        var matrix = Find(dialog, "grid360IndexComparison") as DataGridView;
+        var state = Find(dialog, "cmb360IndexCompareState") as ComboBox;
+        var action = Find(dialog, "btn360RunIndexCompare") as Button;
+        Require(matrix is not null && matrix.VirtualMode &&
+                matrix.Columns.Count == 6 && matrix.RowCount == 5 &&
+                action is not null && action.Enabled, "Three-index comparison UI not initialized");
+        // A scrollable dialog is not sufficient if the actual comparison grid
+        // starts below the viewport at 125-175% UI font scaling.
+        var matrixViewport = Find(dialog, "Wim360CompareIndexesViewport") as Panel;
+        Require(matrixViewport is not null, "Comparison viewport missing");
+        var visibleMatrix = Rectangle.Intersect(
+            matrix.RectangleToScreen(matrix.ClientRectangle),
+            matrixViewport!.RectangleToScreen(matrixViewport.ClientRectangle));
+        Require(visibleMatrix.Height >= 118,
+            $"WIM 360 comparison grid hidden below the fold: " +
+            $"visible={visibleMatrix.Height}px, " +
+            $"fontScale={Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_FONT_SCALE")}");
+        foreach (var name in new[] { "btn360RunIndexCompare",
+                                     "btn360IndexCompareHash",
+                                     "btn360IndexCompareCsv",
+                                     "btn360IndexCompareClose" })
+        {
+            var footerButton = Find(dialog, name) as Button;
+            Require(footerButton is not null, "WIM comparison footer button missing: " + name);
+            var full = footerButton!.RectangleToScreen(footerButton.ClientRectangle);
+            var clipped = Rectangle.Intersect(full,
+                matrixViewport.RectangleToScreen(matrixViewport.ClientRectangle));
+            Require(clipped.Height >= footerButton.Height - 4 &&
+                    clipped.Width >= footerButton.Width - 4,
+                    $"WIM comparison footer button hidden at simulated DPI: {name}, " +
+                    $"visible={clipped.Height}x{clipped.Width}, " +
+                    $"required={footerButton.Height}x{footerButton.Width}");
+        }
+        var thirdIndexRect = matrix.GetColumnDisplayRectangle(5, false);
+        Require(thirdIndexRect.Width > 80 &&
+                thirdIndexRect.Right <= matrix.ClientSize.Width,
+            $"Third WIM index is offscreen in the three-column comparison: " +
+            $"right={thirdIndexRect.Right}, width={matrix.ClientSize.Width}, " +
+            $"fontScale={Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_FONT_SCALE")}");
+        state!.SelectedItem = "Missing / only in some";
+        Application.DoEvents();
+        Require(matrix.RowCount == 3,
+                "Missing filter must include unique and partially absent paths");
+        state.SelectedItem = "Missing from Index 3";
+        Application.DoEvents();
+        Require(matrix.RowCount == 2,
+                "Missing-from-index filter must show paths absent in index 3");
+        state.SelectedItem = "Present in Index 3";
+        Application.DoEvents();
+        Require(matrix.RowCount == 3,
+                "Present-in-index filter must show only paths found in index 3");
+        state.SelectedItem = "All results";
+        Application.DoEvents();
+        Snapshot(dialog, "DISM-GUI-WIM360-Compare-Three-Indexes");
+        dialog.Close();
+        Console.WriteLine("PASS WIM 360 three-index metadata, files, inventory filters and CSV");
+    }
+
     private static void VerifyWimMetadata()
     {
         var report = Wim360Reader.ParseMetadataXml(
@@ -236,6 +498,30 @@ internal static class LayoutSmoke
                 "WIM 360 report generation is incomplete");
         Require(Wim360Reader.HumanSize(1073741824) == "1 GB",
                 "WIM file size formatting is incorrect");
+
+        // Export index-level metadata directly from unmounted WIM/ESD/SWM.
+        var indexCsv = Wim360MetadataExport.ToCsv(report);
+        Require(indexCsv.Contains("\"Image file\"") &&
+                indexCsv.Contains("\"C:\\Images\\boot.wim\"") &&
+                indexCsv.Contains("\"WindowsPE\"") &&
+                indexCsv.Contains("\"ARM64\"") &&
+                indexCsv.Split('\n').Length == 4,
+                "WIM 360 index CSV must include both indexes and headers");
+        var metadataJson = Wim360MetadataExport.ToJson(report);
+        using (var indexDocument = System.Text.Json.JsonDocument.Parse(metadataJson))
+        {
+            var root = indexDocument.RootElement;
+            Require(root.GetProperty("ExportKind").GetString() == "Wim360IndexMetadata" &&
+                    root.GetProperty("ImageCount").GetInt32() == 2 &&
+                    root.GetProperty("Indexes").GetArrayLength() == 2 &&
+                    root.GetProperty("Indexes")[1].GetProperty("Architecture").GetString() == "ARM64",
+                    "Index metadata JSON must remain independent of servicing inventory snapshots");
+        }
+        report.Images[0].Name = "=1+1";
+        Require(Wim360MetadataExport.ToCsv(report).Contains("\"'=1+1\""),
+                "WIM index CSV must protect against spreadsheet formula injection");
+        report.Images[0].Name = "Microsoft Windows PE";
+
 
         bool dtdRejected = false;
         try {
@@ -355,6 +641,7 @@ internal static class LayoutSmoke
         using var dialog = new ErrorReportForm(raw, "WIM 360 diagnostics");
         dialog.Show();
         Application.DoEvents();
+        VerifyScrollableDialog(dialog, "GitHub diagnostics");
         var include = Find(dialog, "chkSupportIncludeLog") as CheckBox;
         var reviewed = Find(dialog, "chkSupportReviewed") as CheckBox;
         var history = Find(dialog, "chkSupportIncludeHistory") as CheckBox;
@@ -371,6 +658,8 @@ internal static class LayoutSmoke
                 title is not null && description is not null &&
                 copy is not null && draft is not null && close is not null,
                 "Error report UI is missing required preview, consent or export controls");
+        Require(preview!.WordWrap && preview.ScrollBars == ScrollBars.Vertical,
+                "Diagnostics preview must wrap long report lines without requiring horizontal scrolling");
         Require(!include!.Checked && !history!.Checked &&
                 !reviewed!.Checked && !draft!.Enabled,
                 "Diagnostic logs must opt-in and GitHub action must require review");
@@ -547,6 +836,7 @@ internal static class LayoutSmoke
         using var window = new Wim360InventoryForm(audit);
         window.Show(owner);
         Application.DoEvents();
+        VerifyScrollableDialog(window, "WIM 360 inventory");
         var grid = Find(window, "grid360Catalog") as DataGridView;
         var type = Find(window, "cmb360CatalogType") as ComboBox;
         var state = Find(window, "cmb360CatalogState") as ComboBox;
@@ -710,6 +1000,7 @@ internal static class LayoutSmoke
         using var window = new Wim360CompareForm();
         window.Show(owner);
         Application.DoEvents();
+        VerifyScrollableDialog(window, "WIM 360 snapshot comparison");
         var baselineField = Find(window, "txt360Baseline") as TextBox;
         var currentField = Find(window, "txt360Current") as TextBox;
         var runButton = Find(window, "btn360CompareRun") as Button;
@@ -780,6 +1071,7 @@ internal static class LayoutSmoke
         using var window = new IntegratedTestCenterForm();
         window.Show(owner);
         Application.DoEvents();
+        VerifyScrollableDialog(window, "Integrated Test Center");
         var grid = Find(window, "gridTestCenterResults") as DataGridView;
         var browse = Find(window, "btnTestCenterBrowse") as Button;
         var image = Find(window, "txtTestCenterImage") as TextBox;
@@ -872,6 +1164,9 @@ internal static class LayoutSmoke
                     "WIM metadata inspection modified the source fixture");
             Console.WriteLine("PASS native WIMGAPI read-only WIM catalog: " +
                 inventory.Images[0].Name + ", " + inventory.FileSizeBytes + " bytes");
+            WimMountIntegration.ProbeOfflineList(image);
+            WimMountIntegration.VerifyOfflineThreeIndexes(root);
+            WimMountIntegration.VerifyLargeThreeIndexWim(root);
             WimMountIntegration.Verify(image, root);
             WimMountIntegration.VerifySplit(image, root);
         }
@@ -1041,6 +1336,10 @@ internal static class LayoutSmoke
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            var testScale = Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_FONT_SCALE");
+            if (Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_ONLY") == "1")
+                Console.WriteLine("SIMULATED DPI FONT SCALE " + testScale +
+                    " (not a substitute for a physical Windows DPI session)");
             using var form = new frmMain();
             form.Show();
             Application.DoEvents();
@@ -1053,13 +1352,17 @@ internal static class LayoutSmoke
             tabs!.SelectedIndex = 0;
             Application.DoEvents();
             VerifyWimMetadata();
+            VerifyThreeIndexComparison(form);
             VerifyMountedAudit();
             VerifyRuntimeDiagnostics();
             VerifyErrorDiagnostics();
             VerifyIntegratedTestCenter(form);
             var detailFixture = VerifyDetailedInventory();
             var snapshotReport = VerifySnapshotDiff(detailFixture);
-            VerifyNativeWimReader();
+            if (Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_ONLY") != "1")
+                VerifyNativeWimReader();
+            else
+                Console.WriteLine("SIMULATED DPI LAYOUT: skipped real WIM capture/mount tests.");
             var driverFixture = VerifyDriverStudioEngine();
             Require(tabs.TabPages.Count == 11 &&
                     tabs.TabPages[9].Name == "TabPageWim360" &&
@@ -1086,6 +1389,25 @@ internal static class LayoutSmoke
             var inventoryButton = Find(dashboard, "btn360Inventory") as Button;
             Require(inventoryButton is not null && !inventoryButton.Enabled,
                     "WIM 360 inventory detail action must require a finished audit");
+            var indexCsvButton = Find(dashboard, "btn360ExportIndexCsv") as Button;
+            var indexJsonButton = Find(dashboard, "btn360ExportIndexJson") as Button;
+            Require(indexCsvButton is not null && indexCsvButton.Enabled &&
+                    indexJsonButton is not null && indexJsonButton.Enabled,
+                    "WIM 360 index metadata export should work without mounting");
+            var multiCompare = Find(dashboard, "btn360CompareIndexes") as Button;
+            tabs.SelectedIndex = 9;
+            Application.DoEvents();
+            foreach (var actionButton in new[] {
+                indexCsvButton!, indexJsonButton!, multiCompare,
+                Find(dashboard, "btn360UseInMount") as Button,
+                Find(dashboard, "btn360CompareSnapshots") as Button
+            })
+            {
+                Require(actionButton is not null, "WIM 360 required action missing");
+                VerifyReadableButton(actionButton!, "WIM 360");
+            }
+            Require(multiCompare is not null && multiCompare.Enabled,
+                    "WIM 360 must enable direct multi-index comparison when two indexes exist");
             var selectedDetails = Find(dashboard, "txt360Details") as TextBox;
             Require(selectedDetails!.Text.Contains("WindowsPE") &&
                     selectedDetails.Text.Contains("10.0.26100"),
@@ -1197,6 +1519,9 @@ internal static class LayoutSmoke
             Require(visibleScan.Width >= 85 && visibleCompare.Width >= 130 &&
                     studioGrid.Height >= 145,
                     "Driver Studio must have readable scan buttons and comparison grid");
+            if (Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_ONLY") == "1")
+                Require(studioSource.Width >= 200,
+                    "Driver Studio source path was squeezed under high font scaling");
             Snapshot(form, "DISM-GUI-Driver-Studio");
             tabs.SelectedIndex = 0;
             Application.DoEvents();
@@ -1261,6 +1586,8 @@ internal static class LayoutSmoke
                 NoOverlap(mountAction, dismountAction, "Mount / Dismount");
                 NoOverlap(dismountAction, info, "Dismount / Image info");
                 NoOverlap(index, browseWim, "Numeric image index / Choose WIM");
+                foreach (var button in new[] { expandLog!, copyLog!, clearLog!, exitApp! }.OfType<Button>())
+                    VerifyReadableButton(button, "DISM output");
                 NoOverlap(copyLog!, clearLog!, "Copy log / Clear");
                 NoOverlap(clearLog!, exitApp!, "Clear / Exit");
                 NoOverlap(expandLog!, copyLog!, "Expand / Copy log");
@@ -1312,6 +1639,9 @@ internal static class LayoutSmoke
             Application.DoEvents();
             wimPathField.Text = @"C:\test\boot.wim";
             dashboard.PreviewMetadataForTest(WIM_METADATA_FIXTURE);
+            if (Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_ONLY") == "1")
+                Require(wimPathField.Width >= 200,
+                    "WIM 360 image path field was squeezed under high font scaling");
             Snapshot(form, "DISM-GUI-WIM-360");
             tabs.SelectedIndex = 0;
             Application.DoEvents();
@@ -1391,6 +1721,13 @@ internal static class LayoutSmoke
                 Require(updatesTitle is not null && updatesSub is not null,
                         "Update Center heading labels missing");
                 NoOverlap(updatesTitle!, updatesSub!, "Update Center title and subtitle");
+                VerifyScrollableDialog(updateForm, "Update Center");
+                var updateViewport = AllControls(updateForm).OfType<Panel>()
+                    .FirstOrDefault(p => p.AutoScroll);
+                Require(updateViewport is not null &&
+                        updateViewport.HorizontalScroll.Value <= 5 &&
+                        updateViewport.VerticalScroll.Value <= 5,
+                    "Update Center should open at the top-left rather than focus-scroll to footer");
                 Snapshot(updateForm, "DISM-GUI-Update-Center");
                 updateForm.Hide();
             }

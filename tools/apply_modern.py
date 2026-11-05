@@ -29,7 +29,8 @@ def edit_once(path, old, new, label):
 for name in ("ModernTheme.vb", "ResponsiveSectionLayout.vb", "ResponsiveForms.vb", "WindowGeometry.vb", "UpdateManager.vb", "SupportContact.vb", "ErrorDiagnostics.vb", "ErrorReportForm.vb", "RuntimeDiagnostics.vb",
              "Wim360Reader.vb", "Wim360SplitSet.vb", "Wim360Dashboard.vb",
              "IntegratedTestChecks.vb", "IntegratedTestCenterForm.vb", "Wim360Servicing.vb",
-             "Wim360Catalog.vb", "Wim360InventoryForm.vb",
+             "Wim360Catalog.vb", "Wim360MetadataExport.vb", "Wim360IndexComparer.vb", "Wim360OfflineList.vb",
+             "Wim360CompareIndexesForm.vb", "Wim360InventoryForm.vb",
              "Wim360SnapshotDiff.vb", "Wim360CompareForm.vb", "DriverStudioEngine.vb",
              "DriverStudioInventory.vb", "DriverStudioPanel.vb",
              "DriverStudioInstaller.vb"):
@@ -84,3 +85,41 @@ s = s.replace("frmProgress.ShowDialog()", "frmProgress.ShowDialog(Me)")
 s = s.replace("frmAbout.ShowDialog()", "frmAbout.ShowDialog(Me)")
 main.write_text(s, encoding="utf-8-sig")
 print("Installed themed UI, update manager and clean About dialog")
+
+# Repair command-line construction inherited from the pinned upstream release.
+# The legacy Mount-WIM and Apply-Image builders put an opening quote before
+# /Index but never close it; consequently DISM treats /MountDir or /ApplyDir
+# as part of /Index and returns error 87. Index is numeric, so do not quote it.
+# Quote every file/directory path independently, including ApplyDir.
+def repair_dism_image_commands(source):
+    lines = source.splitlines(keepends=True)
+    mounted = 0
+    applied = 0
+    for pos, line in enumerate(lines):
+        if 'DISM.StartInfo.Arguments = "/Mount-WIM ' in line:
+            if ' & " /index:""" & strIndex & " /MountDir:"' not in line:
+                raise RuntimeError("Unexpected upstream Mount-WIM argument format")
+            lines[pos] = line.replace(
+                ' & " /index:""" & strIndex & " /MountDir:"',
+                ' & " /Index:" & strIndex & " /MountDir:"')
+            mounted += 1
+        elif 'strDISMArguments = "/Apply-Image ' in line:
+            verify = ' & " /Verify"' if ' /Verify"' in line else ''
+            indent = line[:len(line) - len(line.lstrip())]
+            ending = "\r\n" if line.endswith("\r\n") else "\n"
+            lines[pos] = (indent +
+                'strDISMArguments = "/Apply-Image /ImageFile:""" & strSource & ' +
+                '"""" & " /Index:" & strAppendIndex & " /ApplyDir:""" & ' +
+                'strDest & """"' + verify + ending)
+            applied += 1
+    if mounted != 2 or applied != 2:
+        raise RuntimeError(
+            f"Expected 2 Mount-WIM and 2 Apply-Image builders, found {mounted}/{applied}")
+    repaired = "".join(lines)
+    if ' & " /index:""" &' in repaired:
+        raise RuntimeError("Malformed numeric DISM /index argument remains")
+    return repaired
+
+main.write_text(repair_dism_image_commands(
+    main.read_text(encoding="utf-8-sig")), encoding="utf-8-sig")
+print("Repaired DISM Mount-WIM and Apply-Image index/path quoting")

@@ -51,7 +51,61 @@ read all image-index metadata through the Windows WIMGAPI in read-only mode.
 Select an index to view architecture, build, edition, languages and
 mount state. **Use index in Mount** transfers the selected WIM path and
 index to the original Mount form but **never mounts or modifies the image**.
-Use **Copy report** to share the read-only inventory.
+Use **Copy report** to copy the read-only text report. The new
+**Export indexes CSV** and **Export indexes JSON** buttons save an unmounted
+image's index metadata directly to a local file (including WIM/ESD or a
+verified split SWM). These exports include all image indexes, architecture,
+edition, build, languages, size and mount status; they never mount the image.
+CSV text is protected against spreadsheet formula injection. The JSON format
+has `ExportKind: Wim360IndexMetadata` and is **not** an inventory snapshot
+for **Compare JSON snapshots**; those require an actual mounted-index audit.
+
+### Compare 2–8 indexes inside one WIM or ESD (test RC)
+
+After **Inspect**, choose **Compare indexes**. Two or three indexes are
+selected by default; select any 2–8 using the checkbox list.
+
+- **Index metadata** works immediately, without a mount: name, description,
+  edition, build, languages, architecture, installation type, image size.
+- **Files + folders (no mounting)** uses the built-in Windows
+  Windows DISM PowerShell `Get-WindowsImageContent` against each selected WIM/ESD index.
+  The result contains all *paths* (files, folders and empty folders) in
+  adjacent columns: `Only in Index N`, `Missing from Index N`,
+  `Present in all`, etc. It does not mount or modify the image, and cannot
+  prove file bytes or sizes are the same. Truncated/failed DISM output is
+  rejected instead of being reported as a missing file. Direct split SWM
+  path enumeration is not enabled; SWM metadata inspection remains available.
+  To protect image integrity, this mode computes a full SHA-256 of the
+  **source WIM before and after** enumeration and restores its original file
+  modification timestamp if Windows DISM changed only that timestamp.
+  On multi-gigabyte WIM files this verification adds substantial disk reads;
+  the Compare button switches to **Cancel scan** during the operation.
+- **Files + sizes (already mounted)** requires each selected index to be
+  mounted in a **different folder** (prefer read-only mounts); refresh
+  **Inspect** after mounting. This mode compares file paths, lengths and
+  empty-folder presence. Reparse points are skipped. File SHA-256 verification
+  is available for an individually selected path.
+- **Drivers / packages / features** requires a completed **Scan mounted
+  index** for every selected index. If any scan is partial, comparison
+  refuses to report possibly false missing items.
+
+Use the Type, Result, and Search filters to find missing or changed items.
+**Exists in all** includes items present in every selected index even if
+their versions or sizes differ; **Present in all** means reported values
+are identical across all selected indexes.
+The selected indexes are shown as adjacent columns; horizontal scrolling
+is available. **Export filtered CSV** saves only visible rows. To check
+actual bytes, select one file in the mounted-files mode and choose **Verify SHA-256**.
+Equal file lengths alone do not establish equal content, and the SHA-256
+operation can take time for large files. All operations are read-only.
+
+For example, for `install.wim` with indexes 1, 2 and 3, first use
+**Index metadata** to compare editions and builds. Select
+**Files + folders (no mounting)** to compare all paths under
+`Windows\System32` immediately. Filter by `Missing from Index 2`,
+`Only in Index 3`, or `Present in all`. To check different file lengths
+or calculate SHA-256, mount the selected indexes in separate read-only
+directories and switch to **Files + sizes (already mounted)**.
 
 For an index that is **already mounted**, select it and click **Scan mounted
 index**. WIM 360 validates the exact image file, index and mount directory,

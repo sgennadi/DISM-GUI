@@ -23,7 +23,20 @@ Public NotInheritable Class ModernTheme
     Public Shared ReadOnly Red As Color = Color.FromArgb(211, 70, 91)
 
     Public Shared Function UiFont(size As Single, Optional bold As Boolean = False) As Font
-        Return New Font("Segoe UI", size, If(bold, FontStyle.Bold, FontStyle.Regular), GraphicsUnit.Point)
+        ' LayoutSmoke runs at three simulated font scales in Windows CI.
+        ' Normal installed builds ALWAYS use the unchanged system UI size.
+        Dim factor As Single = 1.0F
+        If String.Equals(Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_ONLY"),
+                         "1", StringComparison.Ordinal) Then
+            Dim requested As Single
+            If Single.TryParse(Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_FONT_SCALE"),
+                               Globalization.NumberStyles.Float,
+                               Globalization.CultureInfo.InvariantCulture, requested) Then
+                factor = Math.Max(1.0F, Math.Min(1.75F, requested))
+            End If
+        End If
+        Return New Font("Segoe UI", size * factor,
+                        If(bold, FontStyle.Bold, FontStyle.Regular), GraphicsUnit.Point)
     End Function
 
     Private Shared Function RoundPath(bounds As Rectangle, radius As Integer) As GraphicsPath
@@ -84,6 +97,138 @@ Public NotInheritable Class ModernTheme
         End Using
     End Function
 
+    ' Common, DPI-aware action-button measurements; keep container Dock behavior.
+    Public Shared Function RecommendedButtonSize(button As Button,
+                                                   Optional minimumWidth As Integer = 100) As Size
+        Dim caption = button.Text.Replace("&&", "&").Replace("&", "")
+        Dim measured = TextRenderer.MeasureText(caption, button.Font)
+        Return New Size(Math.Max(minimumWidth, measured.Width + 34),
+                        Math.Max(36, measured.Height + 18))
+    End Function
+
+    Public Shared Sub ConfigureReadableButton(button As Button,
+                                              Optional minimumWidth As Integer = 100)
+        button.AutoEllipsis = False
+        button.TextAlign = ContentAlignment.MiddleCenter
+        button.Padding = New Padding(8, 3, 8, 3)
+        If button.Dock = DockStyle.None Then
+            Dim preferred = RecommendedButtonSize(button, minimumWidth)
+            button.MinimumSize = preferred
+            button.Size = New Size(Math.Max(button.Width, preferred.Width),
+                                   Math.Max(button.Height, preferred.Height))
+        End If
+    End Sub
+
+    ' Measure every button against its real font. This works for all shared
+    ' dialogs and avoids unreadable fixed-width English action captions.
+    Public Shared Sub FitTableButtonCells(table As TableLayoutPanel)
+        If table Is Nothing Then Return
+        For Each button In table.Controls.OfType(Of Button)()
+            button.AutoEllipsis = False
+            Dim expected = RecommendedButtonSize(button)
+            Dim col = table.GetColumn(button)
+            If col >= 0 AndAlso col < table.ColumnStyles.Count Then
+                Dim cell = table.ColumnStyles(col)
+                If cell.SizeType = SizeType.Absolute Then
+                    cell.Width = Math.Max(cell.Width,
+                        expected.Width + button.Margin.Horizontal)
+                End If
+            End If
+            Dim row = table.GetRow(button)
+            If row >= 0 AndAlso row < table.RowStyles.Count Then
+                Dim cell = table.RowStyles(row)
+                If cell.SizeType = SizeType.Absolute Then
+                    cell.Height = Math.Max(cell.Height,
+                        expected.Height + button.Margin.Vertical)
+                End If
+            End If
+        Next
+    End Sub
+
+    Private Shared Sub ScaleDialogTables(control As Control, scale As Single)
+        Dim table = TryCast(control, TableLayoutPanel)
+        If table IsNot Nothing Then
+            If scale > 1.01F Then
+                For Each row As RowStyle In table.RowStyles
+                    If row.SizeType = SizeType.Absolute AndAlso row.Height > 0 Then
+                        row.Height = CSng(Math.Ceiling(row.Height * scale))
+                    End If
+                Next
+                For Each col As ColumnStyle In table.ColumnStyles
+                    If col.SizeType = SizeType.Absolute AndAlso col.Width > 0 Then
+                        col.Width = CSng(Math.Ceiling(col.Width * scale))
+                    End If
+                Next
+            End If
+            FitTableButtonCells(table)
+        End If
+        Dim grid = TryCast(control, DataGridView)
+        If grid IsNot Nothing Then
+            grid.RowTemplate.Height = Math.Max(grid.RowTemplate.Height,
+                                               grid.Font.Height + 12)
+            Dim headerFont = If(grid.ColumnHeadersDefaultCellStyle.Font, grid.Font)
+            grid.ColumnHeadersHeight = Math.Max(grid.ColumnHeadersHeight,
+                                                headerFont.Height + 18)
+            ' Keep grid headers legible. The DataGridView itself scrolls
+            ' horizontally; narrowing columns is not a valid DPI fix.
+            For Each column As DataGridViewColumn In grid.Columns
+                Dim headerWidth = TextRenderer.MeasureText(
+                    If(column.HeaderText, ""), headerFont).Width + 26
+                Dim expected = Math.Max(headerWidth,
+                    CInt(Math.Ceiling(column.Width * Math.Min(1.75F, scale))))
+                column.Width = Math.Max(column.Width, expected)
+            Next
+        End If
+        For Each child As Control In control.Controls
+            ScaleDialogTables(child, scale)
+        Next
+    End Sub
+
+    ' Large dialogs must scroll at 125-200% Windows scaling instead of clipping
+    ' their buttons or falling off screen. Call after all dialog controls exist.
+    Public Shared Sub MakeDialogScrollable(frm As Form, root As TableLayoutPanel,
+                                           minimumWidth As Integer,
+                                           minimumHeight As Integer)
+        If frm Is Nothing OrElse root Is Nothing OrElse root.Parent IsNot frm Then
+            Return
+        End If
+        Dim uiScale = Math.Max(1.0F, frm.Font.Height / 17.0F)
+        Dim scaledMinWidth = CInt(Math.Ceiling(minimumWidth * uiScale))
+        Dim scaledMinHeight = CInt(Math.Ceiling(minimumHeight * uiScale))
+        ScaleDialogTables(root, uiScale)
+        Dim viewport As New Panel With {
+            .Name = root.Name & "Viewport",
+            .Dock = DockStyle.Fill, .AutoScroll = True,
+            .BackColor = frm.BackColor
+        }
+        frm.Controls.Remove(root)
+        frm.Controls.Add(viewport)
+        root.Dock = DockStyle.None
+        root.Margin = Padding.Empty
+        root.Location = Point.Empty
+        viewport.Controls.Add(root)
+        Dim syncSize As Action = Sub()
+            If frm.IsDisposed OrElse root.IsDisposed OrElse viewport.IsDisposed Then Return
+            Dim w = Math.Max(scaledMinWidth, viewport.ClientSize.Width - 1)
+            Dim h = Math.Max(scaledMinHeight, viewport.ClientSize.Height - 1)
+            If root.Width <> w OrElse root.Height <> h Then
+                root.Size = New Size(w, h)
+            End If
+        End Sub
+        AddHandler viewport.ClientSizeChanged, Sub(sender, e) syncSize()
+        AddHandler frm.Shown, Sub(sender, e)
+            syncSize()
+            ' WinForms may auto-scroll to the last focused button during Show.
+            ' Restore the top/left AFTER initial focus and layout settle.
+            frm.BeginInvoke(New MethodInvoker(Sub()
+                If Not viewport.IsDisposed Then
+                    viewport.AutoScrollPosition = Point.Empty
+                End If
+            End Sub))
+        End Sub
+        syncSize()
+    End Sub
+
     Public Shared Sub StyleButton(button As Button, Optional role As String = Nothing)
         If role Is Nothing Then
             Dim n = button.Name.ToLowerInvariant()
@@ -117,7 +262,7 @@ Public NotInheritable Class ModernTheme
         button.ForeColor = If(role = "primary", Color.White, TextInk)
         button.Font = UiFont(9.3F, True)
         button.Cursor = Cursors.Hand
-        button.AutoEllipsis = True
+        ConfigureReadableButton(button)
         AddHandler button.SizeChanged, Sub(sender, e)
             Dim b = DirectCast(sender, Button)
             If b.IsDisposed OrElse b.Width < 6 OrElse b.Height < 6 Then Return
@@ -185,9 +330,17 @@ Public NotInheritable Class ModernTheme
             ElseIf TypeOf c Is Label Then
                 c.ForeColor = Muted
                 c.Font = UiFont(9.7F)
+                ' Tooltip preserves the full caption where a narrow legacy
+                ' layout cannot display the entire dynamic status label.
+                tips.SetToolTip(c, c.Text)
+                AddHandler c.TextChanged, Sub(sender, e)
+                    Dim label = DirectCast(sender, Control)
+                    If Not label.IsDisposed Then tips.SetToolTip(label, label.Text)
+                End Sub
             ElseIf TypeOf c Is CheckBox Then
                 c.ForeColor = TextInk
                 c.Font = UiFont(9.7F)
+                tips.SetToolTip(c, c.Text)
             ElseIf TypeOf c Is GroupBox Then
                 c.BackColor = Color.White
                 c.ForeColor = TextInk
@@ -558,6 +711,8 @@ Public NotInheritable Class ModernTheme
         Dim sectionNames As String() = {"Mount & Inspect", "Drivers", "Packages",
             "Windows Features", "Editions", "Unattend XML",
             "Applications", "Capture WIM", "Apply WIM"}
+        Dim shortNavigationNames As String() = {"Mount", "Drivers", "Packages",
+            "Features", "Editions", "Unattend", "Apps", "Capture", "Apply"}
         Dim sectionColors As Color() = {Blue, Green, Blue, Green, Blue,
                                        Green, Blue, Green, Blue}
         Dim navButtons As New List(Of Button)()
@@ -592,11 +747,11 @@ Public NotInheritable Class ModernTheme
         For i As Integer = 0 To sectionNames.Length - 1
             Dim index As Integer = i
             Dim navBtn As New Button With {
-                .Name = "nav" & i.ToString(), .Text = "  " & (i + 1).ToString("00") &
-                   "    " & sectionNames(Math.Min(i, sectionNames.Length - 1)).Replace("&", "&&"),
+                .Name = "nav" & i.ToString(), .Text = (i + 1).ToString("00") &
+                   "  " & shortNavigationNames(i),
                 .Size = New Size(211, 43), .Margin = New Padding(2, 1, 2, 6),
                 .FlatStyle = FlatStyle.Flat, .TextAlign = ContentAlignment.MiddleLeft,
-                .Font = UiFont(10, True), .ForeColor = TextInk, .BackColor = Color.White,
+                .Font = UiFont(9.5F, True), .ForeColor = TextInk, .BackColor = Color.White,
                 .Cursor = Cursors.Hand, .UseVisualStyleBackColor = False
             }
             navBtn.FlatAppearance.BorderSize = 1
@@ -691,7 +846,8 @@ Public NotInheritable Class ModernTheme
         logHeader.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 87))
         logHeader.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         logArea.Controls.Add(logHeader, 0, 0)
-        Dim logTitle = TextLabel("DISM OUTPUT  ·  Drag divider to resize", UiFont(9.5F, True), TextInk)
+        Dim logTitle = TextLabel("DISM OUTPUT", UiFont(9.5F, True), TextInk)
+        tips.SetToolTip(logTitle, "Drag the divider to resize DISM Output.")
         logTitle.Dock = DockStyle.Fill
         logTitle.AutoEllipsis = True
         logTitle.TextAlign = ContentAlignment.MiddleLeft
@@ -748,6 +904,7 @@ Public NotInheritable Class ModernTheme
         exitButton.Margin = New Padding(4, 2, 0, 2)
         StyleButton(exitButton, "neutral")
         logHeader.Controls.Add(exitButton, 4, 0)
+        FitTableButtonCells(logHeader)
 
         output.Dock = DockStyle.Fill
         output.BackColor = Color.White
@@ -776,13 +933,13 @@ Public NotInheritable Class ModernTheme
             toolsButton.Text = "Tools  " & ChrW(&H2022) & " " & ChrW(&H25BE)
             toolsButton.ForeColor = Color.FromArgb(12, 110, 67)
             toolsButton.BackColor = Color.FromArgb(233, 250, 240)
-            statusItem.Text = "New stable release: v" & available
+            statusItem.Text = "New stable release: " & available
             statusItem.ForeColor = Color.FromArgb(12, 124, 75)
-            menuItem.Text = "Update to v" & available & "..."
+            menuItem.Text = "Update to " & available & "..."
             menuItem.ForeColor = Color.FromArgb(12, 124, 75)
             menuItem.Font = UiFont(10, True)
             Dim tips As New ToolTip()
-            tips.SetToolTip(toolsButton, "DISM GUI v" & available &
+            tips.SetToolTip(toolsButton, "DISM GUI " & available &
                                           " is available. Open Tools > Update.")
         Catch
             If Not statusItem.IsDisposed Then

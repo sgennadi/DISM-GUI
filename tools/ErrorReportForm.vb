@@ -114,8 +114,8 @@ Public NotInheritable Class ErrorReportForm
         previewBox = New TextBox With {
             .Name = "txtSupportPreview",
             .Dock = DockStyle.Fill, .Multiline = True,
-            .ScrollBars = ScrollBars.Both, .WordWrap = False,
-            .Font = New Font("Consolas", 9.2F),
+            .ScrollBars = ScrollBars.Vertical, .WordWrap = True,
+            .Font = ModernTheme.UiFont(9.4F),
             .Margin = New Padding(0, 3, 0, 6)
         }
         layout.Controls.Add(previewBox, 0, 4)
@@ -240,6 +240,7 @@ Public NotInheritable Class ErrorReportForm
             reviewed.Checked = False
         End Sub
         GeneratePreview()
+        ModernTheme.MakeDialogScrollable(Me, layout, 970, 710)
         WindowGeometry.Install(Me, "Software\DISMGUI\ErrorReport")
     End Sub
 

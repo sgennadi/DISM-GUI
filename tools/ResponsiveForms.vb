@@ -34,7 +34,7 @@ Public NotInheritable Class ResponsiveForms
                 .BackColor = Color.White
             }
             root.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-            root.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 210))
+            root.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 240))
             root.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
 
             leftPanel = New FlowLayoutPanel With {
@@ -110,6 +110,7 @@ Public NotInheritable Class ResponsiveForms
                 browse.Text = browseText
                 browse.AutoEllipsis = False
                 ModernTheme.StyleButton(browse, "browse")
+                ModernTheme.ConfigureReadableButton(browse, 150)
                 browse.Font = ModernTheme.UiFont(9.3F, True)
                 browse.TextAlign = ContentAlignment.MiddleCenter
             End If
@@ -196,10 +197,11 @@ Public NotInheritable Class ResponsiveForms
             button.TextAlign = ContentAlignment.MiddleCenter
             button.AutoEllipsis = False
             button.Dock = DockStyle.None
+            ModernTheme.ConfigureReadableButton(button, 180)
             button.Margin = New Padding(3, 0, 0, 12)
-            button.Width = 186
+            button.Width = 205
             Dim m = TextRenderer.MeasureText(button.Text, button.Font,
-                        New Size(163, Integer.MaxValue),
+                        New Size(175, Integer.MaxValue),
                         TextFormatFlags.WordBreak Or TextFormatFlags.TextBoxControl)
             button.Height = Math.Max(56, m.Height + 20)
             rightItems.Add(button)
@@ -222,7 +224,7 @@ Public NotInheritable Class ResponsiveForms
         End Sub
 
         Private Sub RightResized(sender As Object, e As EventArgs)
-            Dim width = Math.Max(155, rightPanel.ClientSize.Width -
+            Dim width = Math.Max(180, rightPanel.ClientSize.Width -
                                      rightPanel.Padding.Horizontal -
                                      SystemInformation.VerticalScrollBarWidth - 2)
             For Each button In rightItems
@@ -240,7 +242,7 @@ Public NotInheritable Class ResponsiveForms
             ' keep full width and both panes remain vertically scrollable.
             ' Keep side-by-side actions on ordinary laptop windows; stack only
             ' when the workspace itself becomes exceptionally narrow.
-            Dim narrow = root.ClientSize.Width < 560
+            Dim narrow = root.ClientSize.Width < 640
             If narrow AndAlso root.RowCount <> 2 Then
                 root.SuspendLayout()
                 root.ColumnStyles(1).SizeType = SizeType.Absolute
@@ -260,13 +262,13 @@ Public NotInheritable Class ResponsiveForms
                 root.RowStyles.Clear()
                 root.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
                 root.ColumnStyles(1).SizeType = SizeType.Absolute
-                root.ColumnStyles(1).Width = If(root.ClientSize.Width < 740, 180, 210)
+                root.ColumnStyles(1).Width = If(root.ClientSize.Width < 800, 215, 240)
                 rightPanel.FlowDirection = FlowDirection.TopDown
                 rightPanel.WrapContents = False
                 root.ResumeLayout(True)
             End If
             If Not narrow AndAlso root.RowCount = 1 Then
-                Dim wanted = If(root.ClientSize.Width < 740, 180, 210)
+                Dim wanted = If(root.ClientSize.Width < 800, 215, 240)
                 If root.ColumnStyles(1).Width <> wanted Then
                     root.ColumnStyles(1).Width = wanted
                 End If

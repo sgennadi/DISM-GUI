@@ -1,6 +1,7 @@
 Imports System
 Imports System.Drawing
 Imports System.IO
+Imports System.Text
 Imports System.Linq
 Imports System.Threading
 Imports System.Threading.Tasks
@@ -29,6 +30,9 @@ Public NotInheritable Class Wim360Dashboard
     Private ReadOnly auditMounted As Button
     Private ReadOnly inventoryButton As Button
     Private ReadOnly compareSnapshotsButton As Button
+    Private ReadOnly exportIndexesCsv As Button
+    Private ReadOnly exportIndexesJson As Button
+    Private ReadOnly compareIndexesButton As Button
     Private report As Wim360Reader.WimReport
     Private scanGeneration As Integer
     Private isAuditing As Boolean
@@ -63,14 +67,28 @@ Public NotInheritable Class Wim360Dashboard
             .Margin = Padding.Empty, .Padding = New Padding(17, 13, 17, 18)
         }
         dashboardLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        For Each height As Integer In {53, 57, 72, 27, 205, 145, 139}
-            dashboardLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, height))
+        ' Scroll rather than truncate content on high-DPI or short viewports.
+        Dim factor As Single = Math.Max(1.0F, Me.Font.Height / 16.0F)
+        Dim stackSource As Boolean = factor > 1.15F
+        For Each height As Integer In {62, 66, 85, 36, 215, 163, 314}
+            dashboardLayout.RowStyles.Add(New RowStyle(SizeType.Absolute,
+                CInt(Math.Ceiling(height * factor))))
         Next
+        dashboardLayout.Height = dashboardLayout.RowStyles.Cast(Of RowStyle)().
+            Sum(Function(row) CInt(row.Height)) + dashboardLayout.Padding.Vertical + 8
         canvas.Controls.Add(dashboardLayout)
-        AddHandler canvas.ClientSizeChanged, Sub(sender, e)
-            Dim newWidth = Math.Max(410, canvas.ClientSize.Width - 1)
+        Dim resizeDashboard As Action = Sub()
+            If canvas.IsDisposed OrElse dashboardLayout.IsDisposed Then Return
+            ' When source controls stack, avoid a huge horizontal canvas.
+            Dim minimum = If(stackSource, 660, CInt(Math.Ceiling(760 * factor)))
+            Dim newWidth = Math.Max(minimum, canvas.ClientSize.Width - 1)
             If dashboardLayout.Width <> newWidth Then dashboardLayout.Width = newWidth
         End Sub
+        AddHandler canvas.ClientSizeChanged, Sub(sender, e) resizeDashboard()
+        AddHandler Me.VisibleChanged, Sub(sender, e)
+            If Me.Visible Then resizeDashboard()
+        End Sub
+        resizeDashboard()
 
         Dim header As New TableLayoutPanel With {
             .Dock = DockStyle.Fill, .RowCount = 2, .ColumnCount = 1,
@@ -86,13 +104,22 @@ Public NotInheritable Class Wim360Dashboard
                                     9.4F, False, ModernTheme.Muted), 0, 1)
 
         Dim pathRow As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .RowCount = 1, .ColumnCount = 3,
+            .Dock = DockStyle.Fill,
+            .RowCount = If(stackSource, 2, 1),
+            .ColumnCount = If(stackSource, 2, 3),
             .Margin = New Padding(0, 4, 0, 7), .BackColor = Color.White
         }
-        pathRow.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        pathRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        pathRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 142))
-        pathRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 113))
+        If stackSource Then
+            pathRow.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
+            pathRow.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
+            pathRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
+            pathRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
+        Else
+            pathRow.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+            pathRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+            pathRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(165 * factor))))
+            pathRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(130 * factor))))
+        End If
         dashboardLayout.Controls.Add(pathRow, 0, 1)
 
         fileBox = New TextBox With {
@@ -104,6 +131,7 @@ Public NotInheritable Class Wim360Dashboard
             .Margin = New Padding(1, 13, 7, 9)
         }
         pathRow.Controls.Add(fileBox, 0, 0)
+        If stackSource Then pathRow.SetColumnSpan(fileBox, 2)
 
         browse = New Button With {
             .Name = "btn360Browse", .Text = "Choose WIM",
@@ -111,7 +139,7 @@ Public NotInheritable Class Wim360Dashboard
         }
         ModernTheme.StyleButton(browse, "browse")
         AddHandler browse.Click, AddressOf BrowseClicked
-        pathRow.Controls.Add(browse, 1, 0)
+        pathRow.Controls.Add(browse, If(stackSource, 0, 1), If(stackSource, 1, 0))
 
         scan = New Button With {
             .Name = "btn360Scan", .Text = "Inspect",
@@ -119,7 +147,7 @@ Public NotInheritable Class Wim360Dashboard
         }
         ModernTheme.StyleButton(scan, "primary")
         AddHandler scan.Click, AddressOf ScanClicked
-        pathRow.Controls.Add(scan, 2, 0)
+        pathRow.Controls.Add(scan, If(stackSource, 1, 2), If(stackSource, 1, 0))
 
         Dim metrics As New TableLayoutPanel With {
             .Name = "Wim360Metrics",
@@ -201,12 +229,12 @@ Public NotInheritable Class Wim360Dashboard
         info.Controls.Add(details, 0, 1)
 
         Dim actions As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 3,
+            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 5,
             .Margin = New Padding(0, 5, 0, 0),
             .BackColor = Color.White
         }
-        For i As Integer = 1 To 3
-            actions.RowStyles.Add(New RowStyle(SizeType.Percent, CSng(100.0 / 3.0)))
+        For i As Integer = 1 To 5
+            actions.RowStyles.Add(New RowStyle(SizeType.Percent, 20.0F))
         Next
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
@@ -267,12 +295,52 @@ Public NotInheritable Class Wim360Dashboard
             End Using
         End Sub
         actions.Controls.Add(testCenter, 1, 2)
+
+        exportIndexesCsv = New Button With {
+            .Name = "btn360ExportIndexCsv", .Text = "Export indexes CSV",
+            .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 9, 4),
+            .Enabled = False
+        }
+        ModernTheme.StyleButton(exportIndexesCsv, "browse")
+        AddHandler exportIndexesCsv.Click, Sub(sender, e) ExportIndexMetadata(False)
+        actions.Controls.Add(exportIndexesCsv, 0, 3)
+
+        exportIndexesJson = New Button With {
+            .Name = "btn360ExportIndexJson", .Text = "Export indexes JSON",
+            .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 8, 4),
+            .Enabled = False
+        }
+        ModernTheme.StyleButton(exportIndexesJson, "browse")
+        AddHandler exportIndexesJson.Click, Sub(sender, e) ExportIndexMetadata(True)
+        actions.Controls.Add(exportIndexesJson, 1, 3)
+
+        compareIndexesButton = New Button With {
+            .Name = "btn360CompareIndexes", .Text = "Compare indexes",
+            .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 9, 4),
+            .Enabled = False
+        }
+        ModernTheme.StyleButton(compareIndexesButton, "primary")
+        AddHandler compareIndexesButton.Click, Sub(sender, e)
+            If report Is Nothing OrElse report.ImageCount < 2 Then Return
+            Using viewer As New Wim360CompareIndexesForm(report)
+                viewer.ShowDialog(Me.FindForm())
+            End Using
+        End Sub
+        actions.Controls.Add(compareIndexesButton, 0, 4)
+        Dim compareHelp = MakeText("2–8 indexes: present / missing / different",
+                                   9.1F, False, ModernTheme.Muted)
+        compareHelp.Margin = New Padding(4, 3, 0, 3)
+        actions.Controls.Add(compareHelp, 1, 4)
+
         AddHandler fileBox.TextChanged, Sub(sender, e)
             CancelMountedAudit()
             useSelected.Enabled = False
             copyReport.Enabled = False
             auditMounted.Enabled = False
             inventoryButton.Enabled = False
+            exportIndexesCsv.Enabled = False
+            exportIndexesJson.Enabled = False
+            compareIndexesButton.Enabled = False
         End Sub
         AddHandler Me.Disposed, Sub(sender, e) CancelMountedAudit()
     End Sub
@@ -370,6 +438,9 @@ Public NotInheritable Class Wim360Dashboard
         copyReport.Enabled = False
         auditMounted.Enabled = False
         inventoryButton.Enabled = False
+        exportIndexesCsv.Enabled = False
+        exportIndexesJson.Enabled = False
+        compareIndexesButton.Enabled = False
         If String.IsNullOrWhiteSpace(path) Then
             status.Text = "Choose a .wim, .esd or .swm file first."
             details.Text = "WIM 360 only reads image metadata."
@@ -435,6 +506,9 @@ Public NotInheritable Class Wim360Dashboard
             indexTable.ResumeLayout(True)
         End Try
         copyReport.Enabled = True
+        exportIndexesCsv.Enabled = value.ImageCount > 0
+        exportIndexesJson.Enabled = value.ImageCount > 0
+        compareIndexesButton.Enabled = value.ImageCount >= 2
         If indexTable.Rows.Count > 0 Then
             indexTable.ClearSelection()
             indexTable.Rows(0).Selected = True
@@ -606,6 +680,40 @@ Public NotInheritable Class Wim360Dashboard
         If selected Is Nothing OrElse report Is Nothing OrElse report.IsSplitSet Then Return
         ' Only fills existing selectors. It does NOT mount or modify the WIM.
         useInMount(report.ImageFile, selected.Index)
+    End Sub
+
+    Private Sub ExportIndexMetadata(asJson As Boolean)
+        Dim inspected = report
+        If inspected Is Nothing OrElse inspected.ImageCount = 0 OrElse
+           Not String.Equals(fileBox.Text.Trim(), inspected.ImageFile,
+                             StringComparison.OrdinalIgnoreCase) Then Return
+        Dim extension = If(asJson, "json", "csv")
+        Dim name = Path.GetFileNameWithoutExtension(inspected.ImageFile) &
+                   "-indexes." & extension
+        Using picker As New SaveFileDialog With {
+            .Title = "Export WIM 360 index metadata (no mounting)",
+            .Filter = If(asJson,
+                         "JSON index metadata (*.json)|*.json",
+                         "CSV index metadata (*.csv)|*.csv"),
+            .DefaultExt = extension, .AddExtension = True,
+            .OverwritePrompt = True, .RestoreDirectory = True,
+            .FileName = name
+        }
+            If picker.ShowDialog(Me.FindForm()) <> DialogResult.OK Then Return
+            Try
+                Dim content = If(asJson,
+                    Wim360MetadataExport.ToJson(inspected),
+                    Wim360MetadataExport.ToCsv(inspected))
+                File.WriteAllText(picker.FileName, content, New UTF8Encoding(True))
+                status.Text = "Exported " & inspected.ImageCount.ToString() &
+                    " indexes to " & picker.FileName & " (metadata only; no WIM changes)."
+            Catch ex As Exception
+                ErrorDiagnostics.RememberFailure("WIM 360 metadata export", ex)
+                MessageBox.Show(Me.FindForm(),
+                    "Could not export index metadata: " & ex.Message,
+                    "WIM 360 - Export", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            End Try
+        End Using
     End Sub
 
     Private Sub CopyClicked(sender As Object, e As EventArgs)

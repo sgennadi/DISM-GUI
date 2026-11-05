@@ -106,6 +106,212 @@ internal static class WimMountIntegration
                           "missing part rejected and SHA-256 unchanged.");
     }
 
+    // Diagnostic probe: determine the exact output of Windows' supported
+    // native file listing API before enabling an unmounted multi-index parser.
+    // Uses the disposable CI fixture only. Never modifies or mounts the image.
+    public static void ProbeOfflineList(string image)
+    {
+        if (Environment.GetEnvironmentVariable("DISMGUI_TEST_WIM_MOUNT") != "1")
+            return;
+        var result = RunDism(new[] {
+            "/English", "/List-Image", "/ImageFile:" + Path.GetFullPath(image),
+            "/Index:1"
+        }, 180000);
+        Console.WriteLine("OFFLINE DISM /List-Image probe exit=" + result.ExitCode +
+            " output:\n" + result.Output[..Math.Min(3500, result.Output.Length)]);
+
+        var psi = new ProcessStartInfo("powershell.exe") {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        var literal = Path.GetFullPath(image).Replace("'", "''");
+        psi.ArgumentList.Add("-NoProfile");
+        psi.ArgumentList.Add("-NonInteractive");
+        psi.ArgumentList.Add("-Command");
+        psi.ArgumentList.Add("$ErrorActionPreference='Stop'; Import-Module Dism; " +
+            "$items=@(Get-WindowsImageContent -ImagePath '" + literal +
+            "' -Index 1); Write-Output ('COUNT=' + $items.Count); " +
+            "$items | ConvertTo-Json -Compress -Depth 3");
+        using var child = new Process { StartInfo = psi };
+        if (child.Start()) {
+            var output = child.StandardOutput.ReadToEndAsync();
+            var error = child.StandardError.ReadToEndAsync();
+            if (!child.WaitForExit(180000)) {
+                child.Kill(entireProcessTree: true);
+                child.WaitForExit(10000);
+            }
+            var combined = output.GetAwaiter().GetResult() +
+                "\n" + error.GetAwaiter().GetResult();
+            Console.WriteLine("OFFLINE Get-WindowsImageContent probe exit=" +
+                child.ExitCode + " output:\n" + combined[..Math.Min(3500, combined.Length)]);
+        }
+    }
+
+    // Real 3-index WIM regression: DISM enumerates contents without mounting.
+    // All sources are temporary files created only by the CI test itself.
+    // CI-only stress fixture. This is a >1 GiB synthetic WIM, not an actual
+    // Microsoft install.wim. All three indexes are captured with Windows DISM.
+    // No real OS images, partitions or mounted production folders are touched.
+    public static void VerifyLargeThreeIndexWim(string root)
+    {
+        if (Environment.GetEnvironmentVariable("DISMGUI_TEST_LARGE_WIM") != "1")
+        {
+            Console.WriteLine("SKIP large synthetic 3-index WIM stress test (opt-in)");
+            return;
+        }
+
+        var timer = Stopwatch.StartNew();
+        var folder = Path.Combine(root, "large-install-fixture");
+        Directory.CreateDirectory(folder);
+        var wim = Path.Combine(folder, "install.wim");
+        var input = Path.Combine(folder, "index-1");
+        Directory.CreateDirectory(Path.Combine(input, "Windows", "System32"));
+        var payload = Path.Combine(input, "Windows", "System32", "large-resource.bin");
+
+        // 1,152 MiB. Fixed-size buffers avoid allocating gigabytes of RAM.
+        // /Compress:none produces a genuine large WIM rather than a tiny
+        // highly-compressed placeholder full of zeros.
+        var block = new byte[4 * 1024 * 1024];
+        new Random(360224).NextBytes(block);
+        using (var writer = new FileStream(payload, FileMode.CreateNew,
+                                           FileAccess.Write, FileShare.None, block.Length))
+        {
+            for (var n = 0; n < 288; n++)
+                writer.Write(block);
+            writer.Flush(flushToDisk: true);
+        }
+        File.WriteAllText(Path.Combine(input, "Windows", "System32", "shared.txt"),
+                          "large-WIM stress index 1");
+
+        CheckDism(new[] {
+            "/English", "/Capture-Image", "/ImageFile:" + wim,
+            "/CaptureDir:" + input, "/Name:Windows 11 Pro",
+            "/Compress:none", "/CheckIntegrity"
+        }, 900000);
+
+        for (var index = 2; index <= 3; index++)
+        {
+            var source = Path.Combine(folder, "index-" + index);
+            Directory.CreateDirectory(Path.Combine(source, "Windows", "System32"));
+            File.WriteAllText(Path.Combine(source, "Windows", "System32", "shared.txt"),
+                              "large-WIM stress index " + index);
+            File.WriteAllText(Path.Combine(source, "Windows", "System32",
+                                            "only-index-" + index + ".txt"), "unique");
+            CheckDism(new[] {
+                "/English", "/Append-Image", "/ImageFile:" + wim,
+                "/CaptureDir:" + source, "/Name:Windows 11 Index " + index
+            }, 300000);
+        }
+
+        var report = Wim360Reader.Inspect(wim);
+        var totalBytes = new FileInfo(wim).Length;
+        if (report.ImageCount != 3 || totalBytes < 1024L * 1024 * 1024)
+            throw new InvalidOperationException(
+                "Stress fixture did not create a >1 GiB three-index WIM. " +
+                "Size: " + totalBytes.ToString("N0") + " bytes.");
+        var digest = Digest(wim);
+        var modified = File.GetLastWriteTimeUtc(wim);
+        var result = Wim360OfflineList.Compare(report, new[] { 1, 2, 3 },
+                                                CancellationToken.None);
+        if (!result.Rows.Any(x => x.Name.EndsWith("large-resource.bin",
+                              StringComparison.OrdinalIgnoreCase) &&
+                            x.State == "Only in Index 1") ||
+            !result.Rows.Any(x => x.Name.EndsWith("only-index-3.txt",
+                              StringComparison.OrdinalIgnoreCase) &&
+                            x.State == "Only in Index 3") ||
+            digest != Digest(wim) ||
+            modified != File.GetLastWriteTimeUtc(wim))
+            throw new InvalidOperationException(
+                "Large real-DISM-created three-index WIM comparison or preservation failed.");
+
+        timer.Stop();
+        var memory = Process.GetCurrentProcess().PeakWorkingSet64;
+        Console.WriteLine("PASS 1+ GiB synthetic install.wim stress: " +
+            totalBytes.ToString("N0") + " bytes, 3 indexes, " +
+            result.Rows.Count.ToString("N0") + " compared paths, " +
+            "elapsed=" + timer.Elapsed.TotalSeconds.ToString("F1") + " s, " +
+            "peak process RAM=" + (memory / 1048576L).ToString("N0") +
+            " MiB; SHA-256 and timestamp unchanged.");
+    }
+
+    public static void VerifyOfflineThreeIndexes(string root)
+    {
+        if (Environment.GetEnvironmentVariable("DISMGUI_TEST_WIM_MOUNT") != "1")
+            return;
+        var wim = Path.Combine(root, "offline-3-index.wim");
+        for (var index = 1; index <= 3; index++)
+        {
+            var src = Path.Combine(root, "offline-source-" + index);
+            Directory.CreateDirectory(Path.Combine(src, "Windows", "System32"));
+            Directory.CreateDirectory(Path.Combine(src, "Documents", "Shared"));
+            Directory.CreateDirectory(Path.Combine(src, "Documents", "מסמכים"));
+            File.WriteAllText(Path.Combine(src, "Windows", "System32", "common.txt"), "same");
+            File.WriteAllText(Path.Combine(src, "Windows", "System32", "Тест-драйвер.txt"), "unicode");
+            File.WriteAllText(Path.Combine(src, "Documents", "מסמכים", "שלום.txt"), "utf8");
+            if (index != 2)
+                File.WriteAllText(Path.Combine(src, "Windows", "System32", "not-in-2.txt"), "exists");
+            if (index == 3)
+            {
+                File.WriteAllText(Path.Combine(src, "Windows", "System32", "index3.txt"), "unique");
+                Directory.CreateDirectory(Path.Combine(src, "Documents", "Only3Empty"));
+            }
+            var cmd = new[] {
+                "/English", index == 1 ? "/Capture-Image" : "/Append-Image",
+                "/ImageFile:" + wim, "/CaptureDir:" + src,
+                "/Name:Index " + index
+            };
+            CheckDism(cmd, 180000);
+        }
+        var report = Wim360Reader.Inspect(wim);
+        if (report.ImageCount != 3)
+            throw new InvalidOperationException("Disposable image has the wrong index count.");
+        var before = Digest(wim);
+        var originalStamp = File.GetLastWriteTimeUtc(wim);
+        Wim360IndexComparer.Result diff;
+        try
+        {
+            diff = Wim360OfflineList.Compare(report, new[] { 1, 2, 3 },
+                                             CancellationToken.None);
+        }
+        catch
+        {
+            Console.WriteLine("OFFLINE WIM failure diagnostics: " +
+                "SHA256 unchanged=" + (before == Digest(wim)) +
+                ", timestamp unchanged=" +
+                (originalStamp == File.GetLastWriteTimeUtc(wim)));
+            throw;
+        }
+        var common = diff.Rows.Single(x => x.Kind == "Files" &&
+                                           x.Name.EndsWith("common.txt", StringComparison.Ordinal));
+        var absent2 = diff.Rows.Single(x => x.Kind == "Files" &&
+                                            x.Name.EndsWith("not-in-2.txt", StringComparison.Ordinal));
+        var unique3 = diff.Rows.Single(x => x.Kind == "Files" &&
+                                            x.Name.EndsWith("index3.txt", StringComparison.Ordinal));
+        var emptyOnly3 = diff.Rows.Single(x => x.Kind == "Folders" &&
+                                               x.Name.EndsWith("Only3Empty", StringComparison.Ordinal));
+        var russianName = diff.Rows.Single(x => x.Kind == "Files" &&
+                         x.Name.EndsWith("Тест-драйвер.txt", StringComparison.Ordinal));
+        var hebrewName = diff.Rows.Single(x => x.Kind == "Files" &&
+                         x.Name.EndsWith("שלום.txt", StringComparison.Ordinal));
+        if (common.State != "Present in all" ||
+            absent2.State != "Missing in some" || absent2.At(2) != "—" ||
+            unique3.State != "Only in Index 3" ||
+            emptyOnly3.State != "Only in Index 3" ||
+            russianName.State != "Present in all" ||
+            hebrewName.State != "Present in all" ||
+            diff.Rows.Any(x => x.Values.Values.Any(v => v != "Present")))
+            throw new InvalidOperationException("Offline three-index file/folder presence is wrong.");
+        if (before != Digest(wim) ||
+            report.Images.Any(x => x.MountStatus.StartsWith("Mounted",
+                                                StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("Offline index comparison modified or mounted the WIM.");
+        Console.WriteLine("PASS real 3-index Unicode-safe DISM offline file/folder presence, " +
+                          "Russian/Hebrew Unicode, unique/missing/empty-folder filters " +
+                          "and unchanged WIM SHA-256.");
+    }
+
     public static void Verify(string image, string root)
     {
         if (Environment.GetEnvironmentVariable("DISMGUI_TEST_WIM_MOUNT") != "1")

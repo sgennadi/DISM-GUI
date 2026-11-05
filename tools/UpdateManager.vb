@@ -431,7 +431,7 @@ Public NotInheritable Class UpdateManager
                 .Enabled = False, .TabStop = True
             }
             AddHandler releaseLink.LinkClicked, Sub(sender, e)
-                Dim releaseTag = latestValue.Text.Replace("Latest stable: ", "").Trim()
+                Dim releaseTag = "v" & latestValue.Text.Replace("Latest stable: ", "").Trim()
                 If releaseTag.Length > 1 AndAlso
                    releaseTag.StartsWith("v", StringComparison.OrdinalIgnoreCase) Then
                     Dim releaseVersion As System.Version = Nothing
@@ -519,6 +519,7 @@ Public NotInheritable Class UpdateManager
             tips.SetToolTip(install, "Available after a release and SHA-256 digest are verified")
             tips.SetToolTip(releases, "Open the download page in your browser")
             tips.SetToolTip(closeButton, "Close only the Update Center")
+            ModernTheme.MakeDialogScrollable(Me, root, 980, 730)
             ' Opening Update Center checks the latest release automatically;
             ' the manual Check for updates button remains available for refresh.
             AddHandler Me.Shown, Sub(sender, e) CheckClicked(check, EventArgs.Empty)
@@ -577,7 +578,7 @@ Public NotInheritable Class UpdateManager
                            Not Version.TryParse(tag.TrimStart("v"c, "V"c), remote) Then
                             Throw New InvalidDataException("The stable release has an invalid version tag")
                         End If
-                        latestValue.Text = "Latest stable: " & tag
+                        latestValue.Text = "Latest stable: " & remote.ToString(3)
                         changelogTitle.Text = "WHAT'S NEW IN " & remote.ToString(3)
                         Dim notesJson As JsonElement
                         If release.TryGetProperty("body", notesJson) AndAlso
@@ -637,15 +638,14 @@ Public NotInheritable Class UpdateManager
                             install.Text = "Reinstall"
                             status.Text = "You already have the latest stable version."
                             status.ForeColor = ModernTheme.Green
-                            detail.Text = "The same verified version is available. " &
-                                          "Use Reinstall only if you need a clean copy."
+                            detail.Text = "Reinstall only if you need a fresh copy."
                         Else
                             install.Text = "Update"
                             status.Text = "A newer stable version is available."
                             status.ForeColor = ModernTheme.Green
                             detail.Text = "Select Update to download the verified " &
                                           "ZIP, back up your current EXE and install " &
-                                          tag & ". DISM GUI will restart."
+                                          remote.ToString(3) & ". DISM GUI will restart."
                         End If
                         install.Enabled = True
                     End Using

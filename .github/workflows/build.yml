@@ -35,18 +35,35 @@ jobs:
       - name: Validate automated CI analyzer
         if: matrix.rid == 'win-x64'
         run: python -m unittest discover -s tests -p test_ci_analysis.py
+      - name: Test DISM image command quoting
+        if: matrix.rid == 'win-x64'
+        run: python -m unittest discover -s tests -p test_dism_image_commands.py
       - name: Prepare modernized DISM GUI source
         run: python tools/prepare_source.py
       - name: Check patch
         shell: pwsh
         run: |
-          python -c "from pathlib import Path; s=Path('DISM GUI/frmMain.vb').read_text(encoding='utf-8-sig'); assert 'ChooseFolderModern(' in s and 'ShowUnmountResult(' in s; print('Patched source OK')"
+          python -c "from pathlib import Path; s=Path('DISM GUI/frmMain.vb').read_text(encoding='utf-8-sig'); assert 'ChooseFolderModern(' in s and 'ShowUnmountResult(' in s; assert s.count(' /Index:') >= 4; assert '/index:' + chr(34)*3 not in s; print('Patched source OK')"
       - name: Smoke-test WinForms and real read-only WIM mount (x64)
         if: matrix.rid == 'win-x64'
         shell: pwsh
         env:
           DISMGUI_TEST_WIM_MOUNT: '1'
+          DISMGUI_TEST_LARGE_WIM: '1'
         run: dotnet run --project tests/LayoutSmoke/LayoutSmoke.csproj --configuration Release -p:Platform=AnyCPU
+      - name: Simulate GUI font scaling at 125%, 150%, and 175% (x64)
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: |
+          $env:DISMGUI_LAYOUT_ONLY = '1'
+          foreach ($scale in @('1.25', '1.50', '1.75')) {
+            $env:DISMGUI_LAYOUT_FONT_SCALE = $scale
+            Write-Host "Running WinForms font-layout stress at simulated $scale scale"
+            dotnet run --project tests/LayoutSmoke/LayoutSmoke.csproj --configuration Release --no-build -p:Platform=AnyCPU
+            if ($LASTEXITCODE -ne 0) {
+              throw "WinForms layout smoke failed at font-scale $scale"
+            }
+          }
       - name: Upload WinForms layout screenshots (x64)
         if: matrix.rid == 'win-x64'
         uses: actions/upload-artifact@v7
@@ -140,3 +157,52 @@ jobs:
             --title "DISM GUI v${RELEASE_VERSION}" \
             --notes-file RELEASE_NOTES.md \
             --latest
+
+  rc-release:
+    name: Publish DISM GUI 4.3.10 RC1
+    needs: build
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.number == 10 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'fix/gui-readability-4.3.9-rc1' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: Download verified Windows ZIPs
+        uses: actions/download-artifact@v7
+        with:
+          pattern: DISMGUI-VS2026-win-*
+          path: dist
+          merge-multiple: true
+      - name: Verify RC version, archives and hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(tr -d '\r\n' < VERSION)" = "4.3.10"
+          for rid in win-x86 win-x64 win-arm64; do
+            zip="dist/DISMGUI-VS2026-$rid.zip"
+            test -s "$zip"
+            unzip -Z1 "$zip" | grep -Fxq 'DISM GUI.exe'
+          done
+          test -s RC_RELEASE_NOTES.md
+          (cd dist && sha256sum DISMGUI-VS2026-win-*.zip > SHA256SUMS.txt)
+      - name: Publish GitHub pre-release without changing stable 4.3.9
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v4.3.10-rc.1"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "RC1 already published, preserving its artifacts."
+            exit 0
+          fi
+          gh release create "$tag" \
+            dist/DISMGUI-VS2026-win-x86.zip \
+            dist/DISMGUI-VS2026-win-x64.zip \
+            dist/DISMGUI-VS2026-win-arm64.zip \
+            dist/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "${{ github.event.pull_request.head.sha }}" \
+            --title "DISM GUI 4.3.10 RC1" \
+            --notes-file RC_RELEASE_NOTES.md \
+            --prerelease
