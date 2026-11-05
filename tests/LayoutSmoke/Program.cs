@@ -358,9 +358,11 @@ internal static class LayoutSmoke
         Require(filteredCsv.Contains("\"oem1.inf\"") && !filteredCsv.Contains("\"SMB1Protocol\""),
                 "CSV must export only currently filtered rows");
         using var jsonDoc = System.Text.Json.JsonDocument.Parse(Wim360Catalog.ToJson(audit, disabled));
-        Require(jsonDoc.RootElement.GetProperty("SchemaVersion").GetInt32() == 1 &&
+        Require(jsonDoc.RootElement.GetProperty("SchemaVersion").GetInt32() == 2 &&
                 jsonDoc.RootElement.GetProperty("Rows").GetArrayLength() == 1 &&
-                jsonDoc.RootElement.GetProperty("ImageIndex").GetInt32() == 2,
+                jsonDoc.RootElement.GetProperty("ImageIndex").GetInt32() == 2 &&
+                jsonDoc.RootElement.GetProperty("InventoryRowCount").GetInt32() == 7 &&
+                !jsonDoc.RootElement.GetProperty("IsCompleteInventory").GetBoolean(),
                 "JSON export must retain source image and filtered records");
         Console.WriteLine("PASS detailed feature/capability inventory, filters and safe CSV/JSON exports");
         return audit;
@@ -407,6 +409,180 @@ internal static class LayoutSmoke
         window.Close();
         Application.DoEvents();
         Console.WriteLine("PASS WIM 360 catalog window layout, filtering, sorting and buttons");
+    }
+
+    private static Wim360SnapshotDiff.DiffReport VerifySnapshotDiff(
+        Wim360Servicing.AuditResult baselineAudit)
+    {
+        var all = Wim360Catalog.BuildRows(baselineAudit);
+        var baselineJson = Wim360Catalog.ToJson(baselineAudit, all);
+        var baseline = Wim360SnapshotDiff.ParseSnapshotJson(baselineJson);
+        Require(baseline.SchemaVersion == 2 && baseline.CoverageKnown &&
+                baseline.IsCompleteInventory && baseline.InventoryRowCount == 7 &&
+                baseline.Rows.Count == 7,
+                "Complete JSON inventory exports must use schema 2 with coverage flags");
+        var reordered = Wim360SnapshotDiff.ParseSnapshotJson(
+            Wim360Catalog.ToJson(baselineAudit, all.AsEnumerable().Reverse()));
+        Require(reordered.IsCompleteInventory,
+                "Reordered full exports must remain marked complete");
+        var filtered = Wim360SnapshotDiff.ParseSnapshotJson(
+            Wim360Catalog.ToJson(baselineAudit, all.Take(1)));
+        Require(filtered.SchemaVersion == 2 && !filtered.IsCompleteInventory &&
+                filtered.InventoryRowCount == 7 && filtered.Rows.Count == 1,
+                "Filtered snapshots cannot claim complete inventory");
+
+        // Older schema 1 exports did not record whether a filter was applied.
+        var legacy = Wim360SnapshotDiff.ParseSnapshotJson(
+            baselineJson.Replace("\"SchemaVersion\": 2", "\"SchemaVersion\": 1"));
+        Require(!legacy.CoverageKnown && !legacy.IsCompleteInventory,
+                "Legacy snapshot must never be considered complete");
+        var legacyDiff = Wim360SnapshotDiff.Compare(legacy, baseline);
+        Require(!legacyDiff.CanDetectMembershipChanges && legacyDiff.AddedCount == 0 &&
+                legacyDiff.RemovedCount == 0 && legacyDiff.Warnings.Count > 0,
+                "Legacy snapshots must not report uncertain adds/removals");
+
+        var newDrivers = new[] {
+            new DriverStudioEngine.DriverPackage {
+                InfName = "oem1.inf", PublishedName = "oem17.inf",
+                Provider = "Vendor", ClassName = "Net",
+                DriverDate = "2026-04-08", Version = "4.3.0", IsInbox = false },
+            new DriverStudioEngine.DriverPackage {
+                InfName = "wifi.inf", PublishedName = "oem27.inf",
+                Provider = "Second Vendor", ClassName = "Net",
+                DriverDate = "2026-04-09", Version = "1.0", IsInbox = false }
+        };
+        var newPackages = new[] {
+            new Wim360Servicing.PackageEntry {
+                Name = "Package \"test\", \r\nline", State = "Installed", ReleaseType = "Update" }
+        };
+        var newComponents = new[] {
+            new Wim360Servicing.ComponentEntry {
+                Kind = "Features", Name = "SMB1Protocol", State = "Enabled" },
+            new Wim360Servicing.ComponentEntry {
+                Kind = "Features", Name = "NetFx3", State = "Enabled" },
+            new Wim360Servicing.ComponentEntry {
+                Kind = "Capabilities", Name = "OpenSSH.Client~~~~0.0.1.0", State = "Installed" },
+            new Wim360Servicing.ComponentEntry {
+                Kind = "Capabilities", Name = "BrandNew.Capability", State = "Installed" }
+        };
+        var newAudit = Wim360Servicing.Summarize(@"C:\images\install.wim", 2,
+            @"C:\Mounted", newDrivers, newPackages, newComponents);
+        var current = Wim360SnapshotDiff.ParseSnapshotJson(
+            Wim360Catalog.ToJson(newAudit, Wim360Catalog.BuildRows(newAudit)));
+        var report = Wim360SnapshotDiff.Compare(baseline, current);
+        Require(report.CanDetectMembershipChanges && report.AddedCount == 2 &&
+                report.RemovedCount == 2 && report.ChangedCount == 3 &&
+                report.UnchangedCount == 2 && report.Changes.Count == 7 &&
+                report.AmbiguousCount == 0,
+                "Snapshot diff failed to distinguish Added/Removed/Changed/Unchanged");
+        var driverChanges = Wim360SnapshotDiff.FilterChanges(
+            report.Changes, "Changed", "Drivers", "4.3");
+        Require(driverChanges.Count == 1 && driverChanges[0].Name == "oem1.inf" &&
+                driverChanges[0].Details.Contains("Version"),
+                "Snapshot filters should combine type, change and version text");
+        var changedCsv = Wim360SnapshotDiff.ToCsv(report, driverChanges);
+        Require(changedCsv.Contains("\"oem1.inf\"") &&
+                !changedCsv.Contains("\"wifi.inf\"") &&
+                !changedCsv.Contains("\"=SUM(1,2).inf\""),
+                "Diff CSV must export only filtered changes");
+        var allCsv = Wim360SnapshotDiff.ToCsv(report, report.Changes);
+        Require(allCsv.Contains("\"'=SUM(1,2).inf\""),
+                "Diff CSV must protect against spreadsheet formula evaluation");
+        using var exportJson = System.Text.Json.JsonDocument.Parse(
+            Wim360SnapshotDiff.ToJson(report, driverChanges));
+        Require(exportJson.RootElement.GetProperty("Rows").GetArrayLength() == 1 &&
+                exportJson.RootElement.GetProperty("Warnings").ValueKind ==
+                System.Text.Json.JsonValueKind.Array,
+                "Diff JSON must include only filtered changes and warnings");
+
+        var uncertain = Wim360SnapshotDiff.Compare(filtered, current);
+        Require(!uncertain.CanDetectMembershipChanges &&
+                uncertain.AddedCount == 0 && uncertain.RemovedCount == 0 &&
+                uncertain.SuppressedMembershipCount > 0 &&
+                uncertain.ChangedCount == 1,
+                "Filtered baseline must suppress unverifiable membership differences");
+
+        var partialAudit = Wim360Servicing.Summarize(@"C:\images\install.wim", 2,
+            @"C:\Mounted", newDrivers, newPackages,
+            newComponents.Where(x => x.Name != "SMB1Protocol").ToArray(),
+            "Feature servicing API is not supported", "");
+        var partial = Wim360SnapshotDiff.ParseSnapshotJson(Wim360Catalog.ToJson(
+            partialAudit, Wim360Catalog.BuildRows(partialAudit)));
+        var partialReport = Wim360SnapshotDiff.Compare(current, partial);
+        Require(partial.IsCompleteInventory && partialReport.RemovedCount == 0 &&
+                partialReport.SuppressedMembershipCount == 1 &&
+                partialReport.Warnings.Any(x => x.Contains("feature", StringComparison.OrdinalIgnoreCase)),
+                "Partial optional-feature inventories must not report false removals");
+
+        var duplicateAudit = Wim360Servicing.Summarize(@"C:\images\install.wim", 2,
+            @"C:\Mounted", newDrivers.Append(newDrivers[0]), newPackages, newComponents);
+        var duplicateReport = Wim360SnapshotDiff.Compare(current,
+            Wim360SnapshotDiff.ParseSnapshotJson(
+                Wim360Catalog.ToJson(duplicateAudit, Wim360Catalog.BuildRows(duplicateAudit))));
+        Require(duplicateReport.AmbiguousCount == 1 && duplicateReport.Warnings.Count > 0,
+                "Repeated driver identities must be flagged rather than silently matched");
+
+        bool malformedRejected = false;
+        try { Wim360SnapshotDiff.ParseSnapshotJson("{\"SchemaVersion\":99}"); }
+        catch (System.IO.InvalidDataException) { malformedRejected = true; }
+        Require(malformedRejected, "Unrecognized JSON schema must be rejected");
+
+        Console.WriteLine("PASS snapshot comparison engine, legacy/filtered protections, partial features and exports");
+        return report;
+    }
+
+    private static void VerifySnapshotCompareWindow(
+        Form owner, Wim360SnapshotDiff.DiffReport report)
+    {
+        using var window = new Wim360CompareForm();
+        window.Show(owner);
+        Application.DoEvents();
+        var baselineField = Find(window, "txt360Baseline") as TextBox;
+        var currentField = Find(window, "txt360Current") as TextBox;
+        var runButton = Find(window, "btn360CompareRun") as Button;
+        var grid = Find(window, "grid360Changes") as DataGridView;
+        var change = Find(window, "cmb360CompareChange") as ComboBox;
+        var type = Find(window, "cmb360CompareType") as ComboBox;
+        var search = Find(window, "txt360CompareSearch") as TextBox;
+        var csv = Find(window, "btn360CompareCsv") as Button;
+        var json = Find(window, "btn360CompareJson") as Button;
+        var close = Find(window, "btn360CompareClose") as Button;
+        Require(baselineField is not null && currentField is not null &&
+                runButton is not null && grid is not null && change is not null &&
+                type is not null && search is not null && csv is not null &&
+                json is not null && close is not null,
+                "WIM 360 snapshot comparison form must expose files, filters and exports");
+        Require(!csv!.Enabled && !json!.Enabled &&
+                grid!.VirtualMode && grid.RowCount == 0,
+                "Snapshot compare must not export before a comparison");
+        NoOverlap(baselineField!, currentField!, "Baseline / Current JSON inputs");
+        NoOverlap(change!, type!, "Change and type filters");
+        NoOverlap(type, search!, "Type and free-text search");
+        NoOverlap(csv, json, "Comparison CSV / JSON buttons");
+        NoOverlap(json, close!, "Comparison JSON / Close buttons");
+
+        window.PreviewComparisonForTest(report);
+        Application.DoEvents();
+        Require(grid.RowCount == 7 && csv.Enabled && json.Enabled,
+                "Loaded comparison must show changes and enable export");
+        change!.SelectedItem = "Changed";
+        Application.DoEvents();
+        Require(grid.RowCount == 3, "Changed filter should show exactly three changes");
+        type!.SelectedItem = "Drivers";
+        Application.DoEvents();
+        Require(grid.RowCount == 1, "Combined type and change filters did not apply");
+        search!.Text = "not-a-driver";
+        Application.DoEvents();
+        Require(grid.RowCount == 0, "Diff search must filter out missing records");
+        search.Clear();
+        change.SelectedIndex = 0;
+        type.SelectedIndex = 0;
+        Application.DoEvents();
+        Require(grid.RowCount == 7, "Clearing filters should restore the full diff");
+        Snapshot(window, "DISM-GUI-WIM360-Snapshot-Compare");
+        window.Close();
+        Application.DoEvents();
+        Console.WriteLine("PASS snapshot comparison UI layout and filters");
     }
 
     private static void VerifyNativeWimReader()
@@ -645,6 +821,7 @@ internal static class LayoutSmoke
             VerifyWimMetadata();
             VerifyMountedAudit();
             var detailFixture = VerifyDetailedInventory();
+            var snapshotReport = VerifySnapshotDiff(detailFixture);
             VerifyNativeWimReader();
             var driverFixture = VerifyDriverStudioEngine();
             Require(tabs.TabPages.Count == 11 &&
@@ -714,6 +891,12 @@ internal static class LayoutSmoke
                     selectedDetails.Text.Contains("Optional features: 2"),
                     "Finished audit must enable details and display component summary");
             VerifyCatalogWindow(form, detailFixture);
+            var compareSnapshotButton = Find(dashboard, "btn360CompareSnapshots") as Button;
+            Require(compareSnapshotButton is not null && compareSnapshotButton.Enabled,
+                    "WIM 360 must expose offline snapshot comparison even without an active audit");
+            NoOverlap(auditWimButton!, inventoryButton!, "WIM 360 audit and inventory buttons");
+            NoOverlap(compareSnapshotButton!, auditWimButton, "WIM 360 compare and audit buttons");
+            VerifySnapshotCompareWindow(form, snapshotReport);
             indexGrid.Rows[1].Selected = true;
             Application.DoEvents();
             selectedWimButton.PerformClick();
