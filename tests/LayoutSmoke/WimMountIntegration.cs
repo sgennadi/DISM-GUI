@@ -106,6 +106,49 @@ internal static class WimMountIntegration
                           "missing part rejected and SHA-256 unchanged.");
     }
 
+    // Diagnostic probe: determine the exact output of Windows' supported
+    // native file listing API before enabling an unmounted multi-index parser.
+    // Uses the disposable CI fixture only. Never modifies or mounts the image.
+    public static void ProbeOfflineList(string image)
+    {
+        if (Environment.GetEnvironmentVariable("DISMGUI_TEST_WIM_MOUNT") != "1")
+            return;
+        var result = RunDism(new[] {
+            "/English", "/List-Image", "/ImageFile:" + Path.GetFullPath(image),
+            "/Index:1"
+        }, 180000);
+        Console.WriteLine("OFFLINE DISM /List-Image probe exit=" + result.ExitCode +
+            " output:\n" + result.Output[..Math.Min(3500, result.Output.Length)]);
+
+        var psi = new ProcessStartInfo("powershell.exe") {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        var literal = Path.GetFullPath(image).Replace("'", "''");
+        psi.ArgumentList.Add("-NoProfile");
+        psi.ArgumentList.Add("-NonInteractive");
+        psi.ArgumentList.Add("-Command");
+        psi.ArgumentList.Add("$ErrorActionPreference='Stop'; Import-Module Dism; " +
+            "$items=@(Get-WindowsImageContent -ImagePath '" + literal +
+            "' -Index 1); Write-Output ('COUNT=' + $items.Count); " +
+            "$items | ConvertTo-Json -Compress -Depth 3");
+        using var child = new Process { StartInfo = psi };
+        if (child.Start()) {
+            var output = child.StandardOutput.ReadToEndAsync();
+            var error = child.StandardError.ReadToEndAsync();
+            if (!child.WaitForExit(180000)) {
+                child.Kill(entireProcessTree: true);
+                child.WaitForExit(10000);
+            }
+            var combined = output.GetAwaiter().GetResult() +
+                "\n" + error.GetAwaiter().GetResult();
+            Console.WriteLine("OFFLINE Get-WindowsImageContent probe exit=" +
+                child.ExitCode + " output:\n" + combined[..Math.Min(3500, combined.Length)]);
+        }
+    }
+
     public static void Verify(string image, string root)
     {
         if (Environment.GetEnvironmentVariable("DISMGUI_TEST_WIM_MOUNT") != "1")
