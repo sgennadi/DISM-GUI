@@ -38,7 +38,11 @@ internal static class LayoutSmoke
             System.IO.Directory.CreateDirectory(folder);
             using var snapshot = new Bitmap(window.Width, window.Height);
             window.DrawToBitmap(snapshot, new Rectangle(Point.Empty, window.Size));
-            snapshot.Save(System.IO.Path.Combine(folder, name + ".png"),
+            var scale = Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_FONT_SCALE");
+            var prefix = Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_ONLY") == "1" &&
+                         !string.IsNullOrWhiteSpace(scale)
+                ? "FontScale-" + scale!.Replace(".", "_") + "-" : "";
+            snapshot.Save(System.IO.Path.Combine(folder, prefix + name + ".png"),
                           System.Drawing.Imaging.ImageFormat.Png);
         }
         catch (Exception ex)
@@ -1284,6 +1288,10 @@ internal static class LayoutSmoke
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            var testScale = Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_FONT_SCALE");
+            if (Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_ONLY") == "1")
+                Console.WriteLine("SIMULATED DPI FONT SCALE " + testScale +
+                    " (not a substitute for a physical Windows DPI session)");
             using var form = new frmMain();
             form.Show();
             Application.DoEvents();
@@ -1303,7 +1311,10 @@ internal static class LayoutSmoke
             VerifyIntegratedTestCenter(form);
             var detailFixture = VerifyDetailedInventory();
             var snapshotReport = VerifySnapshotDiff(detailFixture);
-            VerifyNativeWimReader();
+            if (Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_ONLY") != "1")
+                VerifyNativeWimReader();
+            else
+                Console.WriteLine("SIMULATED DPI LAYOUT: skipped real WIM capture/mount tests.");
             var driverFixture = VerifyDriverStudioEngine();
             Require(tabs.TabPages.Count == 11 &&
                     tabs.TabPages[9].Name == "TabPageWim360" &&
