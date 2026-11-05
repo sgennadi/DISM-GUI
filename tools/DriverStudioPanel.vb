@@ -82,6 +82,7 @@ Public NotInheritable Class DriverStudioPanel
         ' Show the driver decision grid earlier in short windows.
         ' Scale rows to the real UI font instead of clipping content at high DPI.
         Dim layoutScale As Single = Math.Max(1.0F, Me.Font.Height / 16.0F)
+        Dim stackSource As Boolean = layoutScale > 1.15F
         For Each h As Integer In {60, 64, 52, 42, 235, 72, 155, 74, 80}
             rootLayout.RowStyles.Add(New RowStyle(SizeType.Absolute,
                 CInt(Math.Ceiling(h * layoutScale))))
@@ -89,10 +90,17 @@ Public NotInheritable Class DriverStudioPanel
         rootLayout.Height = rootLayout.RowStyles.Cast(Of RowStyle)().
             Sum(Function(row) CInt(row.Height)) + rootLayout.Padding.Vertical + 8
         viewport.Controls.Add(rootLayout)
-        AddHandler viewport.ClientSizeChanged, Sub(sender, e)
-            Dim wanted = Math.Max(CInt(Math.Ceiling(800 * layoutScale)), viewport.ClientSize.Width - 1)
+        Dim resizeStudio As Action = Sub()
+            If viewport.IsDisposed OrElse rootLayout.IsDisposed Then Return
+            Dim minimum = If(stackSource, 660, CInt(Math.Ceiling(800 * layoutScale)))
+            Dim wanted = Math.Max(minimum, viewport.ClientSize.Width - 1)
             If rootLayout.Width <> wanted Then rootLayout.Width = wanted
         End Sub
+        AddHandler viewport.ClientSizeChanged, Sub(sender, e) resizeStudio()
+        AddHandler Me.VisibleChanged, Sub(sender, e)
+            If Me.Visible Then resizeStudio()
+        End Sub
+        resizeStudio()
 
         Dim heading As New TableLayoutPanel With {
             .RowCount = 2, .ColumnCount = 1, .Dock = DockStyle.Fill,
@@ -102,19 +110,29 @@ Public NotInheritable Class DriverStudioPanel
         heading.RowStyles.Add(New RowStyle(SizeType.Percent, 58))
         heading.RowStyles.Add(New RowStyle(SizeType.Percent, 42))
         rootLayout.Controls.Add(heading, 0, 0)
-        heading.Controls.Add(WriteLabel("DRIVER STUDIO  |  SMART VERSION DETECTION",
+        heading.Controls.Add(WriteLabel(If(stackSource,
+                                         "DRIVER STUDIO  |  VERSION CHECK",
+                                         "DRIVER STUDIO  |  SMART VERSION DETECTION"),
                                         12.4F, True, ModernTheme.TextInk), 0, 0)
         heading.Controls.Add(WriteLabel("Read-only scan. Compares with the selected mounted WIM index.",
                                         9.1F, False, ModernTheme.Muted), 0, 1)
 
         Dim sourceRow As New TableLayoutPanel With {
             .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 0, 6),
-            .ColumnCount = 3, .RowCount = 1, .BackColor = Color.White
+            .ColumnCount = If(stackSource, 2, 3),
+            .RowCount = If(stackSource, 2, 1), .BackColor = Color.White
         }
-        sourceRow.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(176 * layoutScale))))
-        sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(128 * layoutScale))))
+        If stackSource Then
+            sourceRow.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
+            sourceRow.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
+            sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
+            sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
+        Else
+            sourceRow.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+            sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+            sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(176 * layoutScale))))
+            sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(128 * layoutScale))))
+        End If
         rootLayout.Controls.Add(sourceRow, 0, 1)
         sourceBox = New TextBox With {
             .Name = "txtStudioSource", .Dock = DockStyle.Fill,
@@ -124,6 +142,7 @@ Public NotInheritable Class DriverStudioPanel
             .Margin = New Padding(1, 13, 7, 11)
         }
         sourceRow.Controls.Add(sourceBox, 0, 0)
+        If stackSource Then sourceRow.SetColumnSpan(sourceBox, 2)
 
         Dim browse As New Button With {
             .Name = "btnStudioBrowse", .Text = "Choose folder",
@@ -145,7 +164,7 @@ Public NotInheritable Class DriverStudioPanel
                 End If
             End Using
         End Sub
-        sourceRow.Controls.Add(browse, 1, 0)
+        sourceRow.Controls.Add(browse, If(stackSource, 0, 1), If(stackSource, 1, 0))
 
         scanButton = New Button With {
             .Name = "btnStudioScan", .Text = "Scan INF",
@@ -154,7 +173,7 @@ Public NotInheritable Class DriverStudioPanel
         ModernTheme.StyleButton(scanButton, "primary")
         scanButton.AutoEllipsis = False
         AddHandler scanButton.Click, AddressOf ScanClicked
-        sourceRow.Controls.Add(scanButton, 2, 0)
+        sourceRow.Controls.Add(scanButton, If(stackSource, 1, 2), If(stackSource, 1, 0))
 
         Dim settings As New TableLayoutPanel With {
             .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 1,
