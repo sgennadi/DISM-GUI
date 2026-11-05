@@ -14,8 +14,8 @@ Public NotInheritable Class Wim360OfflineList
     Private Sub New()
     End Sub
 
-    Private Const MaxEntriesPerIndex As Integer = 250000
-    Private Const MaxEntriesTotal As Integer = 650000
+    Private Const MaxEntriesPerIndex As Integer = 350000
+    Private Const MaxEntriesTotal As Integer = 1250000
 
     ' A pure parser for the English DISM output; also used by regression tests.
     Public Shared Function ParseEnglishListing(output As String,
@@ -186,6 +186,40 @@ Public NotInheritable Class Wim360OfflineList
         End Using
     End Function
 
+    ' Enumerate one index at a time. Prior to this change, the comparison
+    ' retained all per-index catalogs plus LINQ grouping in memory at once.
+    ' Yield completed batches and let CompareRecords aggregate one pass.
+    Private Shared Iterator Function EnumerateIndexBatches(
+                     imagePath As String,
+                     selected As IEnumerable(Of Wim360Reader.ImageInfo),
+                     token As CancellationToken,
+                     progress As IProgress(Of String)
+                     ) As IEnumerable(Of Wim360IndexComparer.Item)
+        Dim total As Integer = 0
+        Dim count As Integer = 0
+        Dim indexes = selected.ToList()
+        For Each image In indexes
+            token.ThrowIfCancellationRequested()
+            count += 1
+            If progress IsNot Nothing Then
+                progress.Report("Reading index " & count.ToString() & "/" &
+                                indexes.Count.ToString() & " (WIM index " &
+                                image.Index.ToString() & ") - no mounting")
+            End If
+            Dim batch = ListIndex(imagePath, image.Index, token, progress)
+            For Each entry In batch
+                token.ThrowIfCancellationRequested()
+                total += 1
+                If total > MaxEntriesTotal Then
+                    Throw New InvalidDataException(
+                        "Combined catalog exceeds " & MaxEntriesTotal.ToString() &
+                        " paths. No partial comparison was shown.")
+                End If
+                Yield entry
+            Next
+        Next
+    End Function
+
     Public Shared Function Compare(report As Wim360Reader.WimReport,
                           indexes As IEnumerable(Of Integer),
                           token As CancellationToken,
@@ -213,28 +247,14 @@ Public NotInheritable Class Wim360OfflineList
                               old.Name = x.Name)) Then
             Throw New InvalidOperationException("The WIM index catalog changed. Inspect again.")
         End If
-        Dim records As New List(Of Wim360IndexComparer.Item)()
-        For Each image In chosen
-            token.ThrowIfCancellationRequested()
-            If progress IsNot Nothing Then
-                progress.Report("Listing index " & image.Index.ToString() &
-                                " / " & chosen.Count.ToString() & " without mounting...")
-            End If
-            records.AddRange(ListIndex(imagePath, image.Index, token, progress))
-            If records.Count > MaxEntriesTotal Then
-                Throw New InvalidDataException(
-                    "Combined catalog exceeds " & MaxEntriesTotal.ToString() &
-                    " entries. No incomplete comparison was shown.")
-            End If
-        Next
+        Dim result = Wim360IndexComparer.CompareRecords(imagePath,
+                    "Offline file/folder presence (no mount)",
+                    chosen.Select(Function(x) x.Index),
+                    EnumerateIndexBatches(imagePath, chosen, token, progress))
         original.Refresh()
         If original.Length <> report.FileSizeBytes OrElse
            original.LastWriteTimeUtc <> report.ModifiedUtc Then
             Throw New IOException("The source WIM changed during enumeration. Results discarded.")
-        End If
-        Dim result = Wim360IndexComparer.CompareRecords(imagePath,
-                    "Offline file/folder presence (no mount)",
-                    chosen.Select(Function(x) x.Index), records)
         result.Notes = "Read from the source WIM without mounting. " &
             "Presence/absence only; no file sizes or SHA-256 hashes. " &
             "Files with identical names may have different contents."
