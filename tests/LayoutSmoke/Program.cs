@@ -642,6 +642,8 @@ internal static class LayoutSmoke
                 title is not null && description is not null &&
                 copy is not null && draft is not null && close is not null,
                 "Error report UI is missing required preview, consent or export controls");
+        Require(preview!.WordWrap && preview.ScrollBars == ScrollBars.Vertical,
+                "Diagnostics preview must wrap long report lines without requiring horizontal scrolling");
         Require(!include!.Checked && !history!.Checked &&
                 !reviewed!.Checked && !draft!.Enabled,
                 "Diagnostic logs must opt-in and GitHub action must require review");
