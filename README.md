@@ -57,6 +57,12 @@ as Home vs Pro on the same build. If metadata is missing, the overview
 does not guess that indexes are the same. It also warns that matching
 metadata is not proof of identical file contents. The overview is included
 in **Copy report**; it never changes the WIM.
+The **Compare suggested pair** action opens the existing index comparison
+with the two suggested indexes already selected and the **Differences only**
+filter active. The first preview compares metadata only. To compare actual
+file/folder presence without mounting, choose **Files + folders (no mounting)**
+and click **Compare selected indexes**. Filters are retained across re-runs
+when they still apply; **Reset** clears them.
 **Use index in Mount** transfers the selected WIM path and
 index to the original Mount form but **never mounts or modifies the image**.
 Use **Copy report** to copy the read-only text report. The new

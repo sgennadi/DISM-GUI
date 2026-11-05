@@ -265,7 +265,7 @@ Public NotInheritable Class Wim360Dashboard
         AddHandler compareSuggestedButton.Click, Sub(sender, e)
             If report Is Nothing OrElse suggestedPair Is Nothing OrElse report.ImageCount < 2 Then Return
             Dim indexes = New Integer() {suggestedPair.FirstIndex, suggestedPair.SecondIndex}
-            Using viewer As New Wim360CompareIndexesForm(report, indexes)
+            Using viewer As New Wim360CompareIndexesForm(report, indexes, True)
                 viewer.ShowDialog(Me.FindForm())
             End Using
         End Sub

@@ -319,6 +319,13 @@ internal static class LayoutSmoke
                 Wim360IndexComparer.Filter(comparison.Rows, "Files",
                     "Different", "changed.dll").Count == 1,
                 "Index comparison filters must combine state, type and search");
+        var changesOnly = Wim360IndexComparer.Filter(
+            comparison.Rows, "All types", "Differences only", "", 3);
+        Require(changesOnly.Count == 4 &&
+                !changesOnly.Any(x => x.Name.EndsWith("common.dll")) &&
+                changesOnly.Any(x => x.Name.EndsWith("changed.dll")) &&
+                changesOnly.Any(x => x.Name.EndsWith("missing.dll")),
+                "Changes-only filter must include missing/unique/different rows");
         var allPresent = Wim360IndexComparer.Filter(comparison.Rows, "All types",
             "Exists in all", "", 3);
         Require(allPresent.Count == 2 &&
@@ -348,8 +355,10 @@ internal static class LayoutSmoke
                 new Wim360IndexComparer.Item { Index = 2, Kind="Files", Key="same.inf", Value="Present" },
                 new Wim360IndexComparer.Item { Index = 3, Kind="Files", Key="same.inf", Value="Present" }
             });
-        Require(repeated.Rows.Single().State == "Ambiguous duplicates",
-                "Streamed comparer must not hide ambiguous duplicate identities");
+        Require(repeated.Rows.Single().State == "Ambiguous duplicates" &&
+                Wim360IndexComparer.Filter(repeated.Rows, "All types",
+                    "Differences only", "", 3).Count == 1,
+                "Changes-only filter must retain ambiguous duplicate identities");
 
         var folderComparison = Wim360IndexComparer.CompareRecords(report.ImageFile,
             "Mounted file paths / sizes", new[] { 1, 2, 3 }, new[] {
@@ -460,7 +469,11 @@ internal static class LayoutSmoke
             $"Third WIM index is offscreen in the three-column comparison: " +
             $"right={thirdIndexRect.Right}, width={matrix.ClientSize.Width}, " +
             $"fontScale={Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_FONT_SCALE")}");
-        state!.SelectedItem = "Missing / only in some";
+        state!.SelectedItem = "Differences only";
+        Application.DoEvents();
+        Require(matrix.RowCount == 4,
+                "Changes-only GUI filter must hide matching file entries");
+        state.SelectedItem = "Missing / only in some";
         Application.DoEvents();
         Require(matrix.RowCount == 3,
                 "Missing filter must include unique and partially absent paths");
@@ -468,6 +481,11 @@ internal static class LayoutSmoke
         Application.DoEvents();
         Require(matrix.RowCount == 2,
                 "Missing-from-index filter must show paths absent in index 3");
+        dialog.PreviewForTest(comparison);
+        Application.DoEvents();
+        Require(state.SelectedItem?.ToString() == "Missing from Index 3" &&
+                matrix.RowCount == 2,
+                "Comparison refresh must retain applicable user filters");
         state.SelectedItem = "Present in Index 3";
         Application.DoEvents();
         Require(matrix.RowCount == 3,
@@ -514,14 +532,17 @@ internal static class LayoutSmoke
 
         // Recommended pair launches the existing multi-index viewer with precisely
         // the suggested two indexes selected, rather than the first three.
-        using (var suggestedViewer = new Wim360CompareIndexesForm(catalog, new[] { 1, 3 }))
+        using (var suggestedViewer = new Wim360CompareIndexesForm(
+            catalog, new[] { 1, 3 }, true))
         {
             var selected = Find(suggestedViewer, "lst360CompareIndexes") as CheckedListBox;
             var checkedIndexes = selected?.CheckedItems.Cast<Wim360Reader.ImageInfo>()
                 .Select(x => x.Index).OrderBy(x => x).ToArray();
+            var suggestedFilter = Find(suggestedViewer, "cmb360IndexCompareState") as ComboBox;
             Require(checkedIndexes is not null &&
-                    checkedIndexes.SequenceEqual(new[] { 1, 3 }),
-                "Suggested index pair must preselect exactly the requested indexes");
+                    checkedIndexes.SequenceEqual(new[] { 1, 3 }) &&
+                    suggestedFilter?.SelectedItem?.ToString() == "Differences only",
+                "Suggested indexes must be preselected with differences-only filter");
         }
 
         // Different build, same edition and architecture: a useful upgrade

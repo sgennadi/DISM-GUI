@@ -337,7 +337,16 @@ Public NotInheritable Class Wim360IndexComparer
                Not String.Equals(x.Kind, typeText, StringComparison.OrdinalIgnoreCase) Then
                 Return False
             End If
-            If stateText = "Missing / only in some" Then
+            If stateText = "Differences only" Then
+                ' Include changed values, missing/unique rows, and ambiguous
+                ' duplicates that need attention; never label matches as changes.
+                If Not (x.State = "Different" OrElse
+                        x.State = "Missing in some" OrElse
+                        x.State = "Ambiguous duplicates" OrElse
+                        x.State.StartsWith("Only in Index ", StringComparison.Ordinal)) Then
+                    Return False
+                End If
+            ElseIf stateText = "Missing / only in some" Then
                 If Not (x.State.StartsWith("Only in Index ", StringComparison.Ordinal) OrElse
                         x.State = "Missing in some") Then Return False
             ElseIf stateText.StartsWith("Missing from Index ", StringComparison.Ordinal) Then
