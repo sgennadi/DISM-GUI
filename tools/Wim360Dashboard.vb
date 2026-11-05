@@ -549,7 +549,8 @@ Public NotInheritable Class Wim360Dashboard
                 status.Text = "Mounted audit canceled; no image changes were made."
             End If
         Catch ex As Exception
-            errorMessage = ex.Message
+            ErrorDiagnostics.RememberFailure("WIM 360 mounted audit", ex)
+            errorMessage = ErrorDiagnostics.Redact(ex.Message)
         Finally
             If Object.ReferenceEquals(auditCancellation, auditToken) Then
                 auditCancellation = Nothing
