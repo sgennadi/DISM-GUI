@@ -74,26 +74,40 @@ Public NotInheritable Class Wim360CompareIndexesForm
             .Padding = New Padding(15, 10, 15, 12), .BackColor = Color.White
         }
         root.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+        ' Compact DPI mode keeps index selection and comparison mode side by
+        ' side and reserves a visible grid, rather than stacking controls so
+        ' deeply that the comparison table starts below the window.
         Dim headerRows As Integer() = If(stackedLayout,
-                                        New Integer() {76, 245, 108},
-                                        New Integer() {76, 156, 62})
+            New Integer() {
+                CInt(Math.Ceiling(70 + 13 * (uiScale - 1))),
+                CInt(Math.Ceiling(133 + 42 * (uiScale - 1))),
+                CInt(Math.Ceiling(65 + 45 * (uiScale - 1)))
+            },
+            New Integer() {CInt(Math.Ceiling(76 * uiScale)),
+                           CInt(Math.Ceiling(156 * uiScale)),
+                           CInt(Math.Ceiling(62 * uiScale))})
         For Each h As Integer In headerRows
-            root.RowStyles.Add(New RowStyle(SizeType.Absolute,
-                CInt(Math.Ceiling(h * uiScale))))
+            root.RowStyles.Add(New RowStyle(SizeType.Absolute, h))
         Next
+        Dim statusHeight As Integer = If(stackedLayout,
+            CInt(Math.Ceiling(52 + 17 * (uiScale - 1))),
+            CInt(Math.Ceiling(80 * uiScale)))
+        Dim actionsHeight As Integer = If(stackedLayout,
+            CInt(Math.Ceiling(85 + 29 * (uiScale - 1))),
+            CInt(Math.Ceiling(68 * uiScale)))
+        Dim minimumGridHeight As Integer = If(stackedLayout, 147,
+                                             CInt(Math.Ceiling(235 * uiScale)))
         root.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        root.RowStyles.Add(New RowStyle(SizeType.Absolute,
-            CInt(Math.Ceiling(80 * uiScale))))
-        root.RowStyles.Add(New RowStyle(SizeType.Absolute,
-            CInt(Math.Ceiling(If(stackedLayout, 135, 68) * uiScale))))
+        root.RowStyles.Add(New RowStyle(SizeType.Absolute, statusHeight))
+        root.RowStyles.Add(New RowStyle(SizeType.Absolute, actionsHeight))
         viewport.Controls.Add(root)
         Dim adjustViewport As Action = Sub()
             If root.IsDisposed OrElse viewport.IsDisposed Then Return
             Dim requiredWidth = If(stackedLayout, 780,
                                    CInt(Math.Ceiling(990 * uiScale)))
-            Dim requiredHeight = CInt(Math.Ceiling(
-                headerRows.Sum() + 80 + If(stackedLayout, 135, 68) + 235
-            ) * uiScale) + root.Padding.Vertical
+            Dim requiredHeight = headerRows.Sum() + statusHeight +
+                                 actionsHeight + minimumGridHeight +
+                                 root.Padding.Vertical
             Dim wantedWidth = Math.Max(requiredWidth, viewport.ClientSize.Width - 1)
             Dim wantedHeight = Math.Max(requiredHeight, viewport.ClientSize.Height - 1)
             If root.Width <> wantedWidth OrElse root.Height <> wantedHeight Then
@@ -114,7 +128,8 @@ Public NotInheritable Class Wim360CompareIndexesForm
         }
         heading.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         heading.RowStyles.Add(New RowStyle(SizeType.Absolute,
-            CInt(Math.Ceiling(40 * uiScale))))
+            If(stackedLayout, CInt(Math.Ceiling(31 + 11 * (uiScale - 1))),
+               CInt(Math.Ceiling(40 * uiScale)))))
         heading.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         Dim title = MakeLabel(If(stackedLayout,
                                  "COMPARE INDEXES  |  WHAT IS MISSING",
@@ -140,19 +155,12 @@ Public NotInheritable Class Wim360CompareIndexesForm
 
         Dim settings As New TableLayoutPanel With {
             .Dock = DockStyle.Fill,
-            .ColumnCount = If(stackedLayout, 1, 2),
-            .RowCount = If(stackedLayout, 2, 1),
+            .ColumnCount = 2, .RowCount = 1,
             .Margin = New Padding(0, 3, 0, 7)
         }
-        If stackedLayout Then
-            settings.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-            settings.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
-            settings.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
-        Else
-            settings.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 57))
-            settings.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 43))
-            settings.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        End If
+        settings.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 54))
+        settings.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 46))
+        settings.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         root.Controls.Add(settings, 0, 1)
 
         Dim selectArea As New TableLayoutPanel With {
@@ -161,7 +169,8 @@ Public NotInheritable Class Wim360CompareIndexesForm
         }
         selectArea.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         selectArea.RowStyles.Add(New RowStyle(SizeType.Absolute,
-            CInt(Math.Ceiling(32 * uiScale))))
+            If(stackedLayout, CInt(Math.Ceiling(25 + 10 * (uiScale - 1))),
+               CInt(Math.Ceiling(32 * uiScale)))))
         selectArea.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         selectArea.Controls.Add(MakeLabel("INDEXES TO COMPARE (CHOOSE 2–8)", 9.5F, True), 0, 0)
         selectedIndexes = New CheckedListBox With {
@@ -183,9 +192,11 @@ Public NotInheritable Class Wim360CompareIndexesForm
         }
         options.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         options.RowStyles.Add(New RowStyle(SizeType.Absolute,
-            CInt(Math.Ceiling(32 * uiScale))))
+            If(stackedLayout, CInt(Math.Ceiling(25 + 10 * (uiScale - 1))),
+               CInt(Math.Ceiling(32 * uiScale)))))
         options.RowStyles.Add(New RowStyle(SizeType.Absolute,
-            CInt(Math.Ceiling(52 * uiScale))))
+            If(stackedLayout, CInt(Math.Ceiling(32 + 16 * (uiScale - 1))),
+               CInt(Math.Ceiling(52 * uiScale)))))
         options.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         options.Controls.Add(MakeLabel("WHAT TO COMPARE", 9.5F, True), 0, 0)
         modeBox = New ComboBox With {
@@ -207,8 +218,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
         explanation.ForeColor = ModernTheme.Muted
         explanation.AutoEllipsis = False
         options.Controls.Add(explanation, 0, 2)
-        settings.Controls.Add(options, If(stackedLayout, 0, 1),
-                              If(stackedLayout, 1, 0))
+        settings.Controls.Add(options, 1, 0)
 
         Dim filters As New TableLayoutPanel With {
             .Dock = DockStyle.Fill,
@@ -296,7 +306,8 @@ Public NotInheritable Class Wim360CompareIndexesForm
         }
         statusPanel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         statusPanel.RowStyles.Add(New RowStyle(SizeType.Absolute,
-            CInt(Math.Ceiling(31 * uiScale))))
+            If(stackedLayout, CInt(Math.Ceiling(28 + 11 * (uiScale - 1))),
+               CInt(Math.Ceiling(31 * uiScale)))))
         statusPanel.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         summaryLabel = MakeLabel("Select at least two indexes.", 9.4F, True)
         summaryLabel.Name = "lbl360IndexCompareSummary"
