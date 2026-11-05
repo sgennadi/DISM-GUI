@@ -60,6 +60,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
         ' A single scrollable viewport protects every action/heading at high
         ' DPI and on small screens; the grid retains its own scrollbars.
         Dim uiScale As Single = Math.Max(1.0F, Me.Font.Height / 17.0F)
+        Dim stackedLayout As Boolean = uiScale > 1.15F
         Dim viewport As New Panel With {
             .Name = "Wim360CompareIndexesViewport",
             .Dock = DockStyle.Fill, .AutoScroll = True,
@@ -73,7 +74,10 @@ Public NotInheritable Class Wim360CompareIndexesForm
             .Padding = New Padding(15, 10, 15, 12), .BackColor = Color.White
         }
         root.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        For Each h In {76, 156, 62}
+        Dim headerRows As Integer() = If(stackedLayout,
+                                        New Integer() {76, 245, 108},
+                                        New Integer() {76, 156, 62})
+        For Each h As Integer In headerRows
             root.RowStyles.Add(New RowStyle(SizeType.Absolute,
                 CInt(Math.Ceiling(h * uiScale))))
         Next
@@ -81,13 +85,15 @@ Public NotInheritable Class Wim360CompareIndexesForm
         root.RowStyles.Add(New RowStyle(SizeType.Absolute,
             CInt(Math.Ceiling(80 * uiScale))))
         root.RowStyles.Add(New RowStyle(SizeType.Absolute,
-            CInt(Math.Ceiling(68 * uiScale))))
+            CInt(Math.Ceiling(If(stackedLayout, 135, 68) * uiScale))))
         viewport.Controls.Add(root)
         Dim adjustViewport As Action = Sub()
             If root.IsDisposed OrElse viewport.IsDisposed Then Return
-            Dim requiredWidth = CInt(Math.Ceiling(990 * uiScale))
-            Dim requiredHeight = CInt(Math.Ceiling(76 + 156 + 62 + 80 + 68 + 235) *
-                                     uiScale) + root.Padding.Vertical
+            Dim requiredWidth = If(stackedLayout, 780,
+                                   CInt(Math.Ceiling(990 * uiScale)))
+            Dim requiredHeight = CInt(Math.Ceiling(
+                headerRows.Sum() + 80 + If(stackedLayout, 135, 68) + 235
+            ) * uiScale) + root.Padding.Vertical
             Dim wantedWidth = Math.Max(requiredWidth, viewport.ClientSize.Width - 1)
             Dim wantedHeight = Math.Max(requiredHeight, viewport.ClientSize.Height - 1)
             If root.Width <> wantedWidth OrElse root.Height <> wantedHeight Then
@@ -95,7 +101,12 @@ Public NotInheritable Class Wim360CompareIndexesForm
             End If
         End Sub
         AddHandler viewport.ClientSizeChanged, Sub(sender, e) adjustViewport()
-        AddHandler Me.Shown, Sub(sender, e) adjustViewport()
+        AddHandler Me.Shown, Sub(sender, e)
+            adjustViewport()
+            Me.BeginInvoke(New MethodInvoker(Sub()
+                If Not viewport.IsDisposed Then viewport.AutoScrollPosition = Point.Empty
+            End Sub))
+        End Sub
         adjustViewport()
 
         Dim heading As New TableLayoutPanel With {
@@ -105,7 +116,9 @@ Public NotInheritable Class Wim360CompareIndexesForm
         heading.RowStyles.Add(New RowStyle(SizeType.Absolute,
             CInt(Math.Ceiling(40 * uiScale))))
         heading.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        Dim title = MakeLabel("COMPARE IMAGE INDEXES  |  WHAT EXISTS / WHAT IS MISSING",
+        Dim title = MakeLabel(If(stackedLayout,
+                                 "COMPARE INDEXES  |  WHAT IS MISSING",
+                                 "COMPARE IMAGE INDEXES  |  WHAT EXISTS / WHAT IS MISSING"),
                               13, True)
         title.Name = "lblIndexCompareTitle"
         heading.Controls.Add(title, 0, 0)
@@ -126,12 +139,20 @@ Public NotInheritable Class Wim360CompareIndexesForm
         root.Controls.Add(heading, 0, 0)
 
         Dim settings As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 1,
+            .Dock = DockStyle.Fill,
+            .ColumnCount = If(stackedLayout, 1, 2),
+            .RowCount = If(stackedLayout, 2, 1),
             .Margin = New Padding(0, 3, 0, 7)
         }
-        settings.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 57))
-        settings.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 43))
-        settings.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        If stackedLayout Then
+            settings.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+            settings.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
+            settings.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
+        Else
+            settings.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 57))
+            settings.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 43))
+            settings.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        End If
         root.Controls.Add(settings, 0, 1)
 
         Dim selectArea As New TableLayoutPanel With {
@@ -186,20 +207,30 @@ Public NotInheritable Class Wim360CompareIndexesForm
         explanation.ForeColor = ModernTheme.Muted
         explanation.AutoEllipsis = False
         options.Controls.Add(explanation, 0, 2)
-        settings.Controls.Add(options, 1, 0)
+        settings.Controls.Add(options, If(stackedLayout, 0, 1),
+                              If(stackedLayout, 1, 0))
 
         Dim filters As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 4, .RowCount = 1,
+            .Dock = DockStyle.Fill,
+            .ColumnCount = If(stackedLayout, 2, 4),
+            .RowCount = If(stackedLayout, 2, 1),
             .Margin = New Padding(0, 3, 0, 5)
         }
-        filters.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        filters.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
-            CInt(Math.Ceiling(155 * uiScale))))
-        filters.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
-            CInt(Math.Ceiling(252 * uiScale))))
-        filters.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        filters.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
-            CInt(Math.Ceiling(112 * uiScale))))
+        If stackedLayout Then
+            filters.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
+            filters.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
+            filters.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
+            filters.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
+        Else
+            filters.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+            filters.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
+                CInt(Math.Ceiling(155 * uiScale))))
+            filters.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
+                CInt(Math.Ceiling(252 * uiScale))))
+            filters.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+            filters.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
+                CInt(Math.Ceiling(112 * uiScale))))
+        End If
         root.Controls.Add(filters, 0, 2)
         categoryBox = New ComboBox With {
             .Name = "cmb360IndexCompareType", .Dock = DockStyle.Fill,
@@ -224,13 +255,15 @@ Public NotInheritable Class Wim360CompareIndexesForm
             .PlaceholderText = "Search paths, names, versions and values",
             .Margin = New Padding(0, 8, 8, 7)
         }
-        filters.Controls.Add(searchBox, 2, 0)
+        filters.Controls.Add(searchBox, If(stackedLayout, 0, 2),
+                             If(stackedLayout, 1, 0))
         Dim reset As New Button With {
             .Name = "btn360IndexCompareReset", .Text = "Reset",
             .Dock = DockStyle.Fill, .Margin = New Padding(0, 6, 0, 6)
         }
         ModernTheme.StyleButton(reset, "neutral")
-        filters.Controls.Add(reset, 3, 0)
+        filters.Controls.Add(reset, If(stackedLayout, 1, 3),
+                             If(stackedLayout, 1, 0))
 
         grid = New DataGridView With {
             .Name = "grid360IndexComparison", .Dock = DockStyle.Fill,
@@ -276,42 +309,53 @@ Public NotInheritable Class Wim360CompareIndexesForm
         root.Controls.Add(statusPanel, 0, 4)
 
         Dim actions As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 5, .RowCount = 1,
+            .Dock = DockStyle.Fill,
+            .ColumnCount = If(stackedLayout, 2, 5),
+            .RowCount = If(stackedLayout, 2, 1),
             .Margin = Padding.Empty
         }
-        actions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        For Each columnWidth As Integer In {245, 175, 205, 140}
-            actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
-                CInt(Math.Ceiling(columnWidth * uiScale))))
-        Next
+        If stackedLayout Then
+            actions.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
+            actions.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
+            actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
+            actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
+        Else
+            actions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+            actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+            For Each columnWidth As Integer In {245, 175, 205, 140}
+                actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
+                    CInt(Math.Ceiling(columnWidth * uiScale))))
+            Next
+        End If
         root.Controls.Add(actions, 0, 5)
         compareButton = New Button With {
             .Name = "btn360RunIndexCompare", .Text = "Compare selected indexes",
             .Dock = DockStyle.Fill, .Margin = New Padding(4, 7, 6, 4)
         }
         ModernTheme.StyleButton(compareButton, "primary")
-        actions.Controls.Add(compareButton, 1, 0)
+        actions.Controls.Add(compareButton, If(stackedLayout, 0, 1), 0)
         hashButton = New Button With {
             .Name = "btn360IndexCompareHash", .Text = "Verify SHA-256",
             .Dock = DockStyle.Fill, .Margin = New Padding(4, 7, 6, 4),
             .Enabled = False
         }
         ModernTheme.StyleButton(hashButton, "secondary")
-        actions.Controls.Add(hashButton, 2, 0)
+        actions.Controls.Add(hashButton, If(stackedLayout, 1, 2), 0)
         exportButton = New Button With {
             .Name = "btn360IndexCompareCsv", .Text = "Export filtered CSV",
             .Dock = DockStyle.Fill, .Margin = New Padding(4, 7, 6, 4),
             .Enabled = False
         }
         ModernTheme.StyleButton(exportButton, "browse")
-        actions.Controls.Add(exportButton, 3, 0)
+        actions.Controls.Add(exportButton, If(stackedLayout, 0, 3),
+                             If(stackedLayout, 1, 0))
         closeButton = New Button With {
             .Name = "btn360IndexCompareClose", .Text = "Close",
             .Dock = DockStyle.Fill, .Margin = New Padding(4, 7, 0, 4)
         }
         ModernTheme.StyleButton(closeButton, "neutral")
-        actions.Controls.Add(closeButton, 4, 0)
+        actions.Controls.Add(closeButton, If(stackedLayout, 1, 4),
+                             If(stackedLayout, 1, 0))
         Me.CancelButton = closeButton
 
         AddHandler compareButton.Click, AddressOf CompareClicked
