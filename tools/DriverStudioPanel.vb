@@ -739,11 +739,12 @@ Public NotInheritable Class DriverStudioPanel
         Using confirm As New Form With {
             .Text = "Open Drivers section",
             .StartPosition = FormStartPosition.CenterParent,
-            .FormBorderStyle = FormBorderStyle.FixedDialog,
+            .FormBorderStyle = FormBorderStyle.Sizable,
             .MaximizeBox = False, .MinimizeBox = False,
             .ShowInTaskbar = False, .AutoScaleMode = AutoScaleMode.Font,
             .Font = ModernTheme.UiFont(10.0F),
-            .ClientSize = New Size(510, 205)
+            .MinimumSize = New Size(590, 245),
+            .ClientSize = New Size(650, 255)
         }
             Dim message As New Label With {
                 .Dock = DockStyle.Fill, .Text = prompt,
@@ -751,8 +752,9 @@ Public NotInheritable Class DriverStudioPanel
                 .ForeColor = ModernTheme.TextInk,
                 .Padding = New Padding(12), .AutoSize = False
             }
+            Dim popupScale As Single = Math.Max(1.0F, confirm.Font.Height / 18.0F)
             Dim actions As New FlowLayoutPanel With {
-                .Dock = DockStyle.Bottom, .Height = 54,
+                .Dock = DockStyle.Fill,
                 .FlowDirection = FlowDirection.RightToLeft,
                 .Padding = New Padding(8), .WrapContents = False
             }
@@ -766,10 +768,23 @@ Public NotInheritable Class DriverStudioPanel
             }
             ModernTheme.StyleButton(cancel, "neutral")
             ModernTheme.StyleButton(proceed, "primary")
+            cancel.Size = New Size(CInt(Math.Ceiling(120 * popupScale)),
+                                   CInt(Math.Ceiling(36 * popupScale)))
+            proceed.Size = New Size(CInt(Math.Ceiling(150 * popupScale)),
+                                    CInt(Math.Ceiling(36 * popupScale)))
             actions.Controls.Add(cancel)
             actions.Controls.Add(proceed)
-            confirm.Controls.Add(message)
-            confirm.Controls.Add(actions)
+            Dim dialogLayout As New TableLayoutPanel With {
+                .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 2,
+                .Padding = New Padding(8, 8, 8, 8)
+            }
+            dialogLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+            dialogLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+            dialogLayout.RowStyles.Add(New RowStyle(SizeType.Absolute,
+                CInt(Math.Ceiling(60 * popupScale))))
+            dialogLayout.Controls.Add(message, 0, 0)
+            dialogLayout.Controls.Add(actions, 0, 1)
+            confirm.Controls.Add(dialogLayout)
             confirm.AcceptButton = proceed
             confirm.CancelButton = cancel
             If confirm.ShowDialog(Me.FindForm()) = DialogResult.OK Then
