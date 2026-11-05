@@ -27,6 +27,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
     Private ReadOnly hintLabel As Label
     Private ReadOnly grid As DataGridView
     Private ReadOnly detailsTip As ToolTip
+    Private ReadOnly searchDelay As System.Windows.Forms.Timer
     Private comparison As Wim360IndexComparer.Result
     Private visibleRows As New List(Of Wim360IndexComparer.Row)()
     Private job As CancellationTokenSource
@@ -114,6 +115,13 @@ Public NotInheritable Class Wim360CompareIndexesForm
         fileName.ForeColor = ModernTheme.Muted
         heading.Controls.Add(fileName, 0, 1)
         detailsTip = New ToolTip With {.AutoPopDelay = 18000}
+        searchDelay = New System.Windows.Forms.Timer With {.Interval = 260}
+        AddHandler searchDelay.Tick, Sub(sender, e)
+            searchDelay.Stop()
+            If Not Me.IsDisposed AndAlso comparison IsNot Nothing AndAlso Not working Then
+                ApplyFilter()
+            End If
+        End Sub
         detailsTip.SetToolTip(fileName, source.ImageFile)
         root.Controls.Add(heading, 0, 0)
 
@@ -332,7 +340,10 @@ Public NotInheritable Class Wim360CompareIndexesForm
         End Sub
         AddHandler categoryBox.SelectedIndexChanged, Sub(sender, e) ApplyFilter()
         AddHandler stateBox.SelectedIndexChanged, Sub(sender, e) ApplyFilter()
-        AddHandler searchBox.TextChanged, Sub(sender, e) ApplyFilter()
+        AddHandler searchBox.TextChanged, Sub(sender, e)
+            searchDelay.Stop()
+            If Not working AndAlso comparison IsNot Nothing Then searchDelay.Start()
+        End Sub
         AddHandler grid.SelectionChanged, Sub(sender, e) UpdateHashButton()
         AddHandler reset.Click, Sub(sender, e)
             categoryBox.SelectedIndex = 0
@@ -341,6 +352,11 @@ Public NotInheritable Class Wim360CompareIndexesForm
         End Sub
         AddHandler Me.FormClosing, Sub(sender, e)
             If job IsNot Nothing Then job.Cancel()
+            searchDelay.Stop()
+        End Sub
+        AddHandler Me.FormClosed, Sub(sender, e)
+            searchDelay.Stop()
+            searchDelay.Dispose()
         End Sub
         WindowGeometry.Install(Me, "Software\DISMGUI\Wim360IndexComparison")
 
@@ -515,6 +531,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
     End Sub
 
     Private Sub ShowComparison(result As Wim360IndexComparer.Result)
+        searchDelay.Stop()
         comparison = result
         grid.SuspendLayout()
         Try
