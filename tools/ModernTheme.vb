@@ -106,6 +106,67 @@ Public NotInheritable Class ModernTheme
         End If
     End Sub
 
+    ' Measure every button against its real font. This works for all shared
+    ' dialogs and avoids unreadable fixed-width English action captions.
+    Public Shared Sub FitTableButtonCells(table As TableLayoutPanel)
+        If table Is Nothing Then Return
+        For Each button In table.Controls.OfType(Of Button)()
+            button.AutoEllipsis = False
+            Dim expected = RecommendedButtonSize(button)
+            Dim col = table.GetColumn(button)
+            If col >= 0 AndAlso col < table.ColumnStyles.Count Then
+                Dim cell = table.ColumnStyles(col)
+                If cell.SizeType = SizeType.Absolute Then
+                    cell.Width = Math.Max(cell.Width,
+                        expected.Width + button.Margin.Horizontal)
+                End If
+            End If
+            Dim row = table.GetRow(button)
+            If row >= 0 AndAlso row < table.RowStyles.Count Then
+                Dim cell = table.RowStyles(row)
+                If cell.SizeType = SizeType.Absolute Then
+                    cell.Height = Math.Max(cell.Height,
+                        expected.Height + button.Margin.Vertical)
+                End If
+            End If
+        Next
+    End Sub
+
+    ' Large dialogs must scroll at 125-200% Windows scaling instead of clipping
+    ' their buttons or falling off screen. Call after all dialog controls exist.
+    Public Shared Sub MakeDialogScrollable(frm As Form, root As TableLayoutPanel,
+                                           minimumWidth As Integer,
+                                           minimumHeight As Integer)
+        If frm Is Nothing OrElse root Is Nothing OrElse root.Parent IsNot frm Then
+            Return
+        End If
+        Dim uiScale = Math.Max(1.0F, frm.Font.Height / 17.0F)
+        Dim scaledMinWidth = CInt(Math.Ceiling(minimumWidth * uiScale))
+        Dim scaledMinHeight = CInt(Math.Ceiling(minimumHeight * uiScale))
+        Dim viewport As New Panel With {
+            .Name = root.Name & "Viewport",
+            .Dock = DockStyle.Fill, .AutoScroll = True,
+            .BackColor = frm.BackColor
+        }
+        frm.Controls.Remove(root)
+        frm.Controls.Add(viewport)
+        root.Dock = DockStyle.None
+        root.Margin = Padding.Empty
+        root.Location = Point.Empty
+        viewport.Controls.Add(root)
+        Dim syncSize As Action = Sub()
+            If frm.IsDisposed OrElse root.IsDisposed OrElse viewport.IsDisposed Then Return
+            Dim w = Math.Max(scaledMinWidth, viewport.ClientSize.Width - 1)
+            Dim h = Math.Max(scaledMinHeight, viewport.ClientSize.Height - 1)
+            If root.Width <> w OrElse root.Height <> h Then
+                root.Size = New Size(w, h)
+            End If
+        End Sub
+        AddHandler viewport.ClientSizeChanged, Sub(sender, e) syncSize()
+        AddHandler frm.Shown, Sub(sender, e) syncSize()
+        syncSize()
+    End Sub
+
     Public Shared Sub StyleButton(button As Button, Optional role As String = Nothing)
         If role Is Nothing Then
             Dim n = button.Name.ToLowerInvariant()
