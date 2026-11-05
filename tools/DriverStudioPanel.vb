@@ -90,7 +90,7 @@ Public NotInheritable Class DriverStudioPanel
             Sum(Function(row) CInt(row.Height)) + rootLayout.Padding.Vertical + 8
         viewport.Controls.Add(rootLayout)
         AddHandler viewport.ClientSizeChanged, Sub(sender, e)
-            Dim wanted = Math.Max(760, viewport.ClientSize.Width - 1)
+            Dim wanted = Math.Max(CInt(Math.Ceiling(800 * layoutScale)), viewport.ClientSize.Width - 1)
             If rootLayout.Width <> wanted Then rootLayout.Width = wanted
         End Sub
 
@@ -113,8 +113,8 @@ Public NotInheritable Class DriverStudioPanel
         }
         sourceRow.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 176))
-        sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 128))
+        sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(176 * layoutScale))))
+        sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(128 * layoutScale))))
         rootLayout.Controls.Add(sourceRow, 0, 1)
         sourceBox = New TextBox With {
             .Name = "txtStudioSource", .Dock = DockStyle.Fill,
@@ -286,8 +286,8 @@ Public NotInheritable Class DriverStudioPanel
             .Margin = New Padding(0, 11, 0, 0), .BackColor = Color.White
         }
         footer.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 185))
-        footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 235))
+        footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(185 * layoutScale))))
+        footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(235 * layoutScale))))
         footer.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         rootLayout.Controls.Add(footer, 0, 7)
         copyButton = New Button With {
@@ -330,8 +330,8 @@ Public NotInheritable Class DriverStudioPanel
             .Margin = New Padding(0, 6, 0, 0), .BackColor = Color.White
         }
         importActions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        importActions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 215))
-        importActions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 215))
+        importActions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(215 * layoutScale))))
+        importActions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(215 * layoutScale))))
         importActions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         rootLayout.Controls.Add(importActions, 0, 8)
 
