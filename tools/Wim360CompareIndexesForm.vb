@@ -81,7 +81,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
             New Integer() {
                 CInt(Math.Ceiling(70 + 13 * (uiScale - 1))),
                 CInt(Math.Ceiling(133 + 42 * (uiScale - 1))),
-                CInt(Math.Ceiling(65 + 45 * (uiScale - 1)))
+                CInt(Math.Ceiling(85 + 40 * (uiScale - 1)))
             },
             New Integer() {CInt(Math.Ceiling(76 * uiScale)),
                            CInt(Math.Ceiling(156 * uiScale)),
@@ -245,7 +245,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
         categoryBox = New ComboBox With {
             .Name = "cmb360IndexCompareType", .Dock = DockStyle.Fill,
             .DropDownStyle = ComboBoxStyle.DropDownList,
-            .Margin = New Padding(0, 6, 9, 6)
+            .Margin = New Padding(0, 2, 9, 2)
         }
         categoryBox.Items.Add("All types")
         categoryBox.SelectedIndex = 0
@@ -253,7 +253,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
         stateBox = New ComboBox With {
             .Name = "cmb360IndexCompareState", .Dock = DockStyle.Fill,
             .DropDownStyle = ComboBoxStyle.DropDownList,
-            .Margin = New Padding(0, 6, 9, 6)
+            .Margin = New Padding(0, 2, 9, 2)
         }
         stateBox.Items.AddRange(New Object() {"All results", "Missing / only in some",
                                                  "Different", "Present in all",
@@ -263,13 +263,13 @@ Public NotInheritable Class Wim360CompareIndexesForm
         searchBox = New TextBox With {
             .Name = "txt360IndexCompareSearch", .Dock = DockStyle.Fill,
             .PlaceholderText = "Search paths, names, versions and values",
-            .Margin = New Padding(0, 8, 8, 7)
+            .Margin = New Padding(0, 2, 8, 2)
         }
         filters.Controls.Add(searchBox, If(stackedLayout, 0, 2),
                              If(stackedLayout, 1, 0))
         Dim reset As New Button With {
             .Name = "btn360IndexCompareReset", .Text = "Reset",
-            .Dock = DockStyle.Fill, .Margin = New Padding(0, 6, 0, 6)
+            .Dock = DockStyle.Fill, .Margin = New Padding(0, 1, 0, 1)
         }
         ModernTheme.StyleButton(reset, "neutral")
         filters.Controls.Add(reset, If(stackedLayout, 1, 3),
