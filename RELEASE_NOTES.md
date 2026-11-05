@@ -1,24 +1,27 @@
-# DISM GUI 4.3.4
+# DISM GUI 4.3.5
 
-## WIM 360 — Detailed Mounted Inventory
+## WIM 360 — Offline Snapshot Comparison
 
-- Added an **Inventory details** window for an already-scanned WIM index, kept separate from destructive servicing.
-- Full driver table (INF, provider, driver class, published INF, version/date), Windows package table (identity, release type, state), optional Windows features and Windows capabilities (names/states).
-- Uses read-only Get-WindowsOptionalFeature -Path and Get-WindowsCapability -Path queries. Failures are isolated per optional component category and a visible warning preserves partial inventory.
-- Responsive, resizable high-DPI inventory window; virtualized table, horizontal scrolling and tooltips for long values. Window position and dimensions are saved independently of the main window.
-- Combined Type/State/substring filtering, column-header sorting and Clear filters.
-- Export displayed filtered rows to **CSV** (UTF-8 BOM, quote escaping and spreadsheet-formula safeguards) or **JSON** (versioned schema, source image/index, UTC timestamp and partial scan warnings).
-- Shows features/capabilities counts in the WIM 360 summary and copied report.
-- Adds Windows CI regression coverage for parsing, filtering, invalid JSON, exports, complete/partial results and the inventory window.
+- Added **Compare JSON snapshots**, a separate resizable high-DPI viewer for two locally saved WIM 360 inventory JSON files; no WIM mounting or DISM servicing.
+- Displays **Added**, **Removed**, and **Changed** driver packages, Windows packages, optional features, and Windows capabilities, including before/after states, versions, providers and changed-field descriptions.
+- Interactive virtualized comparison table, filters by change/type, free-text search, column sorting, and **Export CSV / Export JSON** for the currently displayed changes.
+- Snapshot exports upgraded from schema 1 to **schema 2**, which includes the source's total inventory row count and an independently verified **IsCompleteInventory** flag.
+- **Safety:** Added/Removed detection requires *both* snapshots to contain the complete inventory. Legacy schema-1 and filtered snapshots suppress membership changes rather than guessing missing records are deleted.
+- Unsupported optional feature/capability queries suppress membership comparisons for those categories individually; version/state comparisons of shared records still work.
+- Duplicate inventory identities are flagged as ambiguous; inputs have size, type, index and schema checks, and spreadsheet-formula-safe CSV output.
+- The comparison dialog saves its size and position separately, shows warnings and is available even without a mounted image.
+- Extended CI tests cover legacy and filtered exports, before/after version and state changes, added/removed counts, partial category warnings, ambiguous identities, exports, and real WinForms interaction/layout.
 
-## Retained from 4.3.3
+## Preserved functionality
 
-- Image/index/mount validation before and after scanning; read-only driver/package inventory.
-- Driver Studio selective per-INF write remains separate and requires explicit user confirmation.
+- **WIM 360 / Scan mounted index** remains read-only and requires a verified existing mount.
+- **Inventory details** retains searchable driver/package/feature/capability results and CSV/JSON export.
+- **Driver Studio** selective per-INF installation remains separate and requires explicit confirmation.
+- No implicit Mount / Unmount / Commit / Discard.
 
-## Testing and limitations
+## Validation and limitations
 
-- The real mounted-image audit still requires testing against disposable Windows/WinPE WIM files; Windows CI validates mocks, compilation and the WinForms UI.
-- Some image types do not expose feature/capability information. Partial results are labeled; do not treat an absent list as proof the image has no features.
-- Split .swm files are not supported in WIM 360; re-scan after changing an image.
-- Attribution: Mike Celone (mikecel79/DISMGUI).
+- Windows CI builds portable .NET 10 versions for x86, x64 and ARM64 and tests the WinForms UI.
+- Live component and driver inventory must still be verified on disposable mounted Windows/WinPE WIMs. Diff tests use representative saved inventories.
+- WIM 360 still does not support split .swm image sets.
+- Original DISM GUI by Mike Celone (mikecel79/DISMGUI); attribution retained.
