@@ -245,6 +245,7 @@ Public NotInheritable Class Wim360InventoryForm
         AddHandler searchBox.TextChanged, Sub(sender, e) ApplyFilter()
 
         typeFilter.SelectedIndex = 0
+        ModernTheme.MakeDialogScrollable(Me, root, 930, 670)
         WindowGeometry.Install(Me, "Software\DISMGUI\Wim360Inventory")
     End Sub
 
