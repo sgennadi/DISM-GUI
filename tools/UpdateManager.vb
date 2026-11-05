@@ -37,6 +37,16 @@ Public NotInheritable Class UpdateManager
         Return GetType(UpdateManager).Assembly.GetName().Version
     End Function
 
+    ' Version captions are numeric only; GitHub tag names may retain their
+    ' real v-prefix for API/lookups, but that prefix is never shown in the UI.
+    Private Shared Function DisplayVersion(value As Version) As String
+        Return value.ToString(3)
+    End Function
+
+    Private Shared Function UpToDateCaption(value As Version) As String
+        Return "Up to date - " & DisplayVersion(value)
+    End Function
+
     Private Shared Function CurrentArchitecture() As String
         Select Case RuntimeInformation.ProcessArchitecture
             Case Architecture.Arm64 : Return "win-arm64"
@@ -268,6 +278,11 @@ Public NotInheritable Class UpdateManager
             line = Regex.Replace(line, "^\s*[-*]\s+", "• ")
             line = Regex.Replace(line, "\[([^\]]+)\]\((https?://[^)]+)\)", "$1")
             line = line.Replace("**", "").Replace("`", "")
+            ' Release notes may contain a v-prefixed GitHub version tag.
+            ' The visible preview uses the same numeric-only convention.
+            line = Regex.Replace(line,
+                "(?<![A-Za-z0-9_])v(?=\d+\.\d+(?:\.\d+){1,2}\b)",
+                "", RegexOptions.IgnoreCase Or RegexOptions.CultureInvariant)
             lines.Add(line)
         Next
         Return String.Join(Environment.NewLine, lines).Trim()
@@ -293,10 +308,11 @@ Public NotInheritable Class UpdateManager
         Private assetDownload As String
         Private assetDigest As String
         Private assetSize As Long
+        Private publishedTag As String
         Private busy As Boolean
 
         Public Sub New()
-            Me.Text = "DISM GUI " & CurrentVersion().ToString(3) & " - Updates"
+            Me.Text = "DISM GUI " & DisplayVersion(CurrentVersion()) & " - Updates"
             Me.StartPosition = FormStartPosition.CenterParent
             Me.FormBorderStyle = FormBorderStyle.Sizable
             Me.MaximizeBox = True
@@ -378,15 +394,18 @@ Public NotInheritable Class UpdateManager
             versions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
             versions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
             info.Controls.Add(versions, 0, 1)
-            installedValue = MakeLabel("Installed: " & CurrentVersion().ToString(3) &
+            installedValue = MakeLabel("Installed: " & DisplayVersion(CurrentVersion()) &
                                        " (" & CurrentArchitecture() & ")", 11, True,
                                        ModernTheme.TextInk)
+            installedValue.Name = "lblUpdateInstalledVersion"
             latestValue = MakeLabel("Latest stable: Not checked", 11, True, ModernTheme.Muted)
+            latestValue.Name = "lblUpdateLatestVersion"
             versions.Controls.Add(installedValue, 0, 0)
             versions.Controls.Add(latestValue, 1, 0)
 
             status = MakeLabel("Select Check for updates to look for a stable release.",
                                11, True, ModernTheme.Blue)
+            status.Name = "lblUpdateStatus"
             info.Controls.Add(status, 0, 2)
             detail = MakeLabel("Updates are downloaded from GitHub Releases. The SHA-256 " &
                                "checksum is verified before installation. " &
@@ -431,16 +450,17 @@ Public NotInheritable Class UpdateManager
                 .Enabled = False, .TabStop = True
             }
             AddHandler releaseLink.LinkClicked, Sub(sender, e)
-                Dim releaseTag = "v" & latestValue.Text.Replace("Latest stable: ", "").Trim()
-                If releaseTag.Length > 1 AndAlso
-                   releaseTag.StartsWith("v", StringComparison.OrdinalIgnoreCase) Then
-                    Dim releaseVersion As System.Version = Nothing
-                    If System.Version.TryParse(releaseTag.Substring(1), releaseVersion) Then
-                        Process.Start(New ProcessStartInfo(
-                            ProjectUrl & "/releases/tag/" & Uri.EscapeDataString(releaseTag)) With
-                            {.UseShellExecute = True})
-                    End If
-                End If
+                ' The release URL uses the exact tag returned by GitHub.
+                ' Never recreate the tag from a UI label or show its prefix.
+                If String.IsNullOrWhiteSpace(publishedTag) Then Return
+                Dim parsed As System.Version = Nothing
+                If Not System.Version.TryParse(
+                       publishedTag.TrimStart("v"c, "V"c), parsed) Then Return
+                Process.Start(New ProcessStartInfo(
+                    ProjectUrl & "/releases/tag/" &
+                    Uri.EscapeDataString(publishedTag)) With {
+                    .UseShellExecute = True
+                })
             End Sub
             changesHeading.Controls.Add(releaseLink, 1, 0)
 
@@ -553,6 +573,7 @@ Public NotInheritable Class UpdateManager
             assetDownload = Nothing
             assetDigest = Nothing
             assetSize = 0
+            publishedTag = Nothing
             changelogTitle.Text = "WHAT'S NEW"
             releaseNotes.Text = "Loading release notes from GitHub..."
             releaseLink.Enabled = False
@@ -578,8 +599,9 @@ Public NotInheritable Class UpdateManager
                            Not Version.TryParse(tag.TrimStart("v"c, "V"c), remote) Then
                             Throw New InvalidDataException("The stable release has an invalid version tag")
                         End If
-                        latestValue.Text = "Latest stable: " & remote.ToString(3)
-                        changelogTitle.Text = "WHAT'S NEW IN " & remote.ToString(3)
+                        latestValue.Text = "Latest stable: " & DisplayVersion(remote)
+                        changelogTitle.Text = "WHAT'S NEW IN " & DisplayVersion(remote)
+                        publishedTag = tag
                         Dim notesJson As JsonElement
                         If release.TryGetProperty("body", notesJson) AndAlso
                            notesJson.ValueKind = JsonValueKind.String Then
@@ -636,7 +658,7 @@ Public NotInheritable Class UpdateManager
 
                         If normalizedRemote = normalizedCurrent Then
                             install.Text = "Reinstall"
-                            status.Text = "You already have the latest stable version."
+                            status.Text = UpToDateCaption(remote)
                             status.ForeColor = ModernTheme.Green
                             detail.Text = "Reinstall only if you need a fresh copy."
                         Else
@@ -645,7 +667,7 @@ Public NotInheritable Class UpdateManager
                             status.ForeColor = ModernTheme.Green
                             detail.Text = "Select Update to download the verified " &
                                           "ZIP, back up your current EXE and install " &
-                                          remote.ToString(3) & ". DISM GUI will restart."
+                                          DisplayVersion(remote) & ". DISM GUI will restart."
                         End If
                         install.Enabled = True
                     End Using
