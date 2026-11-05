@@ -119,8 +119,8 @@ Public NotInheritable Class Wim360SnapshotDiff
         If String.IsNullOrWhiteSpace(path) Then
             Throw New ArgumentException("Choose an exported WIM 360 JSON snapshot.")
         End If
-        Dim fullPath = Path.GetFullPath(path)
-        If Not String.Equals(Path.GetExtension(fullPath), ".json",
+        Dim fullPath = System.IO.Path.GetFullPath(path)
+        If Not String.Equals(System.IO.Path.GetExtension(fullPath), ".json",
                              StringComparison.OrdinalIgnoreCase) Then
             Throw New InvalidDataException("Only WIM 360 .json snapshot files are supported.")
         End If
