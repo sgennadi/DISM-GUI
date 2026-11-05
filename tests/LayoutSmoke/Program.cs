@@ -274,6 +274,10 @@ internal static class LayoutSmoke
                     "Missing / only in some", "").Count == 3 &&
                 Wim360IndexComparer.Filter(comparison.Rows, "All types",
                     "Only in Index 3", "").Count == 1 &&
+                Wim360IndexComparer.Filter(comparison.Rows, "All types",
+                    "Missing from Index 3", "").Count == 2 &&
+                Wim360IndexComparer.Filter(comparison.Rows, "All types",
+                    "Present in Index 3", "").Count == 3 &&
                 Wim360IndexComparer.Filter(comparison.Rows, "Files",
                     "Different", "changed.dll").Count == 1,
                 "Index comparison filters must combine state, type and search");
