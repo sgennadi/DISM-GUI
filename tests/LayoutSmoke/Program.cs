@@ -281,6 +281,27 @@ internal static class LayoutSmoke
                 Wim360IndexComparer.Filter(comparison.Rows, "Files",
                     "Different", "changed.dll").Count == 1,
                 "Index comparison filters must combine state, type and search");
+        var allPresent = Wim360IndexComparer.Filter(comparison.Rows, "All types",
+            "Exists in all", "", 3);
+        Require(allPresent.Count == 2 &&
+                allPresent.Any(x => x.Name.EndsWith("changed.dll")) &&
+                allPresent.Any(x => x.Name.EndsWith("common.dll")),
+                "Exists in all must include different-size files still present everywhere");
+
+        var folderComparison = Wim360IndexComparer.CompareRecords(report.ImageFile,
+            "Mounted file paths / sizes", new[] { 1, 2, 3 }, new[] {
+                new Wim360IndexComparer.Item { Index=1, Kind="Folders", Key=@"Windows\Policy", Value="Present" },
+                new Wim360IndexComparer.Item { Index=2, Kind="Folders", Key=@"Windows\Policy", Value="Present" },
+                new Wim360IndexComparer.Item { Index=3, Kind="Folders", Key=@"Windows\Policy", Value="Present" },
+                new Wim360IndexComparer.Item { Index=1, Kind="Folders", Key=@"Windows\Extra", Value="Present" }
+            });
+        Require(folderComparison.Rows.Count == 2 &&
+                folderComparison.Rows.Single(x => x.Name.EndsWith("Extra")).State == "Only in Index 1" &&
+                folderComparison.Rows.Single(x => x.Name.EndsWith("Policy")).State == "Present in all" &&
+                Wim360IndexComparer.Filter(folderComparison.Rows, "Folders",
+                    "Missing from Index 3", "").Count == 1,
+                "Folder presence must compare independently of files");
+
         var csv = Wim360IndexComparer.ToCsv(comparison, comparison.Rows);
         Require(csv.Contains("\"Index 1\",\"Index 2\",\"Index 3\"") &&
                 csv.Contains("\"'=HYPERLINK()\"") &&
@@ -1242,6 +1263,7 @@ internal static class LayoutSmoke
             Require(indexCsvButton is not null && indexCsvButton.Enabled &&
                     indexJsonButton is not null && indexJsonButton.Enabled,
                     "WIM 360 index metadata export should work without mounting");
+            var multiCompare = Find(dashboard, "btn360CompareIndexes") as Button;
             tabs.SelectedIndex = 9;
             Application.DoEvents();
             foreach (var actionButton in new[] {
@@ -1253,7 +1275,6 @@ internal static class LayoutSmoke
                 Require(actionButton is not null, "WIM 360 required action missing");
                 VerifyReadableButton(actionButton!, "WIM 360");
             }
-            var multiCompare = Find(dashboard, "btn360CompareIndexes") as Button;
             Require(multiCompare is not null && multiCompare.Enabled,
                     "WIM 360 must enable direct multi-index comparison when two indexes exist");
             var selectedDetails = Find(dashboard, "txt360Details") as TextBox;
