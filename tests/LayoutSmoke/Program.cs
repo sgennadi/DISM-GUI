@@ -258,6 +258,84 @@ internal static class LayoutSmoke
         Console.WriteLine("PASS WIM 360 metadata, architecture, report and XML safety tests");
     }
 
+    private static void VerifyErrorDiagnostics()
+    {
+        var raw = "Password: DO_NOT_UPLOAD_123\n" +
+                  "RecoveryKey=214516-214516-214516-214516-214516-214516-214516-214516\n" +
+                  "Operator: tech@example.com\n" +
+                  @"Mounted at C:\Users\tester\Private\install.wim" + "\n" +
+                  "Host IP 10.0.0.193\n";
+        var clean = ErrorDiagnostics.Redact(raw);
+        Require(!clean.Contains("DO_NOT_UPLOAD_123") &&
+                !clean.Contains("214516-214516") &&
+                !clean.Contains("tech@example.com") &&
+                !clean.Contains("tester") &&
+                !clean.Contains("10.0.0.193") &&
+                clean.Contains("[REDACTED:"),
+                "Diagnostic report redaction failed to remove credentials, recovery key, account or path");
+
+        ErrorDiagnostics.RememberFailure("WIM 360",
+            new InvalidOperationException(@"C:\Users\tester\Private\image.wim"));
+        var report = ErrorDiagnostics.BuildReport(
+            "WIM 360 returned an error", "How to reproduce:\nOpen read-only image",
+            false, raw, "WIM 360", 144);
+        Require(report.Contains("DISM GUI: ") &&
+                report.Contains("Display DPI: 144") &&
+                report.Contains("DISM output: not included") &&
+                !report.Contains("DO_NOT_UPLOAD_123"),
+                "Default diagnostic report must exclude logs and show version/DPI");
+        var withLog = ErrorDiagnostics.BuildReport(
+            "WIM 360 returned an error", "Scan failed", true, raw, "WIM 360", 144);
+        Require(withLog.Contains("DISM output (last 60 lines") &&
+                !withLog.Contains("214516-214516") &&
+                !withLog.Contains("tech@example.com"),
+                "Opt-in log report must redact before preview");
+        var url = ErrorDiagnostics.BuildGitHubIssueUrl("WIM 360 error", withLog);
+        var decoded = Uri.UnescapeDataString(url);
+        Require(url.StartsWith("https://github.com/sgennadi/DISM-GUI/issues/new?",
+                               StringComparison.Ordinal) &&
+                !decoded.Contains("DO_NOT_UPLOAD_123") &&
+                !decoded.Contains("tech@example.com"),
+                "GitHub draft URL must be restricted to the project and sanitized");
+
+        using var dialog = new ErrorReportForm(raw, "WIM 360 diagnostics");
+        dialog.Show();
+        Application.DoEvents();
+        var include = Find(dialog, "chkSupportIncludeLog") as CheckBox;
+        var reviewed = Find(dialog, "chkSupportReviewed") as CheckBox;
+        var preview = Find(dialog, "txtSupportPreview") as TextBox;
+        var title = Find(dialog, "txtSupportTitle") as TextBox;
+        var description = Find(dialog, "txtSupportDescription") as TextBox;
+        var copy = Find(dialog, "btnSupportCopy") as Button;
+        var draft = Find(dialog, "btnSupportGitHub") as Button;
+        var close = Find(dialog, "btnSupportClose") as Button;
+        Require(include is not null && reviewed is not null && preview is not null &&
+                title is not null && description is not null &&
+                copy is not null && draft is not null && close is not null,
+                "Error report UI is missing required preview, consent or export controls");
+        Require(!include!.Checked && !reviewed!.Checked && !draft!.Enabled,
+                "Diagnostic logs must opt-in and GitHub action must require review");
+        NoOverlap(copy!, draft, "Diagnostics Copy / GitHub draft actions");
+        NoOverlap(draft, close!, "Diagnostics GitHub draft / Close actions");
+
+        include.Checked = true;
+        Application.DoEvents();
+        Require(preview!.Text.Contains("DISM output (last 60 lines") &&
+                !preview.Text.Contains("DO_NOT_UPLOAD_123"),
+                "Opt-in diagnostic preview must be redacted");
+        reviewed.Checked = true;
+        Application.DoEvents();
+        Require(draft.Enabled, "Reviewed report should allow opening GitHub draft");
+        preview.AppendText("\nEdited report");
+        Application.DoEvents();
+        Require(!draft.Enabled && !reviewed.Checked,
+                "Editing report after consent must invalidate approval");
+        Snapshot(dialog, "DISM-GUI-Error-Diagnostics");
+        dialog.Close();
+        Application.DoEvents();
+        Console.WriteLine("PASS diagnostic sanitization, explicit consent and GitHub draft UI");
+    }
+
     private static void VerifyMountedAudit()
     {
         const string json = "[{\"PackageName\":\"Package_A\",\"PackageState\":\"Installed\",\"ReleaseType\":\"Update\"}," +
@@ -850,6 +928,7 @@ internal static class LayoutSmoke
             Application.DoEvents();
             VerifyWimMetadata();
             VerifyMountedAudit();
+            VerifyErrorDiagnostics();
             var detailFixture = VerifyDetailedInventory();
             var snapshotReport = VerifySnapshotDiff(detailFixture);
             VerifyNativeWimReader();
@@ -1119,6 +1198,10 @@ internal static class LayoutSmoke
                 NoOverlap(aboutTitle!, aboutSub!, "About title and subtitle");
                 var supportEmailLink = Find(about, "lnkSupportEmail") as LinkLabel;
                 var supportEmailButton = Find(about, "btnEmailSupport") as Button;
+                var reportIssueButton = Find(about, "btnReportProblem") as Button;
+                Require(reportIssueButton is not null &&
+                        reportIssueButton.Text == "Report error to GitHub",
+                        "About must provide a direct diagnostics and GitHub Issue workflow");
                 Require(supportEmailLink is not null && supportEmailButton is not null,
                         "About Support email link and button must exist");
                 Require(supportEmailLink!.Text.Contains("sgennadi@hotmail.com") &&
