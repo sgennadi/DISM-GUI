@@ -3,6 +3,7 @@ Imports System.Collections.Generic
 Imports System.Globalization
 Imports System.IO
 Imports System.Linq
+Imports System.Security.Cryptography
 Imports System.Text
 Imports System.Threading
 
@@ -176,6 +177,64 @@ Public NotInheritable Class Wim360IndexComparer
         Return result
     End Function
 
+    ' Hash one selected file across every mounted index where it exists.
+    ' This is opt-in because full hashing of a Windows image can be expensive.
+    Public Shared Function VerifyFileHashes(report As Wim360Reader.WimReport,
+                                           indexes As IEnumerable(Of Integer),
+                                           original As Row,
+                                           token As CancellationToken) As Row
+        If report Is Nothing Then Throw New ArgumentNullException(NameOf(report))
+        If original Is Nothing OrElse
+           Not String.Equals(original.Kind, "Files", StringComparison.OrdinalIgnoreCase) Then
+            Throw New ArgumentException("Choose a file row to verify by SHA-256.")
+        End If
+        If Path.IsPathRooted(original.Name) OrElse
+           original.Name.IndexOf(ChrW(0)) >= 0 Then
+            Throw New InvalidOperationException("Invalid relative file path.")
+        End If
+        Dim chosen = SelectedIndexes(report, indexes)
+        Dim fresh = Wim360Reader.Inspect(report.ImageFile)
+        Dim current = SelectedIndexes(fresh, chosen.Select(Function(x) x.Index))
+        Dim records As New List(Of Item)()
+        For Each image In current
+            token.ThrowIfCancellationRequested()
+            If Not original.Values.ContainsKey(image.Index) Then Continue For
+            If Not image.MountStatus.StartsWith("Mounted", StringComparison.OrdinalIgnoreCase) OrElse
+               String.IsNullOrWhiteSpace(image.MountFolder) Then
+                Throw New InvalidOperationException(
+                    "Index " & image.Index.ToString() &
+                    " is no longer mounted. Refresh the comparison.")
+            End If
+            Dim basePath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(image.MountFolder))
+            Dim rootPrefix = basePath & Path.DirectorySeparatorChar
+            Dim fullName = Path.GetFullPath(Path.Combine(basePath, original.Name))
+            If Not fullName.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase) OrElse
+               Not File.Exists(fullName) Then
+                Throw New InvalidOperationException(
+                    "A file has moved or is outside the mounted image. Recompare the indexes.")
+            End If
+            If (File.GetAttributes(fullName) And FileAttributes.ReparsePoint) <> 0 Then
+                Throw New InvalidOperationException(
+                    "SHA-256 verification intentionally excludes reparse points.")
+            End If
+            Dim hashBytes As Byte()
+            Using stream As New FileStream(fullName, FileMode.Open, FileAccess.Read,
+                                           FileShare.ReadWrite Or FileShare.Delete)
+                hashBytes = SHA256.HashData(stream)
+            End Using
+            records.Add(New Item With {
+                .Index = image.Index, .Kind = "Files", .Key = original.Name,
+                .Value = Convert.ToHexString(hashBytes)
+            })
+        Next
+        Dim compared = CompareRecords(report.ImageFile, "SHA-256 verification",
+            chosen.Select(Function(x) x.Index), records)
+        Dim checkedRow = compared.Rows.Single()
+        checkedRow.Notes = "SHA-256 verified for the available copies at scan time. " &
+            "Absent indexes remain absent. Large files may take time to hash."
+        Return checkedRow
+    End Function
+
     Public Shared Function CompareRecords(imageFile As String, mode As String,
                        indexes As IEnumerable(Of Integer),
                        items As IEnumerable(Of Item)) As Result
@@ -252,8 +311,8 @@ Public NotInheritable Class Wim360IndexComparer
                 If x.Name.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0 OrElse
                    x.Kind.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0 OrElse
                    x.State.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0 Then Return True
-                Return x.Values.Values.Any(Function(v)
-                    v.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0)
+                Return x.Values.Values.Any(Function(v) v.IndexOf(
+                    needle, StringComparison.OrdinalIgnoreCase) >= 0)
             End If
             Return True
         End Function).ToList()
