@@ -53,6 +53,59 @@ internal static class WimMountIntegration
         return Convert.ToHexString(SHA256.HashData(stream));
     }
 
+    public static void VerifySplit(string image, string root)
+    {
+        if (Environment.GetEnvironmentVariable("DISMGUI_TEST_WIM_MOUNT") != "1")
+        {
+            Console.WriteLine("SKIP real split SWM WIM integration test (opt-in)");
+            return;
+        }
+        var output = Path.Combine(root, "split-image");
+        Directory.CreateDirectory(output);
+        var first = Path.Combine(output, "tiny.swm");
+        var sourceHash = Digest(image);
+        CheckDism(new[] {
+            "/English", "/Split-Image", "/ImageFile:" + Path.GetFullPath(image),
+            "/SWMFile:" + first, "/FileSize:3"
+        }, 180000);
+
+        var manifest = Wim360SplitSet.Discover(first);
+        if (manifest.PartCount < 2 ||
+            manifest.Parts.Distinct(StringComparer.OrdinalIgnoreCase).Count() != manifest.PartCount)
+            throw new InvalidOperationException("DISM did not generate a multi-part SWM set.");
+        var before = manifest.Parts.Select(Digest).ToArray();
+        var inspected = Wim360Reader.Inspect(first);
+        if (!inspected.IsSplitSet || inspected.SplitSet.PartCount != manifest.PartCount ||
+            inspected.ImageCount != 1 || inspected.Images[0].Name != "WIM360 CI" ||
+            inspected.Images[0].MountStatus != "Split image (read-only)")
+            throw new InvalidOperationException("WIMGAPI could not read a real split SWM catalog.");
+        var secondPart = manifest.Parts[1];
+        var bySecond = Wim360Reader.Inspect(secondPart);
+        if (!bySecond.IsSplitSet ||
+            !string.Equals(bySecond.ImageFile, first, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("SWM part #2 did not resolve the first part.");
+
+        var hidden = secondPart + ".missing";
+        File.Move(secondPart, hidden);
+        try
+        {
+            bool rejected = false;
+            try { Wim360SplitSet.Discover(first); }
+            catch (FileNotFoundException) { rejected = true; }
+            if (!rejected)
+                throw new InvalidOperationException("A missing SWM part was not detected.");
+        }
+        finally
+        {
+            File.Move(hidden, secondPart);
+        }
+        if (!before.SequenceEqual(manifest.Parts.Select(Digest)) ||
+            sourceHash != Digest(image))
+            throw new InvalidOperationException("SWM inspection modified a split or source image.");
+        Console.WriteLine("PASS real DISM SWM split: metadata, all parts, part #2, " +
+                          "missing part rejected and SHA-256 unchanged.");
+    }
+
     public static void Verify(string image, string root)
     {
         if (Environment.GetEnvironmentVariable("DISMGUI_TEST_WIM_MOUNT") != "1")
