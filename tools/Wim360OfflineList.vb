@@ -255,6 +255,7 @@ Public NotInheritable Class Wim360OfflineList
         If original.Length <> report.FileSizeBytes OrElse
            original.LastWriteTimeUtc <> report.ModifiedUtc Then
             Throw New IOException("The source WIM changed during enumeration. Results discarded.")
+        End If
         result.Notes = "Read from the source WIM without mounting. " &
             "Presence/absence only; no file sizes or SHA-256 hashes. " &
             "Files with identical names may have different contents."
