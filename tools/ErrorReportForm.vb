@@ -240,6 +240,7 @@ Public NotInheritable Class ErrorReportForm
             reviewed.Checked = False
         End Sub
         GeneratePreview()
+        ModernTheme.MakeDialogScrollable(Me, layout, 970, 710)
         WindowGeometry.Install(Me, "Software\DISMGUI\ErrorReport")
     End Sub
 
