@@ -213,7 +213,7 @@ Public NotInheritable Class Wim360IndexComparer
                 Throw New InvalidOperationException(
                     "A file has moved or is outside the mounted image. Recompare the indexes.")
             End If
-            If (File.GetAttributes(fullName) And FileAttributes.ReparsePoint) <> 0 Then
+            If (File.GetAttributes(fullName) And FileAttributes.ReparsePoint) = FileAttributes.ReparsePoint Then
                 Throw New InvalidOperationException(
                     "SHA-256 verification intentionally excludes reparse points.")
             End If
