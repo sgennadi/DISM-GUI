@@ -519,6 +519,7 @@ Public NotInheritable Class UpdateManager
             tips.SetToolTip(install, "Available after a release and SHA-256 digest are verified")
             tips.SetToolTip(releases, "Open the download page in your browser")
             tips.SetToolTip(closeButton, "Close only the Update Center")
+            ModernTheme.MakeDialogScrollable(Me, root, 980, 730)
             ' Opening Update Center checks the latest release automatically;
             ' the manual Check for updates button remains available for refresh.
             AddHandler Me.Shown, Sub(sender, e) CheckClicked(check, EventArgs.Empty)
