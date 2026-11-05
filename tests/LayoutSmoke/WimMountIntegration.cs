@@ -183,8 +183,21 @@ internal static class WimMountIntegration
         if (report.ImageCount != 3)
             throw new InvalidOperationException("Disposable image has the wrong index count.");
         var before = Digest(wim);
-        var diff = Wim360OfflineList.Compare(report, new[] { 1, 2, 3 },
+        var originalStamp = File.GetLastWriteTimeUtc(wim);
+        Wim360IndexComparer.Result diff;
+        try
+        {
+            diff = Wim360OfflineList.Compare(report, new[] { 1, 2, 3 },
                                              CancellationToken.None);
+        }
+        catch
+        {
+            Console.WriteLine("OFFLINE WIM failure diagnostics: " +
+                "SHA256 unchanged=" + (before == Digest(wim)) +
+                ", timestamp unchanged=" +
+                (originalStamp == File.GetLastWriteTimeUtc(wim)));
+            throw;
+        }
         var common = diff.Rows.Single(x => x.Kind == "Files" &&
                                            x.Name.EndsWith("common.txt", StringComparison.Ordinal));
         var absent2 = diff.Rows.Single(x => x.Kind == "Files" &&
