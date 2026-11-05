@@ -32,6 +32,7 @@ Public NotInheritable Class Wim360Dashboard
     Private ReadOnly compareSnapshotsButton As Button
     Private ReadOnly exportIndexesCsv As Button
     Private ReadOnly exportIndexesJson As Button
+    Private ReadOnly compareIndexesButton As Button
     Private report As Wim360Reader.WimReport
     Private scanGeneration As Integer
     Private isAuditing As Boolean
@@ -68,7 +69,7 @@ Public NotInheritable Class Wim360Dashboard
         dashboardLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         ' Scroll rather than truncate content on high-DPI or short viewports.
         Dim factor As Single = Math.Max(1.0F, Me.Font.Height / 16.0F)
-        For Each height As Integer In {62, 66, 85, 36, 215, 163, 254}
+        For Each height As Integer In {62, 66, 85, 36, 215, 163, 314}
             dashboardLayout.RowStyles.Add(New RowStyle(SizeType.Absolute,
                 CInt(Math.Ceiling(height * factor))))
         Next
@@ -209,12 +210,12 @@ Public NotInheritable Class Wim360Dashboard
         info.Controls.Add(details, 0, 1)
 
         Dim actions As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 4,
+            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 5,
             .Margin = New Padding(0, 5, 0, 0),
             .BackColor = Color.White
         }
-        For i As Integer = 1 To 4
-            actions.RowStyles.Add(New RowStyle(SizeType.Percent, 25.0F))
+        For i As Integer = 1 To 5
+            actions.RowStyles.Add(New RowStyle(SizeType.Percent, 20.0F))
         Next
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
@@ -294,6 +295,24 @@ Public NotInheritable Class Wim360Dashboard
         AddHandler exportIndexesJson.Click, Sub(sender, e) ExportIndexMetadata(True)
         actions.Controls.Add(exportIndexesJson, 1, 3)
 
+        compareIndexesButton = New Button With {
+            .Name = "btn360CompareIndexes", .Text = "Compare indexes",
+            .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 9, 4),
+            .Enabled = False
+        }
+        ModernTheme.StyleButton(compareIndexesButton, "primary")
+        AddHandler compareIndexesButton.Click, Sub(sender, e)
+            If report Is Nothing OrElse report.ImageCount < 2 Then Return
+            Using viewer As New Wim360CompareIndexesForm(report)
+                viewer.ShowDialog(Me.FindForm())
+            End Using
+        End Sub
+        actions.Controls.Add(compareIndexesButton, 0, 4)
+        Dim compareHelp = MakeText("2–8 indexes: present / missing / different",
+                                   9.1F, False, ModernTheme.Muted)
+        compareHelp.Margin = New Padding(4, 3, 0, 3)
+        actions.Controls.Add(compareHelp, 1, 4)
+
         AddHandler fileBox.TextChanged, Sub(sender, e)
             CancelMountedAudit()
             useSelected.Enabled = False
@@ -302,6 +321,7 @@ Public NotInheritable Class Wim360Dashboard
             inventoryButton.Enabled = False
             exportIndexesCsv.Enabled = False
             exportIndexesJson.Enabled = False
+            compareIndexesButton.Enabled = False
         End Sub
         AddHandler Me.Disposed, Sub(sender, e) CancelMountedAudit()
     End Sub
@@ -401,6 +421,7 @@ Public NotInheritable Class Wim360Dashboard
         inventoryButton.Enabled = False
         exportIndexesCsv.Enabled = False
         exportIndexesJson.Enabled = False
+        compareIndexesButton.Enabled = False
         If String.IsNullOrWhiteSpace(path) Then
             status.Text = "Choose a .wim, .esd or .swm file first."
             details.Text = "WIM 360 only reads image metadata."
@@ -468,6 +489,7 @@ Public NotInheritable Class Wim360Dashboard
         copyReport.Enabled = True
         exportIndexesCsv.Enabled = value.ImageCount > 0
         exportIndexesJson.Enabled = value.ImageCount > 0
+        compareIndexesButton.Enabled = value.ImageCount >= 2
         If indexTable.Rows.Count > 0 Then
             indexTable.ClearSelection()
             indexTable.Rows(0).Selected = True
