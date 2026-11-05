@@ -49,7 +49,21 @@ jobs:
         shell: pwsh
         env:
           DISMGUI_TEST_WIM_MOUNT: '1'
+          DISMGUI_TEST_LARGE_WIM: '1'
         run: dotnet run --project tests/LayoutSmoke/LayoutSmoke.csproj --configuration Release -p:Platform=AnyCPU
+      - name: Simulate GUI font scaling at 125%, 150%, and 175% (x64)
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: |
+          $env:DISMGUI_LAYOUT_ONLY = '1'
+          foreach ($scale in @('1.25', '1.50', '1.75')) {
+            $env:DISMGUI_LAYOUT_FONT_SCALE = $scale
+            Write-Host "Running WinForms font-layout stress at simulated $scale scale"
+            dotnet run --project tests/LayoutSmoke/LayoutSmoke.csproj --configuration Release --no-build -p:Platform=AnyCPU
+            if ($LASTEXITCODE -ne 0) {
+              throw "WinForms layout smoke failed at font-scale $scale"
+            }
+          }
       - name: Upload WinForms layout screenshots (x64)
         if: matrix.rid == 'win-x64'
         uses: actions/upload-artifact@v7
