@@ -116,7 +116,7 @@ Public NotInheritable Class IntegratedTestChecks
         text.AppendLine("")
         For Each statusValue As String In {"PASS", "WARN", "FAIL", "SKIP"}
             text.AppendLine(statusValue & ": " &
-                items.Count(Function(x) x.Status = statusValue).ToString())
+                items.Where(Function(x) x.Status = statusValue).Count().ToString())
         Next
         text.AppendLine("")
         For Each entry As Result In items

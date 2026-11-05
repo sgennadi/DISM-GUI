@@ -22,8 +22,10 @@ if re.fullmatch(r"[0-9]+[.][0-9]+[.][0-9]+", version) is None:
 servicing = (ROOT / "tools" / "Wim360Servicing.vb").read_text(encoding="utf-8")
 if servicing.count("ValidateTarget(") < 2:
     issues.append("Mounted-image validation has been removed")
-if re.search(r"[.]Count\s*\(\s*Function", servicing):
-    issues.append("VB.NET List.Count(predicate) compilation regression")
+for vb_path in sorted((ROOT / "tools").glob("*.vb")):
+    module = vb_path.read_text(encoding="utf-8")
+    if re.search(r"[.]Count\\s*\\(\\s*Function", module):
+        issues.append("VB.NET List.Count(predicate) compilation regression in " + vb_path.name)
 if issues:
     for item in issues:
         print("PRE-BUILD ERROR:", item)

@@ -15,7 +15,7 @@ Public NotInheritable Class IntegratedTestCenterForm
     Private ReadOnly pathBox As TextBox
     Private ReadOnly includeAudit As CheckBox
     Private ReadOnly startButton As Button
-    Private ReadOnly cancelButton As Button
+    Private ReadOnly cancelAction As Button
     Private ReadOnly copyButton As Button
     Private ReadOnly saveButton As Button
     Private ReadOnly supportButton As Button
@@ -188,7 +188,7 @@ Public NotInheritable Class IntegratedTestCenterForm
                                "browse", AddressOf SaveClicked)
         supportButton = AddButton(actions, "btnTestCenterSupport", "Report issue...", 3,
                                   "secondary", AddressOf SupportClicked)
-        cancelButton = AddButton(actions, "btnTestCenterCancel", "Cancel / close", 4,
+        cancelAction = AddButton(actions, "btnTestCenterCancel", "Cancel / close", 4,
                                  "neutral", AddressOf CancelClicked)
         copyButton.Enabled = False
         saveButton.Enabled = False
@@ -239,7 +239,7 @@ Public NotInheritable Class IntegratedTestCenterForm
         copyButton.Enabled = False
         saveButton.Enabled = False
         supportButton.Enabled = False
-        cancelButton.Text = "Cancel"
+        cancelAction.Text = "Cancel"
         statusLabel.Text = "Running local read-only checks..."
         Dim progress As IProgress(Of IntegratedTestChecks.Result) =
             New Progress(Of IntegratedTestChecks.Result)(Sub(entry)
@@ -259,10 +259,10 @@ Public NotInheritable Class IntegratedTestCenterForm
                 grid.Rows.Add(entry.Status, entry.Name, entry.Details)
             Next
             statusLabel.Text = "Completed: " &
-                current.Count(Function(x) x.Status = "PASS").ToString() & " PASS, " &
-                current.Count(Function(x) x.Status = "WARN").ToString() & " WARN, " &
-                current.Count(Function(x) x.Status = "FAIL").ToString() & " FAIL, " &
-                current.Count(Function(x) x.Status = "SKIP").ToString() & " SKIP."
+                current.Where(Function(x) x.Status = "PASS").Count().ToString() & " PASS, " &
+                current.Where(Function(x) x.Status = "WARN").Count().ToString() & " WARN, " &
+                current.Where(Function(x) x.Status = "FAIL").Count().ToString() & " FAIL, " &
+                current.Where(Function(x) x.Status = "SKIP").Count().ToString() & " SKIP."
         Catch ex As OperationCanceledException
             If Not Me.IsDisposed Then statusLabel.Text = "Test canceled; no image changes made."
         Catch ex As Exception
@@ -279,7 +279,7 @@ Public NotInheritable Class IntegratedTestCenterForm
                 copyButton.Enabled = current.Count > 0
                 saveButton.Enabled = current.Count > 0
                 supportButton.Enabled = current.Count > 0
-                cancelButton.Text = "Close"
+                cancelAction.Text = "Close"
             End If
         End Try
     End Sub
