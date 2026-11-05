@@ -112,16 +112,16 @@ Public NotInheritable Class Wim360Servicing
             .MountFolder = mountFolder,
             .ScannedUtc = DateTime.UtcNow,
             .DriverCount = drv.Count,
-            .ThirdPartyDriverCount = drv.Count(Function(d) Not d.IsInbox),
-            .InboxDriverCount = drv.Count(Function(d) d.IsInbox),
+            .ThirdPartyDriverCount = drv.Where(Function(d) Not d.IsInbox).Count(),
+            .InboxDriverCount = drv.Where(Function(d) d.IsInbox).Count(),
             .PackageCount = pkgs.Count,
-            .InstalledPackageCount = pkgs.Count(Function(p)
+            .InstalledPackageCount = pkgs.Where(Function(p)
                 Return String.Equals(p.State, "Installed", StringComparison.OrdinalIgnoreCase)
-            End Function),
+            End Function).Count(),
             .PendingPackageCount = pending.Count,
-            .StagedPackageCount = pkgs.Count(Function(p)
+            .StagedPackageCount = pkgs.Where(Function(p)
                 Return String.Equals(p.State, "Staged", StringComparison.OrdinalIgnoreCase)
-            End Function),
+            End Function).Count(),
             .DriverClasses = If(classes.Any(), String.Join(", ", classes), "Not listed"),
             .DriverProviders = If(providers.Any(), String.Join(", ", providers), "Not listed"),
             .PendingPackages = If(pending.Count = 0, "None",
