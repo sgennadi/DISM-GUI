@@ -638,8 +638,7 @@ Public NotInheritable Class UpdateManager
                             install.Text = "Reinstall"
                             status.Text = "You already have the latest stable version."
                             status.ForeColor = ModernTheme.Green
-                            detail.Text = "The same verified version is available. " &
-                                          "Use Reinstall only if you need a clean copy."
+                            detail.Text = "Reinstall only if you need a fresh copy."
                         Else
                             install.Text = "Update"
                             status.Text = "A newer stable version is available."
