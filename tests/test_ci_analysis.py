@@ -29,6 +29,16 @@ class AnalyzerTests(unittest.TestCase):
             "Other CI step",
         )
 
+    def test_warnings_do_not_count_as_compiler_errors(self):
+        log = (
+            "warning BC40004: variable conflicts with base class\n"
+            "warning CS8602: possible null dereference\n"
+            "src.vb(3,4): error BC32016: invalid expression\n"
+            "##[error]src.cs(5): error CS1061: missing property\n"
+            "error BC40004 was mentioned only in a comment\n"
+        )
+        self.assertEqual(analyzer.parse_codes(log), {"BC32016", "CS1061", "BC40004"})
+
     def test_no_noncompiler_tokens_exposed(self):
         self.assertEqual(analyzer.parse_codes("API key=xxx123 no error code"), set())
 
