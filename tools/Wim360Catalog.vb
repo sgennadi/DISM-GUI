@@ -170,6 +170,13 @@ Public NotInheritable Class Wim360Catalog
             .ScannedUtc = audit.ScannedUtc,
             .FeatureWarning = audit.FeatureWarning,
             .CapabilityWarning = audit.CapabilityWarning,
+            .DriverWarning = audit.DriverWarning,
+            .PackageWarning = audit.PackageWarning,
+            .ReadTimingsSeconds = New With {
+                .Drivers = audit.DriverDurationSeconds,
+                .Packages = audit.PackageDurationSeconds,
+                .Components = audit.ComponentDurationSeconds
+            },
             .Rows = filteredRows
         }
         Return JsonSerializer.Serialize(snapshot, New JsonSerializerOptions With {

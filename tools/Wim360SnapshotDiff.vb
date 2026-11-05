@@ -22,6 +22,8 @@ Public NotInheritable Class Wim360SnapshotDiff
         Public Property IsCompleteInventory As Boolean
         Public Property FeatureWarning As String = ""
         Public Property CapabilityWarning As String = ""
+        Public Property DriverWarning As String = ""
+        Public Property PackageWarning As String = ""
         Public Property Rows As New List(Of Wim360Catalog.CatalogRow)()
     End Class
 
@@ -168,6 +170,9 @@ Public NotInheritable Class Wim360SnapshotDiff
             result.ScannedUtc = parsedDate
             result.FeatureWarning = StringField(root, "FeatureWarning")
             result.CapabilityWarning = StringField(root, "CapabilityWarning")
+            ' Added in 4.3.7; absent on legitimate older schema-2 exports.
+            result.DriverWarning = StringField(root, "DriverWarning")
+            result.PackageWarning = StringField(root, "PackageWarning")
             Dim entries As JsonElement
             If Not root.TryGetProperty("Rows", entries) OrElse
                entries.ValueKind <> JsonValueKind.Array Then
@@ -261,6 +266,14 @@ Public NotInheritable Class Wim360SnapshotDiff
                                                kind As String) As Boolean
         If Not baseline.IsCompleteInventory OrElse
            Not current.IsCompleteInventory Then Return False
+        If String.Equals(kind, "Drivers", StringComparison.OrdinalIgnoreCase) Then
+            Return String.IsNullOrWhiteSpace(baseline.DriverWarning) AndAlso
+                   String.IsNullOrWhiteSpace(current.DriverWarning)
+        End If
+        If String.Equals(kind, "Packages", StringComparison.OrdinalIgnoreCase) Then
+            Return String.IsNullOrWhiteSpace(baseline.PackageWarning) AndAlso
+                   String.IsNullOrWhiteSpace(current.PackageWarning)
+        End If
         If String.Equals(kind, "Features", StringComparison.OrdinalIgnoreCase) Then
             Return String.IsNullOrWhiteSpace(baseline.FeatureWarning) AndAlso
                    String.IsNullOrWhiteSpace(current.FeatureWarning)
@@ -286,6 +299,14 @@ Public NotInheritable Class Wim360SnapshotDiff
         If baseline.ImageIndex <> current.ImageIndex Then
             result.Warnings.Add("Different WIM indexes (" & baseline.ImageIndex.ToString() &
                 " vs " & current.ImageIndex.ToString() & ") were selected.")
+        End If
+        If Not String.IsNullOrWhiteSpace(baseline.DriverWarning) OrElse
+           Not String.IsNullOrWhiteSpace(current.DriverWarning) Then
+            result.Warnings.Add("Driver inventory is incomplete in at least one snapshot.")
+        End If
+        If Not String.IsNullOrWhiteSpace(baseline.PackageWarning) OrElse
+           Not String.IsNullOrWhiteSpace(current.PackageWarning) Then
+            result.Warnings.Add("Windows package inventory is incomplete in at least one snapshot.")
         End If
         If Not String.IsNullOrWhiteSpace(baseline.FeatureWarning) OrElse
            Not String.IsNullOrWhiteSpace(current.FeatureWarning) Then

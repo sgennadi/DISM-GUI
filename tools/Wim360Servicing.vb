@@ -57,6 +57,29 @@ Public NotInheritable Class Wim360Servicing
         Public Property InstalledCapabilityCount As Integer
         Public Property FeatureWarning As String = ""
         Public Property CapabilityWarning As String = ""
+        Public Property DriverWarning As String = ""
+        Public Property PackageWarning As String = ""
+        Public Property DriverDurationSeconds As Double
+        Public Property PackageDurationSeconds As Double
+        Public Property ComponentDurationSeconds As Double
+
+        Public ReadOnly Property HasWarnings As Boolean
+            Get
+                Return DriverWarning.Length > 0 OrElse PackageWarning.Length > 0 OrElse
+                       FeatureWarning.Length > 0 OrElse CapabilityWarning.Length > 0
+            End Get
+        End Property
+
+        Public ReadOnly Property WarningSummary As String
+            Get
+                Dim issues As New List(Of String)()
+                If DriverWarning.Length > 0 Then issues.Add("Drivers: " & DriverWarning)
+                If PackageWarning.Length > 0 Then issues.Add("Packages: " & PackageWarning)
+                If FeatureWarning.Length > 0 Then issues.Add("Features: " & FeatureWarning)
+                If CapabilityWarning.Length > 0 Then issues.Add("Capabilities: " & CapabilityWarning)
+                Return String.Join("  |  ", issues)
+            End Get
+        End Property
     End Class
 
     Private Shared Function StringField(parent As JsonElement, field As String) As String
@@ -113,7 +136,9 @@ Public NotInheritable Class Wim360Servicing
         packages As IEnumerable(Of PackageEntry),
         Optional components As IEnumerable(Of ComponentEntry) = Nothing,
         Optional featureWarning As String = "",
-        Optional capabilityWarning As String = "") As AuditResult
+        Optional capabilityWarning As String = "",
+        Optional driverWarning As String = "",
+        Optional packageWarning As String = "") As AuditResult
         If drivers Is Nothing Then Throw New ArgumentNullException(NameOf(drivers))
         If packages Is Nothing Then Throw New ArgumentNullException(NameOf(packages))
         Dim drv = drivers.ToList()
@@ -166,7 +191,9 @@ Public NotInheritable Class Wim360Servicing
                     String.Equals(c.State, "Installed", StringComparison.OrdinalIgnoreCase)
             End Function).Count(),
             .FeatureWarning = If(featureWarning, ""),
-            .CapabilityWarning = If(capabilityWarning, "")
+            .CapabilityWarning = If(capabilityWarning, ""),
+            .DriverWarning = If(driverWarning, ""),
+            .PackageWarning = If(packageWarning, "")
         }
     End Function
 
@@ -175,24 +202,44 @@ Public NotInheritable Class Wim360Servicing
         Return String.Join(Environment.NewLine, {
             "MOUNTED SERVICING AUDIT (read-only) | Index " & value.Index.ToString(),
             "Checked (UTC): " & value.ScannedUtc.ToString("u"),
-            "Driver packages: " & value.DriverCount.ToString() &
+            If(value.DriverWarning.Length > 0,
+               "Driver packages: unavailable (no reliable count)",
+               "Driver packages: " & value.DriverCount.ToString() &
                 " (" & value.ThirdPartyDriverCount.ToString() & " third-party, " &
-                value.InboxDriverCount.ToString() & " inbox)",
+                value.InboxDriverCount.ToString() & " inbox)"),
             "Common classes: " & value.DriverClasses,
             "Top providers: " & value.DriverProviders,
-            "Windows packages: " & value.PackageCount.ToString() &
+            If(value.PackageWarning.Length > 0,
+               "Windows packages: unavailable (no reliable count)",
+               "Windows packages: " & value.PackageCount.ToString() &
                 " (" & value.InstalledPackageCount.ToString() & " installed, " &
                 value.PendingPackageCount.ToString() & " pending, " &
-                value.StagedPackageCount.ToString() & " staged)",
-            "Pending packages (up to 4): " & value.PendingPackages,
-            "Optional features: " & value.FeatureCount.ToString() &
-                " (" & value.EnabledFeatureCount.ToString() & " enabled)",
-            "Capabilities: " & value.CapabilityCount.ToString() &
-                " (" & value.InstalledCapabilityCount.ToString() & " installed)",
+                value.StagedPackageCount.ToString() & " staged)"),
+            If(value.PackageWarning.Length > 0,
+               "Pending packages: unavailable",
+               "Pending packages (up to 4): " & value.PendingPackages),
+            If(value.FeatureWarning.Length > 0,
+               "Optional features: unavailable (no reliable count)",
+               "Optional features: " & value.FeatureCount.ToString() &
+                " (" & value.EnabledFeatureCount.ToString() & " enabled)"),
+            If(value.CapabilityWarning.Length > 0,
+               "Capabilities: unavailable (no reliable count)",
+               "Capabilities: " & value.CapabilityCount.ToString() &
+                " (" & value.InstalledCapabilityCount.ToString() & " installed)"),
+            If(value.DriverWarning.Length > 0,
+               "Driver inventory failed: " & value.DriverWarning, ""),
+            If(value.PackageWarning.Length > 0,
+               "Windows package inventory failed: " & value.PackageWarning, ""),
             If(value.FeatureWarning.Length > 0,
                "Optional features not available: " & value.FeatureWarning, ""),
             If(value.CapabilityWarning.Length > 0,
-               "Capabilities not available: " & value.CapabilityWarning, "")
+               "Capabilities not available: " & value.CapabilityWarning, ""),
+            "Read timings: drivers " & value.DriverDurationSeconds.ToString("0.0") &
+                "s; packages " & value.PackageDurationSeconds.ToString("0.0") &
+                "s; components " & value.ComponentDurationSeconds.ToString("0.0") & "s",
+            If(value.HasWarnings,
+               "PARTIAL AUDIT: warnings above mean some counts are unavailable.",
+               "AUDIT COMPLETE: all four inventory categories returned successfully.")
         })
     End Function
 
@@ -389,25 +436,84 @@ Public NotInheritable Class Wim360Servicing
         End Using
     End Function
 
+    Private Shared Function Diagnostic(ex As Exception) As String
+        ' Failures are shown to the operator and exported with the snapshot.
+        Dim description = ex.GetType().Name & ": " & ex.Message
+        Return description.Substring(0, Math.Min(description.Length, 480))
+    End Function
+
     Public Shared Async Function InspectMountedAsync(wimFile As String,
         index As Integer, mountFolder As String,
-        cancellation As CancellationToken) As Task(Of AuditResult)
-        ' Reject an unrelated mount before or after inventory collection.
+        cancellation As CancellationToken,
+        Optional progress As IProgress(Of String) = Nothing) As Task(Of AuditResult)
+        ' Mount verification failures remain fatal: never claim that an
+        ' arbitrary Windows folder is the selected mounted image index.
+        If progress IsNot Nothing Then progress.Report("WIM 360: validating source image / index / mount...")
         Dim root = Await Task.Run(
             Function() DriverStudioInventory.ValidateTarget(wimFile, index, mountFolder),
             cancellation)
         cancellation.ThrowIfCancellationRequested()
-        Dim drivers = Await DriverStudioInventory.ReadMountedAsync(wimFile, index, root, cancellation)
+
+        Dim drivers As New List(Of DriverStudioEngine.DriverPackage)()
+        Dim packages As New List(Of PackageEntry)()
+        Dim components As New ComponentInventory()
+        Dim driverWarning As String = ""
+        Dim packageWarning As String = ""
+        Dim featureWarning As String = ""
+        Dim capabilityWarning As String = ""
+        Dim timer As Stopwatch = Stopwatch.StartNew()
+
+        If progress IsNot Nothing Then progress.Report("WIM 360 [1/3]: reading Windows driver packages...")
+        Try
+            drivers = Await DriverStudioInventory.ReadMountedAsync(wimFile, index, root, cancellation)
+        Catch ex As OperationCanceledException
+            Throw
+        Catch ex As Exception
+            driverWarning = Diagnostic(ex)
+        End Try
         cancellation.ThrowIfCancellationRequested()
-        Dim packages = Await ReadPackagesAsync(root, cancellation)
+        Dim driverSeconds = timer.Elapsed.TotalSeconds
+        timer.Restart()
+
+        If progress IsNot Nothing Then progress.Report("WIM 360 [2/3]: reading Windows package states...")
+        Try
+            packages = Await ReadPackagesAsync(root, cancellation)
+        Catch ex As OperationCanceledException
+            Throw
+        Catch ex As Exception
+            packageWarning = Diagnostic(ex)
+        End Try
         cancellation.ThrowIfCancellationRequested()
-        Dim components = Await ReadComponentsAsync(root, cancellation)
+        Dim packageSeconds = timer.Elapsed.TotalSeconds
+        timer.Restart()
+
+        If progress IsNot Nothing Then progress.Report("WIM 360 [3/3]: reading optional features and capabilities...")
+        Try
+            components = Await ReadComponentsAsync(root, cancellation)
+            featureWarning = components.FeatureWarning
+            capabilityWarning = components.CapabilityWarning
+        Catch ex As OperationCanceledException
+            Throw
+        Catch ex As Exception
+            featureWarning = Diagnostic(ex)
+            capabilityWarning = featureWarning
+        End Try
         cancellation.ThrowIfCancellationRequested()
+        Dim componentSeconds = timer.Elapsed.TotalSeconds
+
+        If progress IsNot Nothing Then progress.Report("WIM 360: revalidating mounted index (read-only)...")
+        ' Abort the whole scan if the WIM/index/mount was externally replaced.
         Await Task.Run(Function()
             Return DriverStudioInventory.ValidateTarget(wimFile, index, root)
         End Function, cancellation)
-        Return Summarize(wimFile, index, root, drivers, packages,
-                         components.Items, components.FeatureWarning,
-                         components.CapabilityWarning)
+        cancellation.ThrowIfCancellationRequested()
+
+        Dim audit = Summarize(wimFile, index, root, drivers, packages,
+                              components.Items, featureWarning, capabilityWarning,
+                              driverWarning, packageWarning)
+        audit.DriverDurationSeconds = driverSeconds
+        audit.PackageDurationSeconds = packageSeconds
+        audit.ComponentDurationSeconds = componentSeconds
+        Return audit
     End Function
 End Class
