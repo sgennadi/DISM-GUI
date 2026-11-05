@@ -486,6 +486,8 @@ Public NotInheritable Class Wim360CompareIndexesForm
         })
         For Each index In result.Indexes
             stateBox.Items.Add("Only in Index " & index.ToString())
+            stateBox.Items.Add("Missing from Index " & index.ToString())
+            stateBox.Items.Add("Present in Index " & index.ToString())
         Next
         stateBox.SelectedIndex = 0
         searchBox.Clear()
