@@ -26,6 +26,8 @@ Public NotInheritable Class DriverStudioPanel
     Private ReadOnly compareButton As Button
     Private ReadOnly copyButton As Button
     Private ReadOnly transferButton As Button
+    Private ReadOnly installButton As Button
+    Private ReadOnly stopButton As Button
     Private ReadOnly targetLabel As Label
     Private ReadOnly statusLabel As Label
     Private ReadOnly totalMetric As Label
@@ -35,6 +37,15 @@ Public NotInheritable Class DriverStudioPanel
     Private ReadOnly detailBox As TextBox
     Private decisions As New List(Of DriverStudioEngine.Decision)()
     Private isWorking As Boolean
+    Private isInstalling As Boolean
+    Private comparisonVerified As Boolean
+    Private stopAfterCurrent As Boolean
+    Private comparedWim As String = ""
+    Private comparedMount As String = ""
+    Private comparedIndex As Integer
+    Private comparedSource As String = ""
+    Private comparedRecurse As Boolean
+    Private ReadOnly importHistory As New List(Of String)()
     Private lastTarget As String = "Not checked"
 
     Public Sub New(getSource As Func(Of String),
@@ -62,14 +73,14 @@ Public NotInheritable Class DriverStudioPanel
         Controls.Add(viewport)
         rootLayout = New TableLayoutPanel With {
             .Name = "DriverStudioLayout",
-            .ColumnCount = 1, .RowCount = 8, .Dock = DockStyle.Top,
-            .Width = 660, .Height = 710,
+            .ColumnCount = 1, .RowCount = 9, .Dock = DockStyle.Top,
+            .Width = 660, .Height = 800,
             .BackColor = Color.White, .Margin = Padding.Empty,
             .Padding = New Padding(15, 12, 15, 18)
         }
         rootLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         ' Show the driver decision grid earlier in short windows.
-        For Each h As Integer In {53, 54, 40, 32, 235, 66, 135, 65}
+        For Each h As Integer In {53, 54, 40, 32, 235, 66, 135, 65, 70}
             rootLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, h))
         Next
         viewport.Controls.Add(rootLayout)
@@ -236,6 +247,7 @@ Public NotInheritable Class DriverStudioPanel
                e.ColumnIndex = 0 Then
                 Dim value = grid.Rows(e.RowIndex).Cells(0).Value
                 decisions(e.RowIndex).Selected = TypeOf value Is Boolean AndAlso CBool(value)
+                UpdateInstallReady()
             End If
         End Sub
         rootLayout.Controls.Add(grid, 0, 4)
@@ -278,7 +290,11 @@ Public NotInheritable Class DriverStudioPanel
         ModernTheme.StyleButton(copyButton, "browse")
         AddHandler copyButton.Click, Sub(sender, e)
             Try
-                Clipboard.SetText(DriverStudioEngine.FormatReport(decisions, lastTarget))
+                Clipboard.SetText(DriverStudioEngine.FormatReport(decisions, lastTarget) &
+                If(importHistory.Count = 0, "",
+                   Environment.NewLine & Environment.NewLine &
+                   "SELECTIVE IMPORT RESULTS" & Environment.NewLine &
+                   String.Join(Environment.NewLine, importHistory)))
                 statusLabel.Text = "Read-only comparison copied to clipboard."
             Catch ex As Exception
                 statusLabel.Text = "Copy failed: " & ex.Message
@@ -293,12 +309,56 @@ Public NotInheritable Class DriverStudioPanel
         ModernTheme.StyleButton(transferButton, "neutral")
         AddHandler transferButton.Click, AddressOf OpenDriversClicked
         footer.Controls.Add(transferButton, 1, 0)
-        Dim warning = WriteLabel("Preview only • no drivers added",
+        Dim warning = WriteLabel("No automatic Commit / Discard",
                                   8.5F, False, ModernTheme.Muted)
         warning.TextAlign = ContentAlignment.MiddleRight
         footer.Controls.Add(warning, 2, 0)
+
+        Dim importActions As New TableLayoutPanel With {
+            .Name = "DriverStudioImportActions",
+            .Dock = DockStyle.Fill, .ColumnCount = 3, .RowCount = 1,
+            .Margin = New Padding(0, 6, 0, 0), .BackColor = Color.White
+        }
+        importActions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        importActions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 183))
+        importActions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 183))
+        importActions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+        rootLayout.Controls.Add(importActions, 0, 8)
+
+        installButton = New Button With {
+            .Name = "btnStudioInstallSelected",
+            .Text = "Install selected INF",
+            .Dock = DockStyle.Fill, .Enabled = False,
+            .Margin = New Padding(0, 4, 10, 5)
+        }
+        ModernTheme.StyleButton(installButton, "primary")
+        AddHandler installButton.Click, AddressOf InstallSelectedClicked
+        importActions.Controls.Add(installButton, 0, 0)
+
+        stopButton = New Button With {
+            .Name = "btnStudioStopAfterCurrent",
+            .Text = "Stop after current",
+            .Dock = DockStyle.Fill, .Enabled = False,
+            .Margin = New Padding(0, 4, 10, 5)
+        }
+        ModernTheme.StyleButton(stopButton, "neutral")
+        AddHandler stopButton.Click, Sub(sender, e)
+            stopAfterCurrent = True
+            stopButton.Enabled = False
+            statusLabel.Text = "Stopping after the current DISM driver operation finishes."
+        End Sub
+        importActions.Controls.Add(stopButton, 1, 0)
+
+        Dim importNote = WriteLabel("Requires mounted R/W image",
+                                    8.4F, False, ModernTheme.Muted)
+        importNote.TextAlign = ContentAlignment.MiddleRight
+        importActions.Controls.Add(importNote, 2, 0)
+
         AddHandler sourceBox.TextChanged, Sub(sender, e)
-            InvalidateComparison()
+            If Not isWorking Then InvalidateComparison()
+        End Sub
+        AddHandler recursive.CheckedChanged, Sub(sender, e)
+            If Not isWorking Then InvalidateComparison()
         End Sub
     End Sub
 
@@ -344,6 +404,9 @@ Public NotInheritable Class DriverStudioPanel
     End Sub
 
     Private Sub InvalidateComparison()
+        comparisonVerified = False
+        importHistory.Clear()
+        installButton.Enabled = False
         decisions.Clear()
         grid.Rows.Clear()
         copyButton.Enabled = False
@@ -361,6 +424,15 @@ Public NotInheritable Class DriverStudioPanel
         compareButton.Enabled = Not busy
         recursive.Enabled = Not busy
         sourceBox.ReadOnly = busy
+        grid.ReadOnly = busy
+        transferButton.Enabled = Not busy AndAlso decisions.Count > 0
+        stopButton.Enabled = busy AndAlso isInstalling AndAlso Not stopAfterCurrent
+        UpdateInstallReady()
+    End Sub
+
+    Private Sub UpdateInstallReady()
+        installButton.Enabled = Not isWorking AndAlso comparisonVerified AndAlso
+            decisions.Any(Function(d) d.Selected AndAlso DriverStudioInstaller.IsAllowed(d))
     End Sub
 
     Private Async Sub ScanClicked(sender As Object, e As EventArgs)
@@ -393,6 +465,7 @@ Public NotInheritable Class DriverStudioPanel
         Dim imagePath = currentWim()
         Dim index = currentIndex()
         Dim mount = currentMount()
+        comparisonVerified = False
         WorkState(True)
         statusLabel.Text = "Checking selected WIM index and reading driver versions..."
         Dim sourceItems As New List(Of DriverStudioEngine.DriverPackage)()
@@ -404,8 +477,13 @@ Public NotInheritable Class DriverStudioPanel
                 imagePath, index, mount, CancellationToken.None)
             If IsDisposed Then Return
             Dim results = DriverStudioEngine.CompareCandidates(sourceItems, installed, True)
+            comparedWim = imagePath
+            comparedIndex = index
+            comparedMount = mount
+            comparedSource = selectedPath
+            comparedRecurse = includeSubfolders
             ShowDecisions(results, Path.GetFileName(imagePath) & " / Index " &
-                          index.ToString() & " / " & mount)
+                          index.ToString() & " / " & mount, True)
             statusLabel.Text = "Compared " & results.Count.ToString() &
                                " INF(s) against " & installed.Count.ToString() &
                                " installed driver entries. No changes made."
@@ -424,11 +502,13 @@ Public NotInheritable Class DriverStudioPanel
     End Sub
 
     Public Sub PreviewForTest(items As IEnumerable(Of DriverStudioEngine.Decision))
-        ShowDecisions(items.ToList(), "CI fixture - mounted index verified")
+        ShowDecisions(items.ToList(), "CI fixture - mounted index verified", True)
     End Sub
 
     Private Sub ShowDecisions(results As List(Of DriverStudioEngine.Decision),
-                              comparisonTarget As String)
+                              comparisonTarget As String,
+                              Optional verified As Boolean = False)
+        comparisonVerified = verified
         lastTarget = comparisonTarget
         decisions = results
         grid.SuspendLayout()
@@ -437,6 +517,8 @@ Public NotInheritable Class DriverStudioPanel
             For Each d In results
                 Dim number = grid.Rows.Add(d.Selected, d.Candidate.InfName,
                     d.Candidate.Version, d.InstalledVersion, d.Status)
+                grid.Rows(number).Cells(0).ReadOnly =
+                    Not DriverStudioInstaller.IsAllowed(d)
                 Dim cell = grid.Rows(number).Cells(4)
                 If d.Status = "Same version" OrElse d.Status = "Duplicate source" Then
                     cell.Style.ForeColor = ModernTheme.Muted
@@ -458,6 +540,7 @@ Public NotInheritable Class DriverStudioPanel
             "Preview ready. Choose an INF to see the comparison explanation.")
         copyButton.Enabled = results.Count > 0
         transferButton.Enabled = results.Count > 0
+        UpdateInstallReady()
         If results.Count > 0 Then
             grid.ClearSelection()
             grid.Rows(0).Selected = True
@@ -486,6 +569,146 @@ Public NotInheritable Class DriverStudioPanel
             "Source INF SHA-256: " & src.Sha256 & Environment.NewLine &
             "Hardware IDs from INF: " & If(src.HardwareIds.Count = 0, "not parsed",
                 String.Join(", ", src.HardwareIds.Take(8)))
+    End Sub
+
+    ' Explicit controlled write path. The preview is never an authorization to
+    ' install a folder: only checked, still-verified New/Newer INF files can run.
+    Private Async Sub InstallSelectedClicked(sender As Object, e As EventArgs)
+        If isWorking OrElse Not comparisonVerified Then Return
+        Dim selected = decisions.Where(Function(d) d.Selected).ToList()
+        If selected.Count = 0 Then
+            MessageBox.Show(Me.FindForm(), "Select at least one New or Newer INF.",
+                            "Driver Studio", MessageBoxButtons.OK,
+                            MessageBoxIcon.Information)
+            Return
+        End If
+        If selected.Any(Function(d) Not DriverStudioInstaller.IsAllowed(d)) Then
+            MessageBox.Show(Me.FindForm(),
+                "Only New / Newer entries may be installed. Deselect other statuses.",
+                "Driver Studio - Review selection", MessageBoxButtons.OK,
+                MessageBoxIcon.Warning)
+            Return
+        End If
+        If Not DriverStudioInstaller.IsAdministrator() Then
+            MessageBox.Show(Me.FindForm(),
+                "Adding drivers to an offline image requires Administrator privileges. " &
+                "Restart DISM GUI elevated and compare the WIM index again.",
+                "Driver Studio - Administrator required", MessageBoxButtons.OK,
+                MessageBoxIcon.Warning)
+            Return
+        End If
+        If Not String.Equals(currentWim(), comparedWim, StringComparison.OrdinalIgnoreCase) OrElse
+           currentIndex() <> comparedIndex OrElse
+           Not String.Equals(currentMount(), comparedMount, StringComparison.OrdinalIgnoreCase) OrElse
+           Not String.Equals(sourceBox.Text.Trim(), comparedSource,
+                             StringComparison.OrdinalIgnoreCase) OrElse
+           recursive.Checked <> comparedRecurse Then
+            MessageBox.Show(Me.FindForm(),
+                "The WIM, image index, mount folder or driver source changed. " &
+                "Run Compare with mounted index again.",
+                "Driver Studio - Comparison expired", MessageBoxButtons.OK,
+                MessageBoxIcon.Warning)
+            Return
+        End If
+
+        Dim prompt = "Install " & selected.Count.ToString() &
+                     " selected INF driver package(s) into:" & Environment.NewLine &
+                     comparedWim & Environment.NewLine &
+                     "Index " & comparedIndex.ToString() &
+                     " | Mount folder: " & comparedMount & Environment.NewLine &
+                     Environment.NewLine &
+                     "DISM will MODIFY the mounted image. Only New/Newer INF files " &
+                     "will be added; existing, older and ambiguous packages are skipped." &
+                     Environment.NewLine & Environment.NewLine &
+                     "No automatic Mount, Commit, Discard, Recurse or ForceUnsigned." &
+                     Environment.NewLine &
+                     "Changes remain pending until you explicitly commit/unmount." &
+                     Environment.NewLine &
+                     "Do not close the application while an INF is being installed." &
+                     Environment.NewLine & Environment.NewLine &
+                     "Continue?"
+        If MessageBox.Show(Me.FindForm(), prompt,
+                           "Driver Studio - Confirm selective import",
+                           MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                           MessageBoxDefaultButton.Button2) <> DialogResult.Yes Then Return
+
+        isInstalling = True
+        stopAfterCurrent = False
+        WorkState(True)
+        importHistory.Clear()
+        Dim succeeded As Integer = 0
+        Dim completed As Integer = 0
+        Try
+            statusLabel.Text = "Preflight: verifying read/write mount and fresh driver inventory..."
+            Dim mountRoot = Await Task.Run(Function()
+                Return DriverStudioInstaller.RequireWritableTarget(
+                    comparedWim, comparedIndex, comparedMount)
+            End Function)
+            Dim sourceItems = Await Task.Run(Function()
+                Return DriverStudioEngine.ScanSource(comparedSource, comparedRecurse)
+            End Function)
+            Dim installed = Await DriverStudioInventory.ReadMountedAsync(
+                comparedWim, comparedIndex, comparedMount, CancellationToken.None)
+            Dim plan = DriverStudioInstaller.ValidatePlan(selected, sourceItems, installed)
+
+            For Each package As DriverStudioEngine.DriverPackage In plan
+                If stopAfterCurrent Then Exit For
+                ' An external operation might unmount the image during a long
+                ' batch. Re-check the index and read/write flag before each INF.
+                Await Task.Run(Function()
+                    Return DriverStudioInstaller.RequireWritableTarget(
+                        comparedWim, comparedIndex, comparedMount)
+                End Function)
+
+                statusLabel.Text = "Installing " & (completed + 1).ToString() & "/" &
+                    plan.Count.ToString() & ": " & package.InfName &
+                    " (do not close DISM GUI)"
+                Dim outcome = Await DriverStudioInstaller.AddOneAsync(mountRoot, package)
+                completed += 1
+                If outcome.Succeeded Then succeeded += 1
+                importHistory.Add(package.InfName & " | " &
+                    If(outcome.Succeeded, "Installed", "FAILED") &
+                    " | DISM exit: " & outcome.ExitCode.ToString() &
+                    If(outcome.RebootRequired, " | Restart required", "") &
+                    Environment.NewLine & outcome.Details)
+
+                For Each row As DataGridViewRow In grid.Rows
+                    If String.Equals(Convert.ToString(row.Cells(1).Value),
+                                     package.InfName, StringComparison.OrdinalIgnoreCase) Then
+                        row.Cells(4).Value = If(outcome.Succeeded,
+                                                "Installed", "FAILED")
+                        row.Cells(0).Value = False
+                        Exit For
+                    End If
+                Next
+                If Not outcome.Succeeded OrElse outcome.RebootRequired Then
+                    detailBox.Text = If(outcome.Succeeded,
+                        "Restart required before further servicing.",
+                        "DISM failed. Remaining drivers were NOT installed.") &
+                        Environment.NewLine & outcome.Details
+                    Exit For
+                End If
+            Next
+            statusLabel.Text = "Selective import finished: " &
+                succeeded.ToString() & "/" & completed.ToString() &
+                " successful, " & (selected.Count - completed).ToString() &
+                " not attempted. Commit/Discard was NOT performed. Compare again."
+        Catch ex As Exception
+            importHistory.Add("STOPPED | " & ex.Message)
+            statusLabel.Text = "Selective import stopped after " &
+                completed.ToString() & " attempt(s): " & ex.Message
+            detailBox.Text = "No automatic rollback or Discard was performed." &
+                Environment.NewLine & ex.Message
+        Finally
+            comparisonVerified = False
+            isInstalling = False
+            stopAfterCurrent = False
+            If Not IsDisposed Then
+                WorkState(False)
+                installButton.Enabled = False
+                stopButton.Enabled = False
+            End If
+        End Try
     End Sub
 
     Private Sub OpenDriversClicked(sender As Object, e As EventArgs)
