@@ -110,6 +110,7 @@ Public NotInheritable Class ResponsiveForms
                 browse.Text = browseText
                 browse.AutoEllipsis = False
                 ModernTheme.StyleButton(browse, "browse")
+                ModernTheme.ConfigureReadableButton(browse, 150)
                 browse.Font = ModernTheme.UiFont(9.3F, True)
                 browse.TextAlign = ContentAlignment.MiddleCenter
             End If
@@ -196,6 +197,7 @@ Public NotInheritable Class ResponsiveForms
             button.TextAlign = ContentAlignment.MiddleCenter
             button.AutoEllipsis = False
             button.Dock = DockStyle.None
+            ModernTheme.ConfigureReadableButton(button, 180)
             button.Margin = New Padding(3, 0, 0, 12)
             button.Width = 205
             Dim m = TextRenderer.MeasureText(button.Text, button.Font,
