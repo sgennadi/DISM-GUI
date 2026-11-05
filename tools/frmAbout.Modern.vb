@@ -123,8 +123,8 @@ Public NotInheritable Class frmAbout
             .BackColor = ModernTheme.Backdrop, .Padding = New Padding(0, 11, 0, 0),
             .Margin = Padding.Empty
         }
-        footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 185))
-        footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 185))
+        footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 165))
+        footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 165))
         footer.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 110))
         root.Controls.Add(footer, 0, 2)
@@ -145,6 +145,18 @@ Public NotInheritable Class frmAbout
             SupportContact.OpenSupportEmail(Me)
         End Sub
         footer.Controls.Add(emailButton, 1, 0)
+
+        Dim reportButton As New Button With {
+            .Name = "btnReportProblem", .Text = "Report error to GitHub",
+            .Dock = DockStyle.Fill, .Margin = New Padding(0, 0, 12, 2)
+        }
+        ModernTheme.StyleButton(reportButton, "browse")
+        AddHandler reportButton.Click, Sub(sender, e)
+            Using viewer As New ErrorReportForm("", "About / Support")
+                viewer.ShowDialog(Me)
+            End Using
+        End Sub
+        footer.Controls.Add(reportButton, 2, 0)
 
         Dim closeButton As New Button With {.Text = "Close",
                                             .Dock = DockStyle.Fill,
