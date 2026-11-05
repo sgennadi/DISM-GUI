@@ -385,11 +385,12 @@ Public NotInheritable Class Wim360Dashboard
             End If
             ShowReport(loaded)
         Catch ex As Exception
+            ErrorDiagnostics.RememberFailure("WIM 360 metadata inspection", ex)
             If Me.IsDisposed OrElse generation <> scanGeneration Then Return
             mounts.Text = "Unavailable"
-            status.Text = "Cannot inspect image: " & ex.Message
+            status.Text = "Cannot inspect image; open Tools > Report error to GitHub."
             details.Text = "No files were modified." & Environment.NewLine &
-                           ex.GetType().Name & ": " & ex.Message
+                           ErrorDiagnostics.Redact(ex.GetType().Name & ": " & ex.Message)
         Finally
             If Not Me.IsDisposed AndAlso generation = scanGeneration Then
                 scan.Enabled = True
