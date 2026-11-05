@@ -1126,6 +1126,17 @@ internal static class LayoutSmoke
             Require(indexCsvButton is not null && indexCsvButton.Enabled &&
                     indexJsonButton is not null && indexJsonButton.Enabled,
                     "WIM 360 index metadata export should work without mounting");
+            tabs.SelectedIndex = 9;
+            Application.DoEvents();
+            foreach (var actionButton in new[] {
+                indexCsvButton!, indexJsonButton!,
+                Find(dashboard, "btn360UseInMount") as Button,
+                Find(dashboard, "btn360CompareSnapshots") as Button
+            })
+            {
+                Require(actionButton is not null, "WIM 360 required action missing");
+                VerifyReadableButton(actionButton!, "WIM 360");
+            }
             var selectedDetails = Find(dashboard, "txt360Details") as TextBox;
             Require(selectedDetails!.Text.Contains("WindowsPE") &&
                     selectedDetails.Text.Contains("10.0.26100"),
