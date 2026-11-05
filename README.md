@@ -67,14 +67,19 @@ selected by default; select any 2–8 using the checkbox list.
 
 - **Index metadata** works immediately, without a mount: name, description,
   edition, build, languages, architecture, installation type, image size.
-- **Files + folders** requires each chosen index to already be mounted to a
-  **different directory** (prefer read-only mounts). Refresh **Inspect** after
-  mounting. The comparison includes **files, empty directories and folders**,
-  with file paths/sizes and folder presence, using explicit
-  `Only in Index N`, `Missing in some`, `Different`, and
-  `Present in all` states. The tool neither mounts nor unmounts images.
-  Reparse points are deliberately skipped, and unreadable/incomplete file
-  scans fail instead of silently reporting missing files.
+- **Files + folders (no mounting)** uses the built-in Windows
+  `DISM /English /List-Image` command against each selected WIM/ESD index.
+  The result contains all *paths* (files, folders and empty folders) in
+  adjacent columns: `Only in Index N`, `Missing from Index N`,
+  `Present in all`, etc. It does not mount or modify the image, and cannot
+  prove file bytes or sizes are the same. Truncated/failed DISM output is
+  rejected instead of being reported as a missing file. Direct split SWM
+  path enumeration is not enabled; SWM metadata inspection remains available.
+- **Files + sizes (already mounted)** requires each selected index to be
+  mounted in a **different folder** (prefer read-only mounts); refresh
+  **Inspect** after mounting. This mode compares file paths, lengths and
+  empty-folder presence. Reparse points are skipped. File SHA-256 verification
+  is available for an individually selected path.
 - **Drivers / packages / features** requires a completed **Scan mounted
   index** for every selected index. If any scan is partial, comparison
   refuses to report possibly false missing items.
@@ -85,15 +90,17 @@ their versions or sizes differ; **Present in all** means reported values
 are identical across all selected indexes.
 The selected indexes are shown as adjacent columns; horizontal scrolling
 is available. **Export filtered CSV** saves only visible rows. To check
-actual bytes, select one file in Files mode and choose **Verify SHA-256**.
+actual bytes, select one file in the mounted-files mode and choose **Verify SHA-256**.
 Equal file lengths alone do not establish equal content, and the SHA-256
 operation can take time for large files. All operations are read-only.
 
 For example, for `install.wim` with indexes 1, 2 and 3, first use
-**Index metadata** to compare editions and builds. To compare the real
-`Windows\System32` contents, mount all three to separate directories,
-re-inspect the WIM, then select **Files + folders**. Filter by
-`Missing / only in some`, `Only in Index 3`, or `Different`.
+**Index metadata** to compare editions and builds. Select
+**Files + folders (no mounting)** to compare all paths under
+`Windows\System32` immediately. Filter by `Missing from Index 2`,
+`Only in Index 3`, or `Present in all`. To check different file lengths
+or calculate SHA-256, mount the selected indexes in separate read-only
+directories and switch to **Files + sizes (already mounted)**.
 
 For an index that is **already mounted**, select it and click **Scan mounted
 index**. WIM 360 validates the exact image file, index and mount directory,
