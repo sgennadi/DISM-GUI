@@ -153,8 +153,9 @@ Public NotInheritable Class ModernTheme
         If grid IsNot Nothing Then
             grid.RowTemplate.Height = Math.Max(grid.RowTemplate.Height,
                                                grid.Font.Height + 12)
+            Dim headerFont = If(grid.ColumnHeadersDefaultCellStyle.Font, grid.Font)
             grid.ColumnHeadersHeight = Math.Max(grid.ColumnHeadersHeight,
-                                                grid.ColumnHeadersDefaultCellStyle.Font.Height + 18)
+                                                headerFont.Height + 18)
         End If
         For Each child As Control In control.Controls
             ScaleDialogTables(child, scale)
