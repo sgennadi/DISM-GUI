@@ -225,6 +225,7 @@ Public NotInheritable Class Wim360CompareForm
         typeFilter.SelectedIndex = 0
         AddHandler baselinePath.TextChanged, AddressOf SourcesChanged
         AddHandler currentPath.TextChanged, AddressOf SourcesChanged
+        ModernTheme.MakeDialogScrollable(Me, root, 980, 680)
         WindowGeometry.Install(Me, "Software\DISMGUI\Wim360Compare")
     End Sub
 
