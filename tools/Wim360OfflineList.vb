@@ -7,7 +7,7 @@ Imports System.Linq
 Imports System.Text
 Imports System.Threading
 
-' Read the real file/directory catalog directly from WIM/ESD using DISM /List-Image.
+' Read the real file/directory catalog directly from WIM/ESD using the Windows DISM API.
 ' This mode never mounts, applies, commits, extracts, or modifies an image.
 ' Unlike the mounted mode, DISM does not expose file sizes or byte hashes here.
 Public NotInheritable Class Wim360OfflineList
@@ -64,35 +64,62 @@ Public NotInheritable Class Wim360OfflineList
         }
     End Function
 
+    ' DISM /List-Image writes to a redirected console stream with the active
+    ' console codepage. Non-ASCII image paths can become '?' or replacement
+    ' characters, causing FALSE missing-item reports. Use the Windows DISM
+    ' PowerShell API and ASCII Base64 transport for lossless Unicode paths.
+    ' Both APIs read the WIM catalog without mounting or modifying it.
     Private Shared Function ListIndex(imagePath As String, index As Integer,
                      token As CancellationToken,
                      progress As IProgress(Of String)) As List(Of Wim360IndexComparer.Item)
-        Dim start As New ProcessStartInfo("dism.exe") With {
-            .UseShellExecute = False, .CreateNoWindow = True,
-            .RedirectStandardOutput = True, .RedirectStandardError = True,
-            .StandardOutputEncoding = Encoding.UTF8,
+        Dim encodedPath = Convert.ToBase64String(Encoding.Unicode.GetBytes(imagePath))
+        Dim script = "$ErrorActionPreference='Stop'; " &
+            "Import-Module Dism -ErrorAction Stop; " &
+            "$image=[Text.Encoding]::Unicode.GetString(" &
+            "[Convert]::FromBase64String('" & encodedPath & "')); " &
+            "Get-WindowsImageContent -ImagePath $image -Index " &
+            index.ToString(Globalization.CultureInfo.InvariantCulture) &
+            " -ErrorAction Stop | ForEach-Object { " &
+            "[Console]::Out.WriteLine('W360:' + " &
+            "[Convert]::ToBase64String(" &
+            "[Text.Encoding]::Unicode.GetBytes([string]$_))) " &
+            "}; [Console]::Out.WriteLine('W360:END')"
+        Dim encodedScript = Convert.ToBase64String(Encoding.Unicode.GetBytes(script))
+
+        Dim windowsPath = Environment.GetFolderPath(Environment.SpecialFolder.Windows)
+        Dim shellDir = If(Environment.Is64BitOperatingSystem AndAlso
+                          Not Environment.Is64BitProcess, "Sysnative", "System32")
+        Dim shell = Path.Combine(windowsPath, shellDir,
+                                 "WindowsPowerShell", "v1.0", "powershell.exe")
+        If Not File.Exists(shell) Then shell = "powershell.exe"
+        Dim start As New ProcessStartInfo(shell) With {
+            .UseShellExecute = False,
+            .CreateNoWindow = True,
+            .RedirectStandardOutput = True,
+            .RedirectStandardError = True,
+            .StandardOutputEncoding = Encoding.ASCII,
             .StandardErrorEncoding = Encoding.UTF8
         }
-        ' ArgumentList prevents paths with spaces/quotes from corrupting DISM options.
-        For Each arg In {"/English", "/List-Image",
-                         "/ImageFile:" & imagePath,
-                         "/Index:" & index.ToString(Globalization.CultureInfo.InvariantCulture)}
+        For Each arg In {"-NoLogo", "-NoProfile", "-NonInteractive",
+                         "-EncodedCommand", encodedScript}
             start.ArgumentList.Add(arg)
         Next
         Using proc As New Process With {.StartInfo = start}
             If Not proc.Start() Then
-                Throw New InvalidOperationException("Windows DISM could not start.")
+                Throw New InvalidOperationException(
+                    "Windows PowerShell could not start the DISM image-content reader.")
             End If
             Dim errors = proc.StandardError.ReadToEndAsync()
-            Using timeout As New CancellationTokenSource(TimeSpan.FromMinutes(8))
-                Using linked = CancellationTokenSource.CreateLinkedTokenSource(token, timeout.Token)
+            Using timeout As New CancellationTokenSource(TimeSpan.FromMinutes(12))
+                Using linked = CancellationTokenSource.CreateLinkedTokenSource(
+                    token, timeout.Token)
                     Using registration = linked.Token.Register(Sub()
                         Try
                             If Not proc.HasExited Then proc.Kill(True)
                         Catch ex As InvalidOperationException
-                            ' Process already exited.
+                            ' The process has already stopped.
                         Catch ex As Win32Exception
-                            ' The main thread will report the cancellation/exit.
+                            ' Report the cancellation or process exit below.
                         End Try
                     End Sub)
                         Dim entries As New List(Of Wim360IndexComparer.Item)()
@@ -104,28 +131,33 @@ Public NotInheritable Class Wim360OfflineList
                             End If
                             If timeout.IsCancellationRequested Then
                                 Throw New TimeoutException(
-                                    "DISM file listing exceeded the 8-minute limit for index " &
-                                    index.ToString() & ". No incomplete comparison was shown.")
+                                    "Reading WIM index " & index.ToString() &
+                                    " exceeded 12 minutes. Incomplete results were discarded.")
                             End If
-                            If String.Equals(line.Trim(),
-                                "The operation completed successfully.",
-                                StringComparison.OrdinalIgnoreCase) Then successful = True
-                            Dim entry = ParseEntryLine(line, index)
-                            If entry IsNot Nothing Then
-                                entries.Add(entry)
-                                If entries.Count > MaxEntriesPerIndex Then
-                                    Try
-                                        If Not proc.HasExited Then proc.Kill(True)
-                                    Catch ex As InvalidOperationException
-                                    End Try
-                                    Throw New InvalidDataException(
-                                        "Index " & index.ToString() & " exceeds " &
-                                        MaxEntriesPerIndex.ToString() &
-                                        " paths. No partial comparison was shown.")
-                                End If
-                                If entries.Count Mod 25000 = 0 AndAlso progress IsNot Nothing Then
-                                    progress.Report("Index " & index.ToString() & ": " &
-                                        entries.Count.ToString("N0") & " paths read (no mount)")
+                            If line = "W360:END" Then
+                                successful = True
+                            ElseIf line.StartsWith("W360:", StringComparison.Ordinal) Then
+                                Dim raw = Convert.FromBase64String(line.Substring(5))
+                                Dim original = Encoding.Unicode.GetString(raw)
+                                Dim entry = ParseEntryLine(original, index)
+                                If entry IsNot Nothing Then
+                                    entries.Add(entry)
+                                    If entries.Count > MaxEntriesPerIndex Then
+                                        Try
+                                            If Not proc.HasExited Then proc.Kill(True)
+                                        Catch ex As InvalidOperationException
+                                        End Try
+                                        Throw New InvalidDataException(
+                                            "Index " & index.ToString() & " exceeds " &
+                                            MaxEntriesPerIndex.ToString() &
+                                            " paths; no incomplete comparison was shown.")
+                                    End If
+                                    If entries.Count Mod 25000 = 0 AndAlso
+                                       progress IsNot Nothing Then
+                                        progress.Report("Index " & index.ToString() & ": " &
+                                            entries.Count.ToString("N0") &
+                                            " paths read (no mount)")
+                                    End If
                                 End If
                             End If
                             line = proc.StandardOutput.ReadLine()
@@ -136,14 +168,16 @@ Public NotInheritable Class Wim360OfflineList
                         End If
                         If timeout.IsCancellationRequested Then
                             Throw New TimeoutException(
-                                "DISM file listing timed out for index " & index.ToString())
+                                "Reading index " & index.ToString() & " timed out.")
                         End If
                         Dim errorText = errors.GetAwaiter().GetResult()
                         If proc.ExitCode <> 0 OrElse Not successful Then
                             Throw New InvalidOperationException(
-                                "DISM could not list index " & index.ToString() &
-                                " (exit " & proc.ExitCode.ToString() & "). " &
-                                If(errorText.Length > 900, errorText.Substring(0, 900), errorText))
+                                "DISM PowerShell could not list index " &
+                                index.ToString() & " (exit " & proc.ExitCode.ToString() &
+                                "). The WIM was not modified. " &
+                                If(errorText.Length > 1100,
+                                   errorText.Substring(0, 1100), errorText))
                         End If
                         Return entries
                     End Using
