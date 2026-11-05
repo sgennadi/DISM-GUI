@@ -75,6 +75,11 @@ selected by default; select any 2–8 using the checkbox list.
   prove file bytes or sizes are the same. Truncated/failed DISM output is
   rejected instead of being reported as a missing file. Direct split SWM
   path enumeration is not enabled; SWM metadata inspection remains available.
+  To protect image integrity, this mode computes a full SHA-256 of the
+  **source WIM before and after** enumeration and restores its original file
+  modification timestamp if Windows DISM changed only that timestamp.
+  On multi-gigabyte WIM files this verification adds substantial disk reads;
+  the Compare button switches to **Cancel scan** during the operation.
 - **Files + sizes (already mounted)** requires each selected index to be
   mounted in a **different folder** (prefer read-only mounts); refresh
   **Inspect** after mounting. This mode compares file paths, lengths and
