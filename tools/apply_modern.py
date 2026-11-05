@@ -26,7 +26,7 @@ def edit_once(path, old, new, label):
     path.write_text(s.replace(old, new, 1), encoding="utf-8-sig")
     print("Patched:", label)
 
-for name in ("ModernTheme.vb", "ResponsiveSectionLayout.vb", "ResponsiveForms.vb", "WindowGeometry.vb", "UpdateManager.vb", "SupportContact.vb",
+for name in ("ModernTheme.vb", "ResponsiveSectionLayout.vb", "ResponsiveForms.vb", "WindowGeometry.vb", "UpdateManager.vb", "SupportContact.vb", "ErrorDiagnostics.vb", "ErrorReportForm.vb",
              "Wim360Reader.vb", "Wim360Dashboard.vb", "Wim360Servicing.vb",
              "Wim360Catalog.vb", "Wim360InventoryForm.vb",
              "Wim360SnapshotDiff.vb", "Wim360CompareForm.vb", "DriverStudioEngine.vb",
