@@ -68,7 +68,7 @@ selected by default; select any 2–8 using the checkbox list.
 - **Index metadata** works immediately, without a mount: name, description,
   edition, build, languages, architecture, installation type, image size.
 - **Files + folders (no mounting)** uses the built-in Windows
-  `DISM /English /List-Image` command against each selected WIM/ESD index.
+  Windows DISM PowerShell `Get-WindowsImageContent` against each selected WIM/ESD index.
   The result contains all *paths* (files, folders and empty folders) in
   adjacent columns: `Only in Index N`, `Missing from Index N`,
   `Present in all`, etc. It does not mount or modify the image, and cannot
