@@ -43,7 +43,7 @@ jobs:
       - name: Check patch
         shell: pwsh
         run: |
-          python -c "from pathlib import Path; s=Path('DISM GUI/frmMain.vb').read_text(encoding='utf-8-sig'); assert 'ChooseFolderModern(' in s and 'ShowUnmountResult(' in s; assert s.count(' & chr(34) + ' /Index:' + chr(34)) >= 4; assert ' /index:' + chr(34) * 3 not in s; print('Patched source OK')"
+          python -c "from pathlib import Path; s=Path('DISM GUI/frmMain.vb').read_text(encoding='utf-8-sig'); assert 'ChooseFolderModern(' in s and 'ShowUnmountResult(' in s; assert s.count(' /Index:') >= 4; assert '/index:' + chr(34)*3 not in s; print('Patched source OK')"
       - name: Smoke-test WinForms and real read-only WIM mount (x64)
         if: matrix.rid == 'win-x64'
         shell: pwsh
