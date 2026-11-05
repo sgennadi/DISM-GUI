@@ -261,10 +261,14 @@ Public NotInheritable Class Wim360IndexComparer
         Return checkedRow
     End Function
 
+    ' One-pass aggregation: a large install.wim may have hundreds of thousands
+    ' of paths per index. Avoid LINQ GroupBy(), which retains a second full
+    ' collection of all input items and causes large allocation spikes.
     Public Shared Function CompareRecords(imageFile As String, mode As String,
                        indexes As IEnumerable(Of Integer),
                        items As IEnumerable(Of Item)) As Result
         If items Is Nothing Then Throw New ArgumentNullException(NameOf(items))
+        If indexes Is Nothing Then Throw New ArgumentNullException(NameOf(indexes))
         Dim chosen = indexes.Distinct().OrderBy(Function(x) x).ToList()
         If chosen.Count < 2 OrElse chosen.Count > 8 Then
             Throw New ArgumentException("Select between two and eight image indexes.")
@@ -273,41 +277,51 @@ Public NotInheritable Class Wim360IndexComparer
             .ImageFile = If(imageFile, ""), .Mode = If(mode, ""),
             .Indexes = chosen
         }
-        Dim all = items.Where(Function(x) chosen.Contains(x.Index)).
-                        GroupBy(Function(x) x.Kind & ChrW(0) & x.Key,
-                                StringComparer.OrdinalIgnoreCase)
-        For Each group In all
-            Dim first = group.First()
-            Dim row As New Row With {.Kind = first.Kind, .Name = first.Key}
-            Dim ambiguous As Boolean = False
-            For Each index In chosen
-                Dim sources = group.Where(Function(x) x.Index = index).ToList()
-                If sources.Count > 0 Then
-                    If sources.Count > 1 Then ambiguous = True
-                    row.Values.Add(index, String.Join(" | ",
-                        sources.Select(Function(x) If(x.Value, "")).
-                            Distinct(StringComparer.OrdinalIgnoreCase)))
-                End If
-            Next
-            row.PresentCount = row.Values.Count
-            If ambiguous Then
-                row.State = "Ambiguous duplicates"
+        Dim allowed As New HashSet(Of Integer)(chosen)
+        Dim rowsByPath As New Dictionary(Of String, Row)(
+            StringComparer.OrdinalIgnoreCase)
+        For Each entry In items
+            If entry Is Nothing OrElse Not allowed.Contains(entry.Index) Then Continue For
+            Dim identity = If(entry.Kind, "") & ChrW(0) & If(entry.Key, "")
+            Dim row As Row = Nothing
+            If Not rowsByPath.TryGetValue(identity, row) Then
+                row = New Row With {
+                    .Kind = If(entry.Kind, ""),
+                    .Name = If(entry.Key, "")
+                }
+                rowsByPath.Add(identity, row)
+            End If
+            Dim value = If(entry.Value, "")
+            Dim previous As String = Nothing
+            If row.Values.TryGetValue(entry.Index, previous) Then
+                ' Even a same-value duplicate has an ambiguous identity.
                 row.Notes = "More than one item has the same identity in an index."
+                If Not String.Equals(previous, value,
+                                     StringComparison.OrdinalIgnoreCase) Then
+                    row.Values(entry.Index) = previous & " | " & value
+                End If
+            Else
+                row.Values.Add(entry.Index, value)
+            End If
+        Next
+        For Each row In rowsByPath.Values
+            row.PresentCount = row.Values.Count
+            If row.Notes.Length > 0 Then
+                row.State = "Ambiguous duplicates"
             ElseIf row.PresentCount = 1 Then
                 row.State = "Only in Index " & row.Values.Keys.First().ToString()
             ElseIf row.PresentCount < chosen.Count Then
                 row.State = "Missing in some"
-            ElseIf row.Values.Values.Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1 Then
+            ElseIf row.Values.Values.Distinct(
+                   StringComparer.OrdinalIgnoreCase).Count() > 1 Then
                 row.State = "Different"
             Else
                 row.State = "Present in all"
             End If
-            result.Rows.Add(row)
         Next
-        result.Rows = result.Rows.OrderBy(Function(x) x.Kind,
-                                          StringComparer.OrdinalIgnoreCase).
-                                  ThenBy(Function(x) x.Name,
-                                         StringComparer.OrdinalIgnoreCase).ToList()
+        result.Rows = rowsByPath.Values.
+            OrderBy(Function(x) x.Kind, StringComparer.OrdinalIgnoreCase).
+            ThenBy(Function(x) x.Name, StringComparer.OrdinalIgnoreCase).ToList()
         Return result
     End Function
 
