@@ -71,14 +71,6 @@ Public NotInheritable Class Wim360Reader
             ByRef creationResult As UInteger) As IntPtr
     End Function
 
-    <DllImport("wimgapi.dll", EntryPoint:="WIMSetReferenceFile",
-               CharSet:=CharSet.Unicode, SetLastError:=True)>
-    Private Shared Function WIMSetReferenceFile(wimHandle As IntPtr,
-             referencePath As String, flags As UInteger) As Boolean
-    End Function
-
-    Private Const WIM_REFERENCE_APPEND As UInteger = &H10000UI
-
     <DllImport("wimgapi.dll", EntryPoint:="WIMGetImageInformation",
                SetLastError:=True)>
     Private Shared Function WIMGetImageInformation(handle As IntPtr,
@@ -355,14 +347,9 @@ Public NotInheritable Class Wim360Reader
         End If
         Dim xmlBuffer As IntPtr = IntPtr.Zero
         Try
-            If split IsNot Nothing Then
-                For Each partPath As String In split.Parts.Skip(1)
-                    If Not WIMSetReferenceFile(hWim, partPath, WIM_REFERENCE_APPEND) Then
-                        Throw New Win32Exception(Marshal.GetLastWin32Error(),
-                            "WIMGAPI could not attach a verified SWM reference part.")
-                    End If
-                Next
-            End If
+            ' Only the first SWM part contains XML image metadata.
+            ' All part headers were validated by Discover above. No resource
+            ' reference calls are required for metadata and no write access.
             Dim bytes As UInteger = 0UI
             If Not WIMGetImageInformation(hWim, xmlBuffer, bytes) Then
                 Throw New Win32Exception(Marshal.GetLastWin32Error(),

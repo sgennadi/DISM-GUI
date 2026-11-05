@@ -12,7 +12,7 @@
 
 - Accepts first or later split parts such as \`install.swm\` and \`install2.swm\`.
 - Validates every required part's WIM signature, spanned flag, header part number/count and matching set identity; identifies missing, mismatched or incomplete sets.
-- Uses read-only WIMGAPI access with verified reference parts for image-index metadata, description, architecture and build information.
+- Uses query-only WIMGAPI access to the first SWM part for image-index metadata, description, architecture and build information; no write/reference operation is performed.
 - Displays the complete part count and combined size. **Mount**, **Use index in Mount**, and mounted servicing are disabled for split sets; this release does **not** edit or apply SWM images.
 - New integration test uses a disposable real DISM /Split-Image set, selects both parts, verifies missing-part detection and asserts stable SHA-256 checksums.
 

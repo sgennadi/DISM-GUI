@@ -202,7 +202,7 @@ a WIM. Run as administrator to test the full servicing APIs.
 
 WIM 360 now accepts \`install.swm\`, \`install2.swm\` etc. It resolves the
 first part, verifies the names, count, GUID and part numbers of the complete
-set from each Microsoft WIM header, and uses WIMGAPI to read image metadata.
+set from each Microsoft WIM header, and reads image metadata from the first part with query-only WIMGAPI.
 All members of a split set must be in the same directory.
 
 This is **view-only**: WIM 360 disables **Use index in Mount** and mounted
