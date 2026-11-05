@@ -207,7 +207,16 @@ Public NotInheritable Class ModernTheme
             End If
         End Sub
         AddHandler viewport.ClientSizeChanged, Sub(sender, e) syncSize()
-        AddHandler frm.Shown, Sub(sender, e) syncSize()
+        AddHandler frm.Shown, Sub(sender, e)
+            syncSize()
+            ' WinForms may auto-scroll to the last focused button during Show.
+            ' Restore the top/left AFTER initial focus and layout settle.
+            frm.BeginInvoke(New MethodInvoker(Sub()
+                If Not viewport.IsDisposed Then
+                    viewport.AutoScrollPosition = Point.Empty
+                End If
+            End Sub))
+        End Sub
         syncSize()
     End Sub
 
@@ -693,6 +702,8 @@ Public NotInheritable Class ModernTheme
         Dim sectionNames As String() = {"Mount & Inspect", "Drivers", "Packages",
             "Windows Features", "Editions", "Unattend XML",
             "Applications", "Capture WIM", "Apply WIM"}
+        Dim shortNavigationNames As String() = {"Mount", "Drivers", "Packages",
+            "Features", "Editions", "Unattend", "Apps", "Capture", "Apply"}
         Dim sectionColors As Color() = {Blue, Green, Blue, Green, Blue,
                                        Green, Blue, Green, Blue}
         Dim navButtons As New List(Of Button)()
@@ -727,11 +738,11 @@ Public NotInheritable Class ModernTheme
         For i As Integer = 0 To sectionNames.Length - 1
             Dim index As Integer = i
             Dim navBtn As New Button With {
-                .Name = "nav" & i.ToString(), .Text = "  " & (i + 1).ToString("00") &
-                   "    " & If(i = 0, "Mount", sectionNames(Math.Min(i, sectionNames.Length - 1)).Replace("&", "&&")),
+                .Name = "nav" & i.ToString(), .Text = (i + 1).ToString("00") &
+                   "  " & shortNavigationNames(i),
                 .Size = New Size(211, 43), .Margin = New Padding(2, 1, 2, 6),
                 .FlatStyle = FlatStyle.Flat, .TextAlign = ContentAlignment.MiddleLeft,
-                .Font = UiFont(10, True), .ForeColor = TextInk, .BackColor = Color.White,
+                .Font = UiFont(9.5F, True), .ForeColor = TextInk, .BackColor = Color.White,
                 .Cursor = Cursors.Hand, .UseVisualStyleBackColor = False
             }
             navBtn.FlatAppearance.BorderSize = 1
@@ -826,7 +837,8 @@ Public NotInheritable Class ModernTheme
         logHeader.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 87))
         logHeader.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         logArea.Controls.Add(logHeader, 0, 0)
-        Dim logTitle = TextLabel("DISM OUTPUT  ·  Drag divider to resize", UiFont(9.5F, True), TextInk)
+        Dim logTitle = TextLabel("DISM OUTPUT", UiFont(9.5F, True), TextInk)
+        tips.SetToolTip(logTitle, "Drag the divider to resize DISM Output.")
         logTitle.Dock = DockStyle.Fill
         logTitle.AutoEllipsis = True
         logTitle.TextAlign = ContentAlignment.MiddleLeft
