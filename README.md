@@ -60,6 +60,37 @@ CSV text is protected against spreadsheet formula injection. The JSON format
 has `ExportKind: Wim360IndexMetadata` and is **not** an inventory snapshot
 for **Compare JSON snapshots**; those require an actual mounted-index audit.
 
+### Compare 2–8 indexes inside one WIM or ESD (test RC)
+
+After **Inspect**, choose **Compare indexes**. Two or three indexes are
+selected by default; select any 2–8 using the checkbox list.
+
+- **Index metadata** works immediately, without a mount: name, description,
+  edition, build, languages, architecture, installation type, image size.
+- **Files / paths** requires each chosen index to already be mounted to a
+  **different directory** (prefer read-only mounts). Refresh **Inspect** after
+  mounting. File comparison lists paths and lengths only, with explicit
+  `Only in Index N`, `Missing in some`, `Different`, and
+  `Present in all` states. The tool neither mounts nor unmounts images.
+  Reparse points are deliberately skipped, and unreadable/incomplete file
+  scans fail instead of silently reporting missing files.
+- **Drivers / packages / features** requires a completed **Scan mounted
+  index** for every selected index. If any scan is partial, comparison
+  refuses to report possibly false missing items.
+
+Use the Type, Result, and Search filters to find missing or changed items.
+The selected indexes are shown as adjacent columns; horizontal scrolling
+is available. **Export filtered CSV** saves only visible rows. To check
+actual bytes, select one file in Files mode and choose **Verify SHA-256**.
+Equal file lengths alone do not establish equal content, and the SHA-256
+operation can take time for large files. All operations are read-only.
+
+For example, for `install.wim` with indexes 1, 2 and 3, first use
+**Index metadata** to compare editions and builds. To compare the real
+`Windows\System32` contents, mount all three to separate directories,
+re-inspect the WIM, then select **Files / paths**. Filter by
+`Missing / only in some`, `Only in Index 3`, or `Different`.
+
 For an index that is **already mounted**, select it and click **Scan mounted
 index**. WIM 360 validates the exact image file, index and mount directory,
 then reads the driver inventory (including inbox drivers) and Windows package
