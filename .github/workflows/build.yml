@@ -157,3 +157,52 @@ jobs:
             --title "DISM GUI v${RELEASE_VERSION}" \
             --notes-file RELEASE_NOTES.md \
             --latest
+
+  rc-release:
+    name: Publish DISM GUI 4.3.10 RC1
+    needs: build
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.number == 10 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'fix/gui-readability-4.3.9-rc1' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: Download verified Windows ZIPs
+        uses: actions/download-artifact@v7
+        with:
+          pattern: DISMGUI-VS2026-win-*
+          path: dist
+          merge-multiple: true
+      - name: Verify RC version, archives and hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(tr -d '\r\n' < VERSION)" = "4.3.10"
+          for rid in win-x86 win-x64 win-arm64; do
+            zip="dist/DISMGUI-VS2026-$rid.zip"
+            test -s "$zip"
+            unzip -Z1 "$zip" | grep -Fxq 'DISM GUI.exe'
+          done
+          test -s RC_RELEASE_NOTES.md
+          (cd dist && sha256sum DISMGUI-VS2026-win-*.zip > SHA256SUMS.txt)
+      - name: Publish GitHub pre-release without changing stable 4.3.9
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v4.3.10-rc.1"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "RC1 already published, preserving its artifacts."
+            exit 0
+          fi
+          gh release create "$tag" \
+            dist/DISMGUI-VS2026-win-x86.zip \
+            dist/DISMGUI-VS2026-win-x64.zip \
+            dist/DISMGUI-VS2026-win-arm64.zip \
+            dist/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "${{ github.event.pull_request.head.sha }}" \
+            --title "DISM GUI 4.3.10 RC1" \
+            --notes-file RC_RELEASE_NOTES.md \
+            --prerelease
