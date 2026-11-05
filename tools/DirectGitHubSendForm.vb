@@ -27,7 +27,7 @@ Public NotInheritable Class DirectGitHubSendForm
     Private ReadOnly copyCodeButton As Button
     Private ReadOnly browserButton As Button
     Private ReadOnly resultLabel As Label
-    Private ReadOnly cancelButton As Button
+    Private ReadOnly closeButton As Button
     Private session As CancellationTokenSource
     Private connectedLogin As String = ""
     Private submitted As Boolean
@@ -227,20 +227,20 @@ Public NotInheritable Class DirectGitHubSendForm
         AddHandler sendButton.Click, AddressOf SendClicked
         actions.Controls.Add(sendButton, 2, 0)
 
-        cancelButton = New Button With {
+        closeButton = New Button With {
             .Name = "btnDirectClose", .Text = "Close",
             .Dock = DockStyle.Fill, .Margin = New Padding(2, 3, 0, 0)
         }
-        ModernTheme.StyleButton(cancelButton, "neutral")
-        AddHandler cancelButton.Click, Sub(sender, e)
+        ModernTheme.StyleButton(closeButton, "neutral")
+        AddHandler closeButton.Click, Sub(sender, e)
             If session IsNot Nothing Then
                 session.Cancel()
             Else
                 Me.Close()
             End If
         End Sub
-        actions.Controls.Add(cancelButton, 3, 0)
-        Me.CancelButton = cancelButton
+        actions.Controls.Add(closeButton, 3, 0)
+        Me.CancelButton = closeButton
 
         AddHandler reviewBox.CheckedChanged, Sub(sender, e) RefreshSendAvailability()
         AddHandler Me.FormClosing, Sub(sender, e)
@@ -261,7 +261,7 @@ Public NotInheritable Class DirectGitHubSendForm
         disconnectButton.Enabled = Not active
         clientIdBox.Enabled = Not active
         sendButton.Enabled = False
-        cancelButton.Text = If(active, "Cancel", "Close")
+        closeButton.Text = If(active, "Cancel", "Close")
         If Not active Then RefreshSendAvailability()
     End Sub
 
