@@ -209,7 +209,7 @@ internal static class WimMountIntegration
             report.Images.Any(x => x.MountStatus.StartsWith("Mounted",
                                                 StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Offline index comparison modified or mounted the WIM.");
-        Console.WriteLine("PASS real 3-index DISM /List-Image offline file/folder presence, " +
+        Console.WriteLine("PASS real 3-index Unicode-safe DISM offline file/folder presence, " +
                           "Russian/Hebrew Unicode, unique/missing/empty-folder filters " +
                           "and unchanged WIM SHA-256.");
     }
