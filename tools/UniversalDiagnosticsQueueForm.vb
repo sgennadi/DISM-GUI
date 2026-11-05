@@ -277,7 +277,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
             Dim fileId As Guid
             If Not Guid.TryParse(System.IO.Path.GetFileNameWithoutExtension(path),
                                  fileId) Then Return Nothing
-            Using document = JsonDocument.Parse(File.ReadAllText(path, Encoding.UTF8))
+            Using document = JsonDocument.Parse(System.IO.File.ReadAllText(path, Encoding.UTF8))
                 Dim root = document.RootElement
                 Dim eventJson As JsonElement
                 Dim delivery As JsonElement
