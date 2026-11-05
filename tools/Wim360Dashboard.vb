@@ -2,6 +2,7 @@ Imports System
 Imports System.Drawing
 Imports System.IO
 Imports System.Linq
+Imports System.Threading
 Imports System.Threading.Tasks
 Imports System.Windows.Forms
 
@@ -25,8 +26,11 @@ Public NotInheritable Class Wim360Dashboard
     Private ReadOnly details As TextBox
     Private ReadOnly useSelected As Button
     Private ReadOnly copyReport As Button
+    Private ReadOnly auditMounted As Button
     Private report As Wim360Reader.WimReport
     Private scanGeneration As Integer
+    Private isAuditing As Boolean
+    Private auditCancellation As CancellationTokenSource
 
     Public Sub New(getMountPath As Func(Of String),
                    applyIndex As Action(Of String, Integer))
@@ -52,12 +56,12 @@ Public NotInheritable Class Wim360Dashboard
         dashboardLayout = New TableLayoutPanel With {
             .Name = "Wim360Layout",
             .ColumnCount = 1, .RowCount = 7,
-            .Dock = DockStyle.Top, .Height = 655, .Width = 710,
+            .Dock = DockStyle.Top, .Height = 686, .Width = 710,
             .BackColor = Color.White,
             .Margin = Padding.Empty, .Padding = New Padding(17, 13, 17, 18)
         }
         dashboardLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        For Each height As Integer In {53, 57, 72, 27, 205, 145, 63}
+        For Each height As Integer In {53, 57, 72, 27, 205, 145, 94}
             dashboardLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, height))
         Next
         canvas.Controls.Add(dashboardLayout)
@@ -195,11 +199,12 @@ Public NotInheritable Class Wim360Dashboard
         info.Controls.Add(details, 0, 1)
 
         Dim actions As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 3, .RowCount = 1,
-            .Margin = New Padding(0, 10, 0, 0),
+            .Dock = DockStyle.Fill, .ColumnCount = 3, .RowCount = 2,
+            .Margin = New Padding(0, 5, 0, 0),
             .BackColor = Color.White
         }
-        actions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        actions.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
+        actions.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 210))
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 155))
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
@@ -223,14 +228,26 @@ Public NotInheritable Class Wim360Dashboard
         AddHandler copyReport.Click, AddressOf CopyClicked
         actions.Controls.Add(copyReport, 1, 0)
 
-        Dim hint = MakeText("Read-only • no Commit / Discard",
-                            8.7F, False, ModernTheme.Muted)
-        hint.TextAlign = ContentAlignment.MiddleRight
-        actions.Controls.Add(hint, 2, 0)
+        auditMounted = New Button With {
+            .Name = "btn360AuditMounted", .Text = "Scan mounted index",
+            .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 9, 4),
+            .Enabled = False
+        }
+        ModernTheme.StyleButton(auditMounted, "secondary")
+        AddHandler auditMounted.Click, AddressOf AuditMountedClicked
+        actions.Controls.Add(auditMounted, 0, 1)
+
+        Dim hint = MakeText("Read-only • no image changes", 8.7F, False, ModernTheme.Muted)
+        hint.TextAlign = ContentAlignment.MiddleLeft
+        actions.Controls.Add(hint, 1, 1)
+        actions.SetColumnSpan(hint, 2)
         AddHandler fileBox.TextChanged, Sub(sender, e)
+            CancelMountedAudit()
             useSelected.Enabled = False
             copyReport.Enabled = False
+            auditMounted.Enabled = False
         End Sub
+        AddHandler Me.Disposed, Sub(sender, e) CancelMountedAudit()
     End Sub
 
     Private Shared Function MakeText(value As String, size As Single, bold As Boolean,
@@ -312,6 +329,7 @@ Public NotInheritable Class Wim360Dashboard
     End Sub
 
     Private Async Sub StartScan()
+        CancelMountedAudit()
         Dim path = fileBox.Text.Trim()
         scanGeneration += 1
         Dim generation = scanGeneration
@@ -323,6 +341,7 @@ Public NotInheritable Class Wim360Dashboard
         mounts.Text = "Checking"
         useSelected.Enabled = False
         copyReport.Enabled = False
+        auditMounted.Enabled = False
         If String.IsNullOrWhiteSpace(path) Then
             status.Text = "Choose a .wim or .esd file first."
             details.Text = "WIM 360 only reads image metadata."
@@ -420,6 +439,12 @@ Public NotInheritable Class Wim360Dashboard
                               report IsNot Nothing AndAlso
                               String.Equals(fileBox.Text.Trim(), report.ImageFile,
                                             StringComparison.OrdinalIgnoreCase)
+        auditMounted.Enabled = Not isAuditing AndAlso selected IsNot Nothing AndAlso
+            report IsNot Nothing AndAlso
+            String.Equals(fileBox.Text.Trim(), report.ImageFile,
+                          StringComparison.OrdinalIgnoreCase) AndAlso
+            selected.MountStatus.StartsWith("Mounted", StringComparison.OrdinalIgnoreCase) AndAlso
+            Not String.IsNullOrWhiteSpace(selected.MountFolder)
         If selected Is Nothing Then Return
         details.Text = "Index " & selected.Index.ToString() & "  |  " & selected.Name &
                        Environment.NewLine &
@@ -440,6 +465,73 @@ Public NotInheritable Class Wim360Dashboard
                        "Mount: " & selected.MountStatus &
                        If(selected.MountFolder.Length > 0,
                           "  |  " & selected.MountFolder, "")
+        If selected.ServicingAudit IsNot Nothing Then
+            details.Text &= Environment.NewLine & Environment.NewLine &
+                            Wim360Servicing.FormatAudit(selected.ServicingAudit)
+        ElseIf selected.MountStatus.StartsWith("Mounted", StringComparison.OrdinalIgnoreCase) Then
+            details.Text &= Environment.NewLine & Environment.NewLine &
+                "Click Scan mounted index for read-only driver and Windows package counts."
+        End If
+    End Sub
+
+    Private Sub CancelMountedAudit()
+        If auditCancellation Is Nothing Then Return
+        Try
+            auditCancellation.Cancel()
+        Catch ex As ObjectDisposedException
+        End Try
+    End Sub
+
+    Private Async Sub AuditMountedClicked(sender As Object, e As EventArgs)
+        If isAuditing Then Return
+        Dim selected = SelectedImage()
+        Dim imageReport = report
+        If selected Is Nothing OrElse imageReport Is Nothing OrElse
+           Not selected.MountStatus.StartsWith("Mounted", StringComparison.OrdinalIgnoreCase) OrElse
+           String.IsNullOrWhiteSpace(selected.MountFolder) Then Return
+
+        Dim generation = scanGeneration
+        Dim path = imageReport.ImageFile
+        Dim auditToken As New CancellationTokenSource()
+        auditCancellation = auditToken
+        isAuditing = True
+        auditMounted.Enabled = False
+        status.Text = "Scanning mounted index " & selected.Index.ToString() &
+                      ": drivers and Windows packages (read-only)..."
+        Dim errorMessage As String = Nothing
+        Try
+            Dim audit = Await Wim360Servicing.InspectMountedAsync(
+                path, selected.Index, selected.MountFolder, auditToken.Token)
+            If Me.IsDisposed OrElse auditToken.IsCancellationRequested OrElse
+               generation <> scanGeneration OrElse
+               Not Object.ReferenceEquals(report, imageReport) OrElse
+               Not String.Equals(fileBox.Text.Trim(), path, StringComparison.OrdinalIgnoreCase) Then Return
+            selected.ServicingAudit = audit
+            status.Text = "Mounted index " & selected.Index.ToString() &
+                " audited: " & audit.DriverCount.ToString() & " drivers, " &
+                audit.PackageCount.ToString() & " Windows packages. No changes."
+        Catch ex As OperationCanceledException
+            If Not Me.IsDisposed AndAlso Object.ReferenceEquals(report, imageReport) Then
+                status.Text = "Mounted audit canceled; no image changes were made."
+            End If
+        Catch ex As Exception
+            errorMessage = ex.Message
+        Finally
+            If Object.ReferenceEquals(auditCancellation, auditToken) Then
+                auditCancellation = Nothing
+            End If
+            auditToken.Dispose()
+            isAuditing = False
+            If Not Me.IsDisposed Then
+                UpdateSelection()
+                If errorMessage IsNot Nothing AndAlso
+                   Object.ReferenceEquals(report, imageReport) Then
+                    status.Text = "Mounted audit unavailable; see details."
+                    details.Text &= Environment.NewLine & Environment.NewLine &
+                        "Read-only audit failed: " & errorMessage
+                End If
+            End If
+        End Try
     End Sub
 
     Private Sub UseClicked(sender As Object, e As EventArgs)
