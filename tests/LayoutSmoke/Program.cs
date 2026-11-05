@@ -479,6 +479,80 @@ internal static class LayoutSmoke
         Console.WriteLine("PASS WIM 360 three-index metadata, files, inventory filters and CSV");
     }
 
+    private static void VerifyInspectOverview()
+    {
+        // Three editions from one Windows build, as in install.wim.
+        var catalog = new Wim360Reader.WimReport { ImageFile = @"C:\Images\install.wim" };
+        catalog.Images.Add(new Wim360Reader.ImageInfo {
+            Index = 1, Name = "Windows 11 Home", Edition = "Core",
+            Architecture = "x64", Version = "10.0.26100",
+            Languages = "en-US, he-IL" });
+        catalog.Images.Add(new Wim360Reader.ImageInfo {
+            Index = 2, Name = "Windows 11 Home Single Language",
+            Edition = "CoreSingleLanguage", Architecture = "x64",
+            Version = "10.0.26100", Languages = "he-IL, en-US" });
+        catalog.Images.Add(new Wim360Reader.ImageInfo {
+            Index = 3, Name = "Windows 11 Pro", Edition = "Professional",
+            Architecture = "x64", Version = "10.0.26100",
+            Languages = "en-US" });
+        var overview = Wim360InspectOverview.Analyze(catalog);
+        Require(overview.Text.Contains("3 indexes") &&
+                overview.Text.Contains("OS builds: 10.0.26100 in all 3 indexes") &&
+                overview.Text.Contains("Core [1]") &&
+                overview.Text.Contains("CoreSingleLanguage [2]") &&
+                overview.Text.Contains("Professional [3]") &&
+                overview.Text.Contains("Languages:") &&
+                overview.Text.Contains("Matching metadata does NOT prove identical files") &&
+                overview.SuggestedPairs.Count == 3 &&
+                overview.SuggestedPairs.Any(x =>
+                    x.FirstIndex == 1 && x.SecondIndex == 3 &&
+                    x.Reason.Contains("different editions")),
+                "Three-index metadata overview or suggested compare pairs are wrong");
+        Require(Wim360Reader.FormatReport(catalog).Contains("AUTOMATIC INDEX OVERVIEW") &&
+                Wim360Reader.FormatReport(catalog).Contains("Compare 1 vs 3"),
+                "Copy report must include the automatic metadata overview");
+
+        // Different build, same edition and architecture: a useful upgrade
+        // comparison, without pretending that same-build file bytes match.
+        catalog.Images[0].Edition = "Professional";
+        catalog.Images[0].Version = "10.0.22621";
+        var builds = Wim360InspectOverview.Analyze(catalog);
+        Require(builds.Text.Contains("OS builds: 10.0.22621 [1]; 10.0.26100 [2, 3]") &&
+                builds.SuggestedPairs.Any(x =>
+                    x.FirstIndex == 1 && x.SecondIndex == 3 &&
+                    x.Reason.Contains("different builds")) &&
+                builds.SuggestedPairs.Any(x =>
+                    x.FirstIndex == 2 && x.SecondIndex == 3 &&
+                    x.Reason.Contains("different editions")),
+                "Overview lost build-versus-edition comparison guidance");
+
+        // Missing metadata must NOT be classified as identical builds.
+        catalog.Images[0].Version = "";
+        catalog.Images[0].Architecture = "";
+        catalog.Images[0].Edition = "";
+        var incomplete = Wim360InspectOverview.Analyze(catalog);
+        Require(incomplete.Text.Contains("Some metadata is missing") &&
+                incomplete.Text.Contains("Not listed") &&
+                !incomplete.Text.Contains("OS builds: 10.0.26100 in all"),
+                "Overview falsely treated missing metadata as matching");
+
+        // A one-index WIM has no meaningful cross-index suggestion.
+        var single = new Wim360Reader.WimReport();
+        single.Images.Add(new Wim360Reader.ImageInfo {
+            Index = 5, Edition = "WindowsPE", Version = "10.0.26100",
+            Architecture = "ARM64" });
+        var only = Wim360InspectOverview.Analyze(single);
+        Require(only.SuggestedPairs.Count == 0 &&
+                only.Text.Contains("Only one index"),
+                "Single-index WIM must not invent compare recommendations");
+
+        // Do not mutate source metadata: Inspect is read-only.
+        Require(catalog.Images[1].Languages == "he-IL, en-US" &&
+                catalog.Images[2].Version == "10.0.26100",
+                "Metadata overview unexpectedly modified the WIM report");
+        Console.WriteLine("PASS WIM 360 Inspect automatic metadata overview and compare guidance");
+    }
+
     private static void VerifyWimMetadata()
     {
         var report = Wim360Reader.ParseMetadataXml(
@@ -541,6 +615,7 @@ internal static class LayoutSmoke
             duplicateRejected = true;
         }
         Require(duplicateRejected, "WIM XML parser must reject duplicate indexes");
+        VerifyInspectOverview();
         Console.WriteLine("PASS WIM 360 metadata, architecture, report and XML safety tests");
     }
 
@@ -1381,6 +1456,13 @@ internal static class LayoutSmoke
             wimPathField!.Text = @"C:\test\boot.wim";
             dashboard!.PreviewMetadataForTest(WIM_METADATA_FIXTURE);
             var indexGrid = Find(dashboard, "grid360Indexes") as DataGridView;
+            var overviewText = Find(dashboard, "txt360Overview") as TextBox;
+            Require(overviewText is not null && overviewText.ReadOnly &&
+                    overviewText.Multiline && overviewText.ScrollBars == ScrollBars.Vertical &&
+                    overviewText.Text.Contains("2 indexes") &&
+                    overviewText.Text.Contains("OS builds: 10.0.26100 in all 2 indexes") &&
+                    overviewText.Text.Contains("Compare 1 vs 2"),
+                    "Inspect must display a readable, immediate cross-index metadata overview");
             Require(indexGrid!.Rows.Count == 2,
                     "WIM 360 should display both indexes from the fixture");
             var auditWimButton = Find(dashboard, "btn360AuditMounted") as Button;
