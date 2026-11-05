@@ -591,8 +591,12 @@ internal static class LayoutSmoke
             "DISMGUI-WIM360-" + Guid.NewGuid().ToString("N"));
         var source = System.IO.Path.Combine(root, "source");
         System.IO.Directory.CreateDirectory(source);
+        System.IO.Directory.CreateDirectory(System.IO.Path.Combine(source, "Windows", "System32"));
         try
         {
+            System.IO.File.WriteAllText(
+                System.IO.Path.Combine(source, "Windows", "System32", "sentinel.txt"),
+                "This is a disposable test folder, NOT a Windows installation.");
             System.IO.File.WriteAllText(
                 System.IO.Path.Combine(source, "smoke.txt"),
                 "DISM GUI WIM 360 read-only catalog smoke test");
@@ -640,6 +644,7 @@ internal static class LayoutSmoke
                     "WIM metadata inspection modified the source fixture");
             Console.WriteLine("PASS native WIMGAPI read-only WIM catalog: " +
                 inventory.Images[0].Name + ", " + inventory.FileSizeBytes + " bytes");
+            WimMountIntegration.Verify(image, root);
         }
         finally
         {
