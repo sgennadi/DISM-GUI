@@ -213,8 +213,8 @@ Public NotInheritable Class Wim360CompareIndexesForm
         modeBox.SelectedIndex = 0
         options.Controls.Add(modeBox, 0, 1)
         Dim explanation = MakeLabel(
-            "File paths: compare without mounting. File sizes and SHA-256: " &
-            "mount each index separately. Components: scan each mounted index.", 9, False)
+            "Paths: no mount. Sizes / SHA-256: mount. " &
+            "Drivers / packages: scan.", 9, False)
         explanation.ForeColor = ModernTheme.Muted
         explanation.AutoEllipsis = False
         options.Controls.Add(explanation, 0, 2)
