@@ -1,29 +1,25 @@
-# DISM GUI 4.3.2
+# DISM GUI 4.3.3
 
-## Driver Studio — Selective INF Import
+## WIM 360 — Mounted Image Servicing Audit
 
-- **Install selected INF** adds only checked **New / Newer** packages to one already-mounted, read/write Windows image index. No automatic whole-folder import.
-- Blocks Same version, Older, Review, Duplicate source and Not checked; those rows cannot be selected for installation.
-- **Smart Preflight:** immediately before writing, validates the exact WIM file/index/mount triplet and read/write status, re-reads installed drivers, re-scans driver sources and validates INF SHA-256/provider/class/date/version against the user-reviewed plan.
-- If the installed inventory or an INF changes after comparison, the entire batch is refused until a new comparison. INF files are checked again before each command.
-- Uses `dism.exe /Image:<mounted-folder> /Add-Driver /Driver:<one-inf>` with separated arguments for each selected INF. No `/Recurse` or `/ForceUnsigned`; DISM handles driver/package signature checks.
-- Requires Administrator privileges, shows an explicit confirmation listing WIM/index/mount and cautions that the command **modifies** the mounted image.
-- **Stop after current** completes the active DISM operation before stopping the remaining list; avoids interrupting an in-progress image write.
-- Displays per-INF exit results in the interface and includes them in the Copy comparison report. Stops after a failure; does not silently roll back.
-- Never automatically mounts, unmounts, commits or discards a WIM. Review results and explicitly commit/discard using the original Mount section.
-- Import choices expire after the operation, requiring a new Compare before another import.
+- Added **Scan mounted index** for an already-mounted WIM image index, including read-only mounts; this is separate from ordinary metadata inspection.
+- Shows driver inventory totals, including inbox/third-party breakdown, top driver classes and providers.
+- Reads Windows package inventory and displays Installed, Pending and Staged totals, highlighting up to four pending package names.
+- Stores each audit under its selected WIM index, with a UTC scan timestamp, and includes results in the existing **Copy report** export.
+- Uses read-only DISM PowerShell commands Get-WindowsDriver -Path -All and Get-WindowsPackage -Path; no image modification, automatic mount, commit or discard.
+- Validates the WIM/index/mount path before and after auditing, and cancels stale reads when the source is changed; three-minute timeout per inventory step.
+- Fits the additional audit button on a second actions row for legibility on high-DPI and narrow screens.
+- Extended parser, reporting and WinForms smoke tests.
 
-## From 4.3.1 / 4.3.0
+## Existing Driver Studio — 4.3.2
 
-- WIM 360 read-only image inventory and index handoff; separate Driver Studio source metadata and version-comparison preview.
-- Original nine servicing pages retained, DPI-aware scrollable panels, resizable output, saved window placement.
-- Update Center with release changelog and SHA-256-verified updates; About / Tools email support: sgennadi@hotmail.com.
-- Portable self-contained .NET 10 Windows x64, x86 and ARM64 packages.
+- Retains selective per-INF install, only verified New / Newer entries on read/write-mounted indexes.
+- Preflight validates the mount and incoming source-INF hashes; Stop after current ensures an in-flight DISM write finishes safely.
+- Same/Older/Review/Not checked sources remain blocked; no implicit Commit or Discard.
 
 ## Testing and limitations
 
-- Windows CI verifies safe command arguments, allowed/blocked statuses, source-hash and inventory invalidation, import controls, and the existing WIM 360/UI tests.
-- CI does **not** install real drivers or simulate an interrupted image write. Validate first using disposable mounted WIM copies on Windows.
-- The source-INF hash does not cryptographically cover a driver's additional payload files or prove that Windows PnP will select the driver at boot. Driver compatibility/signing remains the responsibility of the operator and DISM.
-
-Original DISM GUI by Mike Celone (mikecel79/DISMGUI); attribution retained.
+- Windows CI checks parser/report invariants, WinForms layout and portable .NET 10 builds for x86, x64 and ARM64.
+- CI cannot validate the mounted servicing inventory against a full real Windows image. First test with a disposable mounted WIM.
+- Requires Windows PowerShell with DISM module and suitable read permissions for the mounted image; split .swm unsupported.
+- Original DISM GUI by Mike Celone (mikecel79/DISMGUI); attribution retained.

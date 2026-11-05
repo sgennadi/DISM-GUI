@@ -27,7 +27,7 @@ def edit_once(path, old, new, label):
     print("Patched:", label)
 
 for name in ("ModernTheme.vb", "ResponsiveSectionLayout.vb", "ResponsiveForms.vb", "WindowGeometry.vb", "UpdateManager.vb", "SupportContact.vb",
-             "Wim360Reader.vb", "Wim360Dashboard.vb", "DriverStudioEngine.vb",
+             "Wim360Reader.vb", "Wim360Dashboard.vb", "Wim360Servicing.vb", "DriverStudioEngine.vb",
              "DriverStudioInventory.vb", "DriverStudioPanel.vb",
              "DriverStudioInstaller.vb"):
     shutil.copyfile(tools / name, project / name)

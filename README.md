@@ -53,10 +53,18 @@ mount state. **Use index in Mount** transfers the selected WIM path and
 index to the original Mount form but **never mounts or modifies the image**.
 Use **Copy report** to share the read-only inventory.
 
-WIM 360 currently does not inspect split `.swm` sets and cannot count drivers
-or installed packages until further work. The first stage does not perform
-any destructive operation. For actual image servicing, use the existing
-DISM sections only after verifying image backups.
+For an index that is **already mounted**, select it and click **Scan mounted
+index**. WIM 360 validates the exact image file, index and mount directory,
+then reads the driver inventory (including inbox drivers) and Windows package
+inventory with the DISM PowerShell module. The details and copied report
+show total/third-party/inbox drivers, common driver classes and providers,
+installed/staged/pending packages and a scan timestamp. This is **read-only**,
+works with read-only mounts, and can take several minutes. It never mounts,
+installs, commits, discards or changes the image. Re-run **Inspect** after
+external mount changes and re-scan after installing drivers or packages.
+
+WIM 360 still cannot inspect split `.swm` sets. For actual image servicing,
+use the existing DISM sections only after verifying image backups.
 
 ## Changes
 - Modern Windows dialog for selecting mount, apply, driver, package and capture folders; matching file picker for WIM images.

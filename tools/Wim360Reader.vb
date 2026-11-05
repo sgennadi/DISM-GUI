@@ -28,6 +28,7 @@ Public NotInheritable Class Wim360Reader
         Public Property UncompressedBytes As Long
         Public Property MountStatus As String = "Not checked"
         Public Property MountFolder As String = ""
+        Public Property ServicingAudit As Wim360Servicing.AuditResult
 
         Public Overrides Function ToString() As String
             Return Index.ToString() & " - " & If(Name.Length > 0, Name, "Unnamed image")
@@ -382,6 +383,10 @@ Public NotInheritable Class Wim360Reader
             lines.Add("  Install type: " & item.InstallationType)
             lines.Add("  Mount: " & item.MountStatus)
             If item.MountFolder.Length > 0 Then lines.Add("  Mount dir: " & item.MountFolder)
+            If item.ServicingAudit IsNot Nothing Then
+                lines.Add("  " & Wim360Servicing.FormatAudit(item.ServicingAudit).
+                    Replace(Environment.NewLine, Environment.NewLine & "  "))
+            End If
             lines.Add("")
         Next
         If report.MountScanWarning.Length > 0 Then lines.Add(report.MountScanWarning)
