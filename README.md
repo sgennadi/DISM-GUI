@@ -25,10 +25,23 @@ not mounted, every unverified candidate is labeled **Not checked**.
 **Same version** means the same INF name, provider, class, version and
 date; this does not guarantee identical signed driver files. Driver Studio
 flags per-model DriverVer directives and version/date ranking conflicts as
-**Review**. The checkboxes are part of a *read-only comparison plan* —
-**no drivers are installed** by this screen yet. The legacy Drivers
-section's Add drivers button still imports the **entire folder**, so do
-not rely on it to honor Driver Studio's skip checkboxes.
+**Review**. After comparing a **read/write-mounted** index, select the desired **New** or
+**Newer** packages and use **Install selected INF**. Driver Studio confirms
+the WIM path and index, re-checks mount status, the installed-driver inventory
+and source INF hashes, then invokes DISM separately for each selected INF.
+**Same version, Older, Review, Duplicate source** and **Not checked** are
+never eligible. A changed source or inventory invalidates the plan.
+
+The **Stop after current** control finishes the active DISM command before
+ending the batch to avoid interrupting a write. Driver Studio does **not**
+mount, unmount, commit, discard or force unsigned packages automatically.
+After reviewing the outcome, use Mount & Inspect to explicitly commit or
+discard the image. The legacy Drivers section's Add drivers button still
+imports an **entire folder**: its behavior is separate from the selective importer.
+
+Use disposable copies of WIM images for initial real-world tests. DriverVer
+equality does not prove identical binaries, package signatures or Windows
+device ranking. An imported package may not be selected by PnP at boot.
 
 ## WIM 360 — Image Studio
 

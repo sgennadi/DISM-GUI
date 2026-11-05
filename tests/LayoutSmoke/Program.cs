@@ -419,6 +419,49 @@ internal static class LayoutSmoke
             var scanned = DriverStudioEngine.ScanSource(temp, true);
             Require(scanned.Count == 1 && scanned[0].InfName == "contoso.inf",
                     "Recursive driver-folder scanner failed");
+
+            // Pure selective-install preflight: no live DISM writes in CI.
+            var newDecision = DriverStudioEngine.CompareCandidates(
+                new[] { source }, Array.Empty<DriverStudioEngine.DriverPackage>(), true);
+            Require(newDecision[0].Status == "New" &&
+                    DriverStudioInstaller.IsAllowed(newDecision[0]) &&
+                    !DriverStudioInstaller.IsAllowed(same[0]) &&
+                    !DriverStudioInstaller.IsAllowed(unverified[0]) &&
+                    !DriverStudioInstaller.IsAllowed(comparisonOlder[0]),
+                    "Selective import must permit only verified New/Newer decisions");
+            var safePlan = DriverStudioInstaller.ValidatePlan(
+                newDecision, new[] { source }, Array.Empty<DriverStudioEngine.DriverPackage>());
+            Require(safePlan.Count == 1 && safePlan[0].Sha256 == source.Sha256,
+                    "Selected single-INF import plan did not retain the reviewed hash");
+
+            bool staleBlocked = false;
+            try {
+                DriverStudioInstaller.ValidatePlan(newDecision, new[] { source }, inventory);
+            } catch (InvalidOperationException) { staleBlocked = true; }
+            Require(staleBlocked,
+                "The installer must block a stale comparison after inventory changed");
+            var tampered = new DriverStudioEngine.DriverPackage {
+                FilePath=source.FilePath, InfName=source.InfName, Provider=source.Provider,
+                ClassName=source.ClassName, Version=source.Version,
+                DriverDate=source.DriverDate, Sha256=new string('0', 64) };
+            bool hashBlocked = false;
+            try {
+                DriverStudioInstaller.ValidatePlan(newDecision, new[] { tampered },
+                    Array.Empty<DriverStudioEngine.DriverPackage>());
+            } catch (InvalidOperationException) { hashBlocked = true; }
+            Require(hashBlocked, "The installer must reject an INF changed since scanning");
+
+            var args = DriverStudioInstaller.BuildArguments(
+                @"C:\mount dir", @"C:\drivers\new driver.inf");
+            Require(args.Count == 3 && args[0] == @"/Image:C:\mount dir" &&
+                    args[1] == "/Add-Driver" &&
+                    args[2] == @"/Driver:C:\drivers\new driver.inf" &&
+                    !string.Join(" ", args).Contains("Recurse") &&
+                    !string.Join(" ", args).Contains("ForceUnsigned") &&
+                    !string.Join(" ", args).Contains("Commit") &&
+                    !string.Join(" ", args).Contains("Discard"),
+                    "Selective install must build a single INF command without unsafe flags");
+            Console.WriteLine("PASS selective import preflight, stale inventory/hash rejection and safe DISM args");
             Console.WriteLine("PASS Driver Studio INF parsing, duplicates, versions and inventory safety");
             return (source, inventory[0]);
         }
@@ -529,6 +572,29 @@ internal static class LayoutSmoke
                     "Driver Studio preview must show existing driver version not pre-selected");
             Require(((Button)Find(studioPanel, "btnStudioCopyPlan")!).Enabled,
                     "Driver Studio preview should offer Copy comparison");
+            var installStudio = Find(studioPanel, "btnStudioInstallSelected") as Button;
+            var stopStudio = Find(studioPanel, "btnStudioStopAfterCurrent") as Button;
+            Require(installStudio is not null && stopStudio is not null &&
+                    installStudio.Width >= 100 && stopStudio.Width >= 100,
+                    "Driver Studio must show readable per-INF install and safe-stop controls");
+            Require(!installStudio!.Enabled && !stopStudio!.Enabled &&
+                    studioGrid.Rows[0].Cells[0].ReadOnly,
+                    "Identical driver versions must not enable import or user override");
+            var newStudio = DriverStudioEngine.CompareCandidates(
+                new[] { driverFixture.Source },
+                Array.Empty<DriverStudioEngine.DriverPackage>(), true);
+            studioPanel.PreviewForTest(newStudio);
+            Application.DoEvents();
+            Require(installStudio.Enabled && !studioGrid.Rows[0].Cells[0].ReadOnly,
+                    "Verified New INF must enable selective install");
+            var studioSource = Find(studioPanel, "txtStudioSource") as TextBox;
+            Require(studioSource is not null, "Driver Studio source path entry missing");
+            studioSource!.Text = @"C:\ChangedDrivers";
+            Application.DoEvents();
+            Require(!installStudio.Enabled,
+                    "Changing the driver source must invalidate the install plan");
+            studioPanel.PreviewForTest(studioPreview);
+            Application.DoEvents();
             var visibleScan = (Button)Find(studioPanel, "btnStudioScan")!;
             var visibleCompare = (Button)Find(studioPanel, "btnStudioCompare")!;
             Require(visibleScan.Width >= 85 && visibleCompare.Width >= 130 &&

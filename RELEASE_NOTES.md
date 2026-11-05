@@ -1,32 +1,29 @@
-# DISM GUI 4.3.1
+# DISM GUI 4.3.2
 
-## Driver Studio — Smart Driver Detection (preview)
+## Driver Studio — Selective INF Import
 
-- A dedicated **Driver Studio** workspace alongside WIM 360, without changing the original nine servicing sections.
-- Scan a driver folder, subdirectories or a single INF and read its **Provider, Class, DriverVer date/version, hardware IDs and INF SHA-256**.
-- Detect duplicate source INF files.
-- Compare against the installed drivers of one **already mounted** WIM index using structured **Get-WindowsDriver** output.
-- Before comparison, verify that WIM file, image index and mounted folder all refer to the same image.
-- Show **New, Newer, Same version, Older, Review, Duplicate source** or **Not checked** with an explanation; default plan selects only appropriate New/Newer entries.
-- A driver with a newer version but older DriverVer date is flagged **Review** due to Windows driver ranking.
-- Per-model INF DriverVer overrides are conservatively flagged Review.
-- Offline/unmounted/unknown inventory is **Not checked**, never incorrectly shown as all new drivers.
-- Read-only comparison grid with adjustable selection checkboxes, detail pane, Copy comparison report.
-- **Open Drivers section** warns that the original Add drivers action imports the entire folder, regardless of skip choices.
+- **Install selected INF** adds only checked **New / Newer** packages to one already-mounted, read/write Windows image index. No automatic whole-folder import.
+- Blocks Same version, Older, Review, Duplicate source and Not checked; those rows cannot be selected for installation.
+- **Smart Preflight:** immediately before writing, validates the exact WIM file/index/mount triplet and read/write status, re-reads installed drivers, re-scans driver sources and validates INF SHA-256/provider/class/date/version against the user-reviewed plan.
+- If the installed inventory or an INF changes after comparison, the entire batch is refused until a new comparison. INF files are checked again before each command.
+- Uses `dism.exe /Image:<mounted-folder> /Add-Driver /Driver:<one-inf>` with separated arguments for each selected INF. No `/Recurse` or `/ForceUnsigned`; DISM handles driver/package signature checks.
+- Requires Administrator privileges, shows an explicit confirmation listing WIM/index/mount and cautions that the command **modifies** the mounted image.
+- **Stop after current** completes the active DISM operation before stopping the remaining list; avoids interrupting an in-progress image write.
+- Displays per-INF exit results in the interface and includes them in the Copy comparison report. Stops after a failure; does not silently roll back.
+- Never automatically mounts, unmounts, commits or discards a WIM. Review results and explicitly commit/discard using the original Mount section.
+- Import choices expire after the operation, requiring a new Compare before another import.
 
-**This version does not selectively install drivers.** Driver Studio's selections currently form a preview only, not an import list consumed by the original Add drivers command. Checking the same version does not establish identical signatures or binaries. This design deliberately avoids modifying images based on incomplete comparisons.
+## From 4.3.1 / 4.3.0
 
-## UI and prior features
-- Compacter Driver Studio navigation and results layout for smaller windows.
-- WIM 360 read-only image metadata, index selection and Mount handoff.
-- Original nine DISM sections preserved, resizable output log, saved window size/position.
-- Tools update indicator, Update Center with changelog and SHA-256 verification.
-- About / Tools Email Support: sgennadi@hotmail.com.
-- Portable self-contained .NET 10 x64, x86 and ARM64 Windows builds.
+- WIM 360 read-only image inventory and index handoff; separate Driver Studio source metadata and version-comparison preview.
+- Original nine servicing pages retained, DPI-aware scrollable panels, resizable output, saved window placement.
+- Update Center with release changelog and SHA-256-verified updates; About / Tools email support: sgennadi@hotmail.com.
+- Portable self-contained .NET 10 Windows x64, x86 and ARM64 packages.
 
-## Tests and scope
-- Windows CI tests INF parsing, provider variables, date/version comparison, duplicate sources, ambiguous/incomplete data, inventory JSON, native WIM 360 inspection and live WinForms layout.
-- Native Get-WindowsDriver queries require the selected image index to be mounted. No automatic mount, install, commit or discard operations.
-- Real-world driver catalogs, mounted image access and 150-200% DPI still require hands-on testing on the target workstation.
+## Testing and limitations
+
+- Windows CI verifies safe command arguments, allowed/blocked statuses, source-hash and inventory invalidation, import controls, and the existing WIM 360/UI tests.
+- CI does **not** install real drivers or simulate an interrupted image write. Validate first using disposable mounted WIM copies on Windows.
+- The source-INF hash does not cryptographically cover a driver's additional payload files or prove that Windows PnP will select the driver at boot. Driver compatibility/signing remains the responsibility of the operator and DISM.
 
 Original DISM GUI by Mike Celone (mikecel79/DISMGUI); attribution retained.
