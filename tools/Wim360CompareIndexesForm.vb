@@ -395,7 +395,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
         modeBox.Enabled = False
         summaryLabel.Text = "Comparing indexes " & String.Join(", ", indexes) & "..."
         hintLabel.Text = If(mode = 1,
-            "DISM /List-Image reads paths directly from the WIM. No mounting; no file sizes.",
+            "Reading file/folder paths directly from WIM (Unicode-safe). No mounting or sizes.",
             "Read-only. Mounted file trees can take longer on large images.")
         Dim tokenSource As New CancellationTokenSource()
         job = tokenSource
