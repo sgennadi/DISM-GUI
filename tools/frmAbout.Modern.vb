@@ -83,7 +83,8 @@ Public NotInheritable Class frmAbout
         body.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         root.Controls.Add(body, 0, 1)
 
-        Dim versionText = "Version " & GetType(frmAbout).Assembly.GetName().Version.ToString()
+        ' Match the other user-facing captions: major.minor.build, no v prefix.
+        Dim versionText = "Version " & GetType(frmAbout).Assembly.GetName().Version.ToString(3)
         body.Controls.Add(CreateLabel(versionText, 13, True, ModernTheme.TextInk), 0, 0)
         Dim platform = RuntimeInformation.ProcessArchitecture.ToString()
         body.Controls.Add(CreateLabel(".NET 10 LTS   |   " & platform &
