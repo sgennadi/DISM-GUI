@@ -512,6 +512,18 @@ internal static class LayoutSmoke
                 Wim360Reader.FormatReport(catalog).Contains("Compare 1 vs 3"),
                 "Copy report must include the automatic metadata overview");
 
+        // Recommended pair launches the existing multi-index viewer with precisely
+        // the suggested two indexes selected, rather than the first three.
+        using (var suggestedViewer = new Wim360CompareIndexesForm(catalog, new[] { 1, 3 }))
+        {
+            var selected = Find(suggestedViewer, "lst360CompareIndexes") as CheckedListBox;
+            var checkedIndexes = selected?.CheckedItems.Cast<Wim360Reader.ImageInfo>()
+                .Select(x => x.Index).OrderBy(x => x).ToArray();
+            Require(checkedIndexes is not null &&
+                    checkedIndexes.SequenceEqual(new[] { 1, 3 }),
+                "Suggested index pair must preselect exactly the requested indexes");
+        }
+
         // Different build, same edition and architecture: a useful upgrade
         // comparison, without pretending that same-build file bytes match.
         catalog.Images[0].Edition = "Professional";
@@ -1540,6 +1552,13 @@ internal static class LayoutSmoke
             dashboard!.PreviewMetadataForTest(WIM_METADATA_FIXTURE);
             var indexGrid = Find(dashboard, "grid360Indexes") as DataGridView;
             var overviewText = Find(dashboard, "txt360Overview") as TextBox;
+            var recommendedButton = Find(dashboard, "btn360CompareSuggested") as Button;
+            var recommendedLabel = Find(dashboard, "lbl360SuggestedPair") as Label;
+            Require(recommendedButton is not null && recommendedButton.Enabled &&
+                    recommendedLabel is not null &&
+                    recommendedLabel.Text.StartsWith("Recommended: ") &&
+                    recommendedLabel.AutoEllipsis,
+                    "Inspect should expose a readable, enabled recommended-pair action");
             Require(overviewText is not null && overviewText.ReadOnly &&
                     overviewText.Multiline && overviewText.ScrollBars == ScrollBars.Vertical &&
                     overviewText.Text.Contains("2 indexes") &&

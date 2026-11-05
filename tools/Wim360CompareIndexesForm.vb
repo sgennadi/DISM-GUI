@@ -33,10 +33,22 @@ Public NotInheritable Class Wim360CompareIndexesForm
     Private job As CancellationTokenSource
     Private working As Boolean
 
-    Public Sub New(report As Wim360Reader.WimReport)
+    Public Sub New(report As Wim360Reader.WimReport,
+                   Optional preferredIndexes As IEnumerable(Of Integer) = Nothing)
         If report Is Nothing Then Throw New ArgumentNullException(NameOf(report))
         If report.Images.Count < 2 Then
             Throw New ArgumentException("Compare Indexes requires at least two indexes.")
+        End If
+        Dim defaults = report.Images.OrderBy(Function(x) x.Index).
+            Take(Math.Min(3, report.ImageCount)).
+            Select(Function(x) x.Index).ToArray()
+        If preferredIndexes IsNot Nothing Then
+            defaults = preferredIndexes.Distinct().OrderBy(Function(x) x).ToArray()
+        End If
+        If defaults.Length < 2 OrElse defaults.Length > 8 OrElse
+            defaults.Any(Function(i) Not report.Images.Any(Function(x) x.Index = i)) Then
+            Throw New ArgumentException("Choose 2 to 8 valid indexes.",
+                                        NameOf(preferredIndexes))
         End If
         source = report
         Me.Name = "Wim360CompareIndexesForm"
@@ -179,10 +191,8 @@ Public NotInheritable Class Wim360CompareIndexesForm
             .BorderStyle = BorderStyle.FixedSingle,
             .HorizontalScrollbar = True
         }
-        Dim count As Integer = 0
         For Each image In report.Images.OrderBy(Function(x) x.Index)
-            selectedIndexes.Items.Add(image, count < 3)
-            count += 1
+            selectedIndexes.Items.Add(image, defaults.Contains(image.Index))
         Next
         selectArea.Controls.Add(selectedIndexes, 0, 1)
         settings.Controls.Add(selectArea, 0, 0)
@@ -415,8 +425,6 @@ Public NotInheritable Class Wim360CompareIndexesForm
         WindowGeometry.Install(Me, "Software\DISMGUI\Wim360IndexComparison")
 
         ' A metadata diff needs no mount and is available as soon as the window opens.
-        Dim defaults = report.Images.OrderBy(Function(x) x.Index).
-            Take(Math.Min(3, report.ImageCount)).Select(Function(x) x.Index).ToArray()
         ShowComparison(Wim360IndexComparer.Metadata(report, defaults))
     End Sub
 

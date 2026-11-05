@@ -25,6 +25,8 @@ Public NotInheritable Class Wim360Dashboard
     Private ReadOnly status As Label
     Private ReadOnly indexTable As DataGridView
     Private ReadOnly overviewText As TextBox
+    Private ReadOnly recommendedPairLabel As Label
+    Private ReadOnly compareSuggestedButton As Button
     Private ReadOnly details As TextBox
     Private ReadOnly useSelected As Button
     Private ReadOnly copyReport As Button
@@ -35,6 +37,7 @@ Public NotInheritable Class Wim360Dashboard
     Private ReadOnly exportIndexesJson As Button
     Private ReadOnly compareIndexesButton As Button
     Private report As Wim360Reader.WimReport
+    Private suggestedPair As Wim360InspectOverview.SuggestedPair
     Private scanGeneration As Integer
     Private isAuditing As Boolean
     Private auditCancellation As CancellationTokenSource
@@ -71,7 +74,7 @@ Public NotInheritable Class Wim360Dashboard
         ' Scroll rather than truncate content on high-DPI or short viewports.
         Dim factor As Single = Math.Max(1.0F, Me.Font.Height / 16.0F)
         Dim stackSource As Boolean = factor > 1.15F
-        For Each height As Integer In {62, 66, 85, 36, 190, 163, 163, 314}
+        For Each height As Integer In {62, 66, 85, 36, 190, 205, 163, 314}
             dashboardLayout.RowStyles.Add(New RowStyle(SizeType.Absolute,
                 CInt(Math.Ceiling(height * factor))))
         Next
@@ -209,13 +212,16 @@ Public NotInheritable Class Wim360Dashboard
         ' Inspect. No additional WIM file reads or mounting are performed.
         Dim overviewPanel As New TableLayoutPanel With {
             .Name = "Wim360OverviewPanel",
-            .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 2,
+            .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 3,
             .Margin = New Padding(0, 1, 0, 4),
             .BackColor = Color.White
         }
         overviewPanel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        overviewPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 28))
+        overviewPanel.RowStyles.Add(New RowStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(28 * factor))))
         overviewPanel.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        overviewPanel.RowStyles.Add(New RowStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(43 * factor))))
         dashboardLayout.Controls.Add(overviewPanel, 0, 5)
         overviewPanel.Controls.Add(
             MakeText("AUTOMATIC INDEX OVERVIEW  |  READ-ONLY METADATA",
@@ -232,6 +238,38 @@ Public NotInheritable Class Wim360Dashboard
             .Margin = New Padding(0, 1, 0, 3)
         }
         overviewPanel.Controls.Add(overviewText, 0, 1)
+
+        ' An explicit action opens the existing comparison window with the
+        ' highest-ranked suggested pair preselected. The user can then change
+        ' indexes, filters or comparison mode without modifying the image.
+        Dim recommendedRow As New TableLayoutPanel With {
+            .Name = "Wim360RecommendedPairRow",
+            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 1,
+            .Margin = Padding.Empty, .BackColor = Color.White
+        }
+        recommendedRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 54))
+        recommendedRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 46))
+        overviewPanel.Controls.Add(recommendedRow, 0, 2)
+        recommendedPairLabel = MakeText(
+            "Suggested pair: available after Inspect", 9.1F, False, ModernTheme.Muted)
+        recommendedPairLabel.Name = "lbl360SuggestedPair"
+        recommendedPairLabel.Margin = New Padding(0, 2, 4, 2)
+        recommendedRow.Controls.Add(recommendedPairLabel, 0, 0)
+        compareSuggestedButton = New Button With {
+            .Name = "btn360CompareSuggested",
+            .Text = "Compare suggested pair",
+            .Dock = DockStyle.Fill,
+            .Enabled = False, .Margin = New Padding(5, 3, 0, 3)
+        }
+        ModernTheme.StyleButton(compareSuggestedButton, "secondary")
+        AddHandler compareSuggestedButton.Click, Sub(sender, e)
+            If report Is Nothing OrElse suggestedPair Is Nothing OrElse report.ImageCount < 2 Then Return
+            Dim indexes = New Integer() {suggestedPair.FirstIndex, suggestedPair.SecondIndex}
+            Using viewer As New Wim360CompareIndexesForm(report, indexes)
+                viewer.ShowDialog(Me.FindForm())
+            End Using
+        End Sub
+        recommendedRow.Controls.Add(compareSuggestedButton, 1, 0)
 
         Dim info As New TableLayoutPanel With {
             .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 2,
@@ -363,6 +401,9 @@ Public NotInheritable Class Wim360Dashboard
 
         AddHandler fileBox.TextChanged, Sub(sender, e)
             overviewText.Text = "File selection changed. Click Inspect to refresh the metadata overview."
+            suggestedPair = Nothing
+            recommendedPairLabel.Text = "Suggested pair: available after Inspect"
+            compareSuggestedButton.Enabled = False
             CancelMountedAudit()
             useSelected.Enabled = False
             copyReport.Enabled = False
@@ -459,6 +500,9 @@ Public NotInheritable Class Wim360Dashboard
         scanGeneration += 1
         Dim generation = scanGeneration
         report = Nothing
+        suggestedPair = Nothing
+        recommendedPairLabel.Text = "Suggested pair: waiting for Inspect"
+        compareSuggestedButton.Enabled = False
         indexTable.Rows.Clear()
         overviewText.Text = "Inspecting image metadata (read-only)..."
         details.Text = "Inspecting image metadata..."
@@ -517,7 +561,14 @@ Public NotInheritable Class Wim360Dashboard
 
     Private Sub ShowReport(value As Wim360Reader.WimReport)
         report = value
-        overviewText.Text = Wim360InspectOverview.Analyze(value).Text
+        Dim summary = Wim360InspectOverview.Analyze(value)
+        overviewText.Text = summary.Text
+        suggestedPair = summary.SuggestedPairs.FirstOrDefault()
+        compareSuggestedButton.Enabled = suggestedPair IsNot Nothing
+        recommendedPairLabel.Text = If(suggestedPair Is Nothing,
+            "Suggested pair: not available",
+            "Recommended: " & suggestedPair.FirstIndex.ToString() &
+                " vs " & suggestedPair.SecondIndex.ToString())
         imageCount.Text = value.ImageCount.ToString()
         fileSize.Text = Wim360Reader.HumanSize(value.FileSizeBytes)
         Dim mounted = value.Images.Where(Function(x) x.MountStatus.StartsWith("Mounted",
