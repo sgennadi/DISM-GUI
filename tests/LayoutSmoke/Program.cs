@@ -438,6 +438,12 @@ internal static class LayoutSmoke
             $"WIM 360 comparison grid hidden below the fold: " +
             $"visible={visibleMatrix.Height}px, " +
             $"fontScale={Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_FONT_SCALE")}");
+        var thirdIndexRect = matrix.GetColumnDisplayRectangle(5, false);
+        Require(thirdIndexRect.Width > 80 &&
+                thirdIndexRect.Right <= matrix.ClientSize.Width,
+            $"Third WIM index is offscreen in the three-column comparison: " +
+            $"right={thirdIndexRect.Right}, width={matrix.ClientSize.Width}, " +
+            $"fontScale={Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_FONT_SCALE")}");
         state!.SelectedItem = "Missing / only in some";
         Application.DoEvents();
         Require(matrix.RowCount == 3,
