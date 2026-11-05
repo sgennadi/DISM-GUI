@@ -1235,7 +1235,7 @@ internal static class LayoutSmoke
             tabs.SelectedIndex = 9;
             Application.DoEvents();
             foreach (var actionButton in new[] {
-                indexCsvButton!, indexJsonButton!,
+                indexCsvButton!, indexJsonButton!, multiCompare,
                 Find(dashboard, "btn360UseInMount") as Button,
                 Find(dashboard, "btn360CompareSnapshots") as Button
             })
@@ -1243,6 +1243,9 @@ internal static class LayoutSmoke
                 Require(actionButton is not null, "WIM 360 required action missing");
                 VerifyReadableButton(actionButton!, "WIM 360");
             }
+            var multiCompare = Find(dashboard, "btn360CompareIndexes") as Button;
+            Require(multiCompare is not null && multiCompare.Enabled,
+                    "WIM 360 must enable direct multi-index comparison when two indexes exist");
             var selectedDetails = Find(dashboard, "txt360Details") as TextBox;
             Require(selectedDetails!.Text.Contains("WindowsPE") &&
                     selectedDetails.Text.Contains("10.0.26100"),
