@@ -385,12 +385,16 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         Try
             grid.Rows.Clear()
             Dim candidates = records.Where(Function(x)
-                (chosen = "All statuses" OrElse
-                 x.DeliveryStatus.Equals(chosen, StringComparison.OrdinalIgnoreCase)) AndAlso
-                (query.Length = 0 OrElse
-                 (x.Id & " " & x.Component & " " & x.Code & " " &
-                  x.ErrorType & " " & x.Summary & " " & x.Fingerprint).
-                 IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0))
+                If chosen <> "All statuses" AndAlso
+                   Not x.DeliveryStatus.Equals(chosen, StringComparison.OrdinalIgnoreCase) Then
+                    Return False
+                End If
+                If query.Length = 0 Then Return True
+                Dim searchable As String = String.Join(" ", New String() {
+                    x.Id, x.Component, x.Code, x.ErrorType, x.Summary, x.Fingerprint
+                })
+                Return searchable.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0
+            End Function)
             For Each entry In candidates
                 Dim position = grid.Rows.Add(entry.WhenUtc, entry.Component,
                                              entry.Code, entry.Summary,
