@@ -5,7 +5,7 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 modules = (
-    "ErrorDiagnostics.vb", "ErrorReportForm.vb", "RuntimeDiagnostics.vb",
+    "ErrorDiagnostics.vb", "ErrorReportForm.vb", "RuntimeDiagnostics.vb", "UniversalDiagnosticsBridge.vb",
     "Wim360SplitSet.vb", "IntegratedTestChecks.vb", "IntegratedTestCenterForm.vb",
     "Wim360Servicing.vb", "Wim360MetadataExport.vb",
     "Wim360IndexComparer.vb", "Wim360OfflineList.vb", "Wim360CompareIndexesForm.vb",
