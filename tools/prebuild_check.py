@@ -26,6 +26,8 @@ for vb_path in sorted((ROOT / "tools").glob("*.vb")):
     module = vb_path.read_text(encoding="utf-8")
     if re.search(r"[.]Count\s*\(\s*Function", module):
         issues.append("VB.NET List.Count(predicate) compilation regression in " + vb_path.name)
+if "repair_dism_image_commands(" not in prepared:
+    issues.append("DISM mount/apply index quoting guard missing")
 if issues:
     for item in issues:
         print("PRE-BUILD ERROR:", item)
