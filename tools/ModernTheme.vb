@@ -84,6 +84,28 @@ Public NotInheritable Class ModernTheme
         End Using
     End Function
 
+    ' Common, DPI-aware action-button measurements; keep container Dock behavior.
+    Public Shared Function RecommendedButtonSize(button As Button,
+                                                   Optional minimumWidth As Integer = 100) As Size
+        Dim caption = button.Text.Replace("&&", "&").Replace("&", "")
+        Dim measured = TextRenderer.MeasureText(caption, button.Font)
+        Return New Size(Math.Max(minimumWidth, measured.Width + 34),
+                        Math.Max(36, measured.Height + 18))
+    End Function
+
+    Public Shared Sub ConfigureReadableButton(button As Button,
+                                              Optional minimumWidth As Integer = 100)
+        button.AutoEllipsis = False
+        button.TextAlign = ContentAlignment.MiddleCenter
+        button.Padding = New Padding(8, 3, 8, 3)
+        If button.Dock = DockStyle.None Then
+            Dim preferred = RecommendedButtonSize(button, minimumWidth)
+            button.MinimumSize = preferred
+            button.Size = New Size(Math.Max(button.Width, preferred.Width),
+                                   Math.Max(button.Height, preferred.Height))
+        End If
+    End Sub
+
     Public Shared Sub StyleButton(button As Button, Optional role As String = Nothing)
         If role Is Nothing Then
             Dim n = button.Name.ToLowerInvariant()
@@ -117,7 +139,7 @@ Public NotInheritable Class ModernTheme
         button.ForeColor = If(role = "primary", Color.White, TextInk)
         button.Font = UiFont(9.3F, True)
         button.Cursor = Cursors.Hand
-        button.AutoEllipsis = True
+        ConfigureReadableButton(button)
         AddHandler button.SizeChanged, Sub(sender, e)
             Dim b = DirectCast(sender, Button)
             If b.IsDisposed OrElse b.Width < 6 OrElse b.Height < 6 Then Return
