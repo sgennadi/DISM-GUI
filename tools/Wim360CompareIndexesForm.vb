@@ -104,7 +104,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
         Dim adjustViewport As Action = Sub()
             If root.IsDisposed OrElse viewport.IsDisposed Then Return
             Dim requiredWidth = If(stackedLayout, 780,
-                                   CInt(Math.Ceiling(990 * uiScale)))
+                                   CInt(Math.Ceiling(930 * uiScale)))
             Dim requiredHeight = headerRows.Sum() + statusHeight +
                                  actionsHeight + minimumGridHeight +
                                  root.Padding.Vertical
