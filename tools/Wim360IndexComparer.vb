@@ -169,11 +169,28 @@ Public NotInheritable Class Wim360IndexComparer
                     .Value = bytes.ToString(CultureInfo.InvariantCulture) & " bytes"
                 })
             Next
+            ' Empty directories and directory-only differences matter too.
+            ' Use the same recursion and junction-skip policy as file listing.
+            For Each fullName In Directory.EnumerateDirectories(root, "*", options)
+                token.ThrowIfCancellationRequested()
+                count += 1
+                If count > 250000 Then
+                    Throw New InvalidOperationException(
+                        "Index " & item.Index.ToString() &
+                        " exceeded the 250,000-item safety limit. No incomplete diff was shown.")
+                End If
+                Dim relative = Path.GetRelativePath(root, fullName).Replace("/"c, "\"c)
+                records.Add(New Item With {
+                    .Index = item.Index, .Kind = "Folders",
+                    .Key = relative, .Value = "Present"
+                })
+            Next
         Next
         Dim result = CompareRecords(report.ImageFile, "Mounted file paths / sizes",
                                     chosen.Select(Function(x) x.Index), records)
-        result.Notes = "Read-only listing. Reparse points skipped. Equal file sizes " &
-            "are NOT proof of identical bytes; no hashing was performed."
+        result.Notes = "Read-only file and folder listing. Reparse points skipped. " &
+            "Matching file lengths are NOT proof of identical bytes; " &
+            "SHA-256 verification is available for a selected file."
         Return result
     End Function
 
@@ -295,7 +312,8 @@ Public NotInheritable Class Wim360IndexComparer
     End Function
 
     Public Shared Function Filter(rows As IEnumerable(Of Row), category As String,
-                                  state As String, query As String) As List(Of Row)
+                                  state As String, query As String,
+                                  Optional totalIndexes As Integer = 0) As List(Of Row)
         If rows Is Nothing Then Throw New ArgumentNullException(NameOf(rows))
         Dim typeText = If(category, "")
         Dim stateText = If(state, "")
@@ -316,7 +334,11 @@ Public NotInheritable Class Wim360IndexComparer
                 Dim value As Integer
                 If Not Integer.TryParse(stateText.Substring("Present in Index ".Length),
                                         value) OrElse Not x.Values.ContainsKey(value) Then Return False
+            ElseIf stateText = "Exists in all" Then
+                ' Present in every selected image, even when version/size differs.
+                If totalIndexes < 2 OrElse x.PresentCount <> totalIndexes Then Return False
             ElseIf stateText = "Present in all" Then
+                ' Identical reported values in every selected image.
                 If x.State <> "Present in all" Then Return False
             ElseIf stateText <> "" AndAlso stateText <> "All results" AndAlso
                    Not String.Equals(x.State, stateText, StringComparison.OrdinalIgnoreCase) Then
