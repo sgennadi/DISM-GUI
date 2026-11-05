@@ -74,6 +74,8 @@ Public NotInheritable Class ErrorDiagnostics
         SyncLock Gate
             latestFailure = summary
         End SyncLock
+        ' Persistent, bounded and redacted. No network calls or user identifiers.
+        RuntimeDiagnostics.RecordException(If(operation, "Operation"), failure)
     End Sub
 
     Public Shared ReadOnly Property LastFailure As String
@@ -94,7 +96,8 @@ Public NotInheritable Class ErrorDiagnostics
     Public Shared Function BuildReport(title As String, description As String,
                includeLog As Boolean, logText As String,
                Optional context As String = "",
-               Optional dpi As Integer = 96) As String
+               Optional dpi As Integer = 96,
+               Optional includeHistory As Boolean = False) As String
         Dim descriptionSafe = Redact(If(description, "").Trim())
         If descriptionSafe.Length > 2500 Then
             descriptionSafe = descriptionSafe.Substring(0, 2500) & vbLf & "(description shortened)"
@@ -126,6 +129,13 @@ Public NotInheritable Class ErrorDiagnostics
             lines.Add("")
         Else
             lines.Add("DISM output: not included (opt-in only).")
+        End If
+        If includeHistory Then
+            lines.Add("## Recent DISM GUI runtime errors (opt-in, local history)")
+            lines.Add(RuntimeDiagnostics.ReadRecent(15))
+            lines.Add("")
+        Else
+            lines.Add("Local application error history: not included (opt-in only).")
         End If
         lines.Add("## Checklist")
         lines.Add("- [ ] I reviewed this report for sensitive information.")

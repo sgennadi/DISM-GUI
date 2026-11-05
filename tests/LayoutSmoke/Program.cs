@@ -258,6 +258,60 @@ internal static class LayoutSmoke
         Console.WriteLine("PASS WIM 360 metadata, architecture, report and XML safety tests");
     }
 
+    private static void VerifyRuntimeDiagnostics()
+    {
+        var temp = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+            "DISMGUI-Local-Diagnostics-" + Guid.NewGuid().ToString("N"));
+        var oldTest = Environment.GetEnvironmentVariable("DISMGUI_TEST_DIAGNOSTICS");
+        var oldPath = Environment.GetEnvironmentVariable("DISMGUI_TEST_LOG_DIRECTORY");
+        Environment.SetEnvironmentVariable("DISMGUI_TEST_DIAGNOSTICS", "1");
+        Environment.SetEnvironmentVariable("DISMGUI_TEST_LOG_DIRECTORY", temp);
+        try
+        {
+            Require(RuntimeDiagnostics.ReadRecent().Contains("no recorded runtime errors"),
+                "Test runtime journal should be empty initially.");
+            RuntimeDiagnostics.RecordException("Mounted WIM",
+                new InvalidOperationException("Password=DO_NOT_KEEP_THIS_SECRET"));
+            RuntimeDiagnostics.RecordDismExit("DISM command", "87");
+            RuntimeDiagnostics.RecordDismExit("DISM command", "0");
+            RuntimeDiagnostics.RecordDismExit("DISM command", "3010");
+            var history = RuntimeDiagnostics.ReadRecent(15);
+            Require(history.Contains("Mounted WIM") &&
+                    history.Contains("DISM command") &&
+                    history.Contains("code=87") &&
+                    !history.Contains("DO_NOT_KEEP_THIS_SECRET"),
+                    "Persistent local diagnostics should be redacted, bounded and store failed DISM exits.");
+            var raw = System.IO.File.ReadAllText(
+                System.IO.Path.Combine(temp, "events.log"));
+            Require(raw.Contains("sig=") &&
+                    !raw.Contains("DO_NOT_KEEP_THIS_SECRET") &&
+                    raw.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length == 2,
+                "Local journal must use coarse signatures and exclude successful DISM exits.");
+            var withoutHistory = ErrorDiagnostics.BuildReport(
+                "Failure", "Test", false, "", "System", 96);
+            Require(!withoutHistory.Contains("DISM command") &&
+                    withoutHistory.Contains("not included (opt-in only)"),
+                "GitHub reports must exclude local history by default.");
+            var withHistory = ErrorDiagnostics.BuildReport(
+                "Failure", "Test", false, "", "System", 96, true);
+            Require(withHistory.Contains("Recent DISM GUI runtime errors") &&
+                    withHistory.Contains("code=87") &&
+                    !withHistory.Contains("DO_NOT_KEEP_THIS_SECRET"),
+                "Opt-in local diagnostics must appear only after explicit inclusion.");
+            RuntimeDiagnostics.ClearHistory();
+            Require(RuntimeDiagnostics.ReadRecent().Contains("no recorded runtime errors"),
+                "Clear History must erase both local diagnostic files.");
+            Console.WriteLine("PASS persistent local exception/DISM exit capture, redaction and opt-in history.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("DISMGUI_TEST_DIAGNOSTICS", oldTest);
+            Environment.SetEnvironmentVariable("DISMGUI_TEST_LOG_DIRECTORY", oldPath);
+            try { System.IO.Directory.Delete(temp, recursive: true); }
+            catch { /* Disposable test artifacts are not production files. */ }
+        }
+    }
+
     private static void VerifyErrorDiagnostics()
     {
         var raw = "Password: DO_NOT_UPLOAD_123\n" +
@@ -303,6 +357,9 @@ internal static class LayoutSmoke
         Application.DoEvents();
         var include = Find(dialog, "chkSupportIncludeLog") as CheckBox;
         var reviewed = Find(dialog, "chkSupportReviewed") as CheckBox;
+        var history = Find(dialog, "chkSupportIncludeHistory") as CheckBox;
+        var openHistory = Find(dialog, "btnSupportOpenHistory") as Button;
+        var clearHistory = Find(dialog, "btnSupportClearHistory") as Button;
         var preview = Find(dialog, "txtSupportPreview") as TextBox;
         var title = Find(dialog, "txtSupportTitle") as TextBox;
         var description = Find(dialog, "txtSupportDescription") as TextBox;
@@ -310,12 +367,16 @@ internal static class LayoutSmoke
         var draft = Find(dialog, "btnSupportGitHub") as Button;
         var close = Find(dialog, "btnSupportClose") as Button;
         Require(include is not null && reviewed is not null && preview is not null &&
+                history is not null && openHistory is not null && clearHistory is not null &&
                 title is not null && description is not null &&
                 copy is not null && draft is not null && close is not null,
                 "Error report UI is missing required preview, consent or export controls");
-        Require(!include!.Checked && !reviewed!.Checked && !draft!.Enabled,
+        Require(!include!.Checked && !history!.Checked &&
+                !reviewed!.Checked && !draft!.Enabled,
                 "Diagnostic logs must opt-in and GitHub action must require review");
-        NoOverlap(copy!, draft, "Diagnostics Copy / GitHub draft actions");
+        NoOverlap(openHistory!, clearHistory!, "Open / Clear diagnostic logs");
+        NoOverlap(clearHistory, copy!, "Clear diagnostic logs / Copy");
+        NoOverlap(copy, draft, "Diagnostics Copy / GitHub draft actions");
         NoOverlap(draft, close!, "Diagnostics GitHub draft / Close actions");
 
         include.Checked = true;
@@ -323,6 +384,15 @@ internal static class LayoutSmoke
         Require(preview!.Text.Contains("DISM output (last 60 lines") &&
                 !preview.Text.Contains("DO_NOT_UPLOAD_123"),
                 "Opt-in diagnostic preview must be redacted");
+        history.Checked = true;
+        Application.DoEvents();
+        Require(preview.Text.Contains("Recent DISM GUI runtime errors") &&
+                !reviewed.Checked,
+                "Including local history must require new explicit review");
+        history.Checked = false;
+        Application.DoEvents();
+        Require(preview.Text.Contains("Local application error history: not included"),
+                "Unchecking local history must exclude it from the preview");
         reviewed.Checked = true;
         Application.DoEvents();
         Require(draft.Enabled, "Reviewed report should allow opening GitHub draft");
@@ -984,6 +1054,7 @@ internal static class LayoutSmoke
             Application.DoEvents();
             VerifyWimMetadata();
             VerifyMountedAudit();
+            VerifyRuntimeDiagnostics();
             VerifyErrorDiagnostics();
             VerifyIntegratedTestCenter(form);
             var detailFixture = VerifyDetailedInventory();

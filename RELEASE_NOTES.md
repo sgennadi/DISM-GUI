@@ -1,24 +1,26 @@
-# DISM GUI 4.3.8
+# DISM GUI 4.3.9
 
-## Integrated Test Center — test everything together
+## Runtime diagnostics on real installed copies
 
-- Added **Tools > Run complete safe tests...** and **WIM 360 > Run complete safe tests**.
-- One resizable, separately remembered WinForms window tests local Windows/.NET environment, administrator rights, physical display DPI, DISM availability, and selected WIM/ESD/SWM image metadata.
-- Optional **already-mounted** servicing audit reads driver packages, Windows packages, optional features and capabilities; it is OFF by default. The Test Center never mounts, edits, commits, discards, installs, or changes images.
-- Consolidated PASS/WARN/FAIL/SKIP results with progress, tooltips, cancel/close, local Copy and Save report (sanitized UTF-8), and the reviewed GitHub Issue-draft workflow. No automatic desktop uploads.
-- Integrated Test Center is accessible directly from both the main Tools menu and WIM 360.
+- Added locally stored, redacted diagnostic history for normal DISM GUI sessions. Tracks unhandled UI/process/task exceptions, WIM 360 errors and nonzero DISM exit codes from the legacy Mount/Unmount/command workers.
+- Each entry includes UTC timestamp, version, sanitized operation, error type and exit/HRESULT code plus a short coarse signature. Raw command lines, full DISM logs and credentials are not recorded automatically.
+- Current and previous local journals rotate at 256 KiB each. No automatic uploads or embedded GitHub secrets.
 
-## WIM 360 — read-only split SWM metadata
+## User-reviewed support reports
 
-- Accepts first or later split parts such as \`install.swm\` and \`install2.swm\`.
-- Validates every required part's WIM signature, spanned flag, header part number/count and matching set identity; identifies missing, mismatched or incomplete sets.
-- Uses query-only WIMGAPI access to the first SWM part for image-index metadata, description, architecture and build information; no write/reference operation is performed.
-- Displays the complete part count and combined size. **Mount**, **Use index in Mount**, and mounted servicing are disabled for split sets; this release does **not** edit or apply SWM images.
-- New integration test uses a disposable real DISM /Split-Image set, selects both parts, verifies missing-part detection and asserts stable SHA-256 checksums.
+- Two independent opt-in checkboxes: include last 60 DISM output lines, or include last 15 locally recorded errors.
+- Open log folder and confirmation-protected Clear history controls.
+- Preview editing and checkbox changes revoke review approval. GitHub Issue submission still occurs from the user's authenticated browser.
+- Shorter captions help the window fit at high DPI.
 
-## Regression and limitations
+## CI failure diagnostics
 
-- Existing Error Diagnostics (user-reviewed GitHub Issue drafts), CI recurring-error diagnostics, WIM 360 partial audit and Driver Studio safety remain intact.
-- Windows CI validates the WinForms Test Center layout, DPI reporting at sample scales, sanitized report output, WIM/SWM metadata and disposable read-only WIM mount; portable archives cover x86, x64 and ARM64.
-- Header/metadata inspection is not equivalent to a complete corruption scan. Windows 11/Server install.wim driver/package enumeration and 125%-200% live DPI should be tested on a separate disposable workstation before production use.
+- Counts actual compiler errors and failed CI steps, but not warnings or casual code references.
+- Tests cover history persistence, redaction, clearing and UI opt-in behavior.
+- All existing WIM/SWM, Test Center and x86/x64/ARM64 safety tests remain.
+
+## Limitations
+
+- Unattended forwarding of arbitrary end-user errors to GitHub still requires a separately hosted authenticated intake service with rate limiting, organizational consent and retention controls.
+- Physical 125%/150%/200% DPI and real OS-image servicing require manual testing.
 - Original DISM GUI by Mike Celone (mikecel79/DISMGUI); attribution retained.
