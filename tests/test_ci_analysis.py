@@ -9,7 +9,7 @@ class AnalyzerTests(unittest.TestCase):
             "C:\\Users\\user\\secret.cs(8,1): error CS1061: failed\n"
             "Authorization: bearer opaque-sensitive-value\n"
             "/home/runner/build.cs(9): error BC30456: unknown\n"
-            "build error NETSDK1138\n"
+            "build error NETSDK1138: unsupported SDK\n"
         )
         self.assertEqual(
             analyzer.parse_codes(log),
@@ -37,7 +37,7 @@ class AnalyzerTests(unittest.TestCase):
             "##[error]src.cs(5): error CS1061: missing property\n"
             "error BC40004 was mentioned only in a comment\n"
         )
-        self.assertEqual(analyzer.parse_codes(log), {"BC32016", "CS1061", "BC40004"})
+        self.assertEqual(analyzer.parse_codes(log), {"BC32016", "CS1061"})
 
     def test_no_noncompiler_tokens_exposed(self):
         self.assertEqual(analyzer.parse_codes("API key=xxx123 no error code"), set())

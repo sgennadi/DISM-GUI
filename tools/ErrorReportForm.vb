@@ -90,21 +90,21 @@ Public NotInheritable Class ErrorReportForm
 
         includeLog = New CheckBox With {
             .Name = "chkSupportIncludeLog",
-            .Text = "Include sanitized last 60 lines of DISM output",
+            .Text = "Include last 60 DISM lines",
             .Dock = DockStyle.Fill, .Checked = False,
             .AutoSize = False, .Margin = New Padding(0, 5, 5, 7)
         }
         choices.Controls.Add(includeLog, 0, 0)
         includeHistory = New CheckBox With {
             .Name = "chkSupportIncludeHistory",
-            .Text = "Include last 15 local errors",
+            .Text = "Include 15 local errors",
             .Checked = False, .Dock = DockStyle.Fill,
             .AutoSize = False, .Margin = New Padding(2, 5, 5, 7)
         }
         choices.Controls.Add(includeHistory, 1, 0)
         Dim refresh As New Button With {
             .Name = "btnSupportGenerate",
-            .Text = "Generate sanitized preview",
+            .Text = "Refresh preview",
             .Dock = DockStyle.Fill, .Margin = New Padding(8, 3, 0, 5)
         }
         ModernTheme.StyleButton(refresh, "browse")

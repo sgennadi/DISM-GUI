@@ -19,7 +19,7 @@ KNOWN = {
     "Publish portable EXE": "Portable EXE publication",
     "Verify embedded EXE icon and no PDB/config clutter": "Artifact validation",
 }
-ERROR_CODE = re.compile(r"\berror\s+((?:BC|CS|MSB|NETSDK|NU)[0-9]{4,6})\b", re.I)
+ERROR_CODE = re.compile(r"\berror\s+((?:BC|CS|MSB|NETSDK|NU)[0-9]{4,6})\s*:", re.I)
 ADVICE = {
     "BC": "Check VB source, imports, name shadowing and overloads.",
     "CS": "Check C# smoke tests and source contracts.",
