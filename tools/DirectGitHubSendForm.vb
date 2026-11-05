@@ -340,7 +340,7 @@ Public NotInheritable Class DirectGitHubSendForm
         If session IsNot Nothing OrElse submitted OrElse Not reviewBox.Checked OrElse
            connectedLogin.Length = 0 Then Return
 
-        If DirectGitHubAccount.IsRecentlySubmitted(issueTitle, reviewedReport) Then
+        If DirectGitHubDedup.AlreadySubmitted(issueTitle, reviewedReport) Then
             resultLabel.Text = "This report was already sent recently. Duplicate blocked."
             Return
         End If
@@ -360,7 +360,7 @@ Public NotInheritable Class DirectGitHubSendForm
             resultLabel.Text = "Sending sanitized report directly to GitHub..."
             Dim answer = Await client.CreateIssueAsync(
                 storedToken, issueTitle, reviewedReport, session.Token)
-            DirectGitHubAccount.RememberSubmitted(issueTitle, reviewedReport,
+            DirectGitHubDedup.Remember(issueTitle, reviewedReport,
                                                   answer.Url)
             submitted = True
             resultLabel.Text = "Published GitHub Issue #" & answer.Number.ToString() &
