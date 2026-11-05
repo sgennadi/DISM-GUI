@@ -248,6 +248,30 @@ internal static class LayoutSmoke
         Require(Wim360Reader.HumanSize(1073741824) == "1 GB",
                 "WIM file size formatting is incorrect");
 
+        // Export index-level metadata directly from unmounted WIM/ESD/SWM.
+        var indexCsv = Wim360MetadataExport.ToCsv(report);
+        Require(indexCsv.Contains("\"Image file\"") &&
+                indexCsv.Contains("\"C:\\Images\\boot.wim\"") &&
+                indexCsv.Contains("\"WindowsPE\"") &&
+                indexCsv.Contains("\"ARM64\"") &&
+                indexCsv.Split('\n').Length == 4,
+                "WIM 360 index CSV must include both indexes and headers");
+        var metadataJson = Wim360MetadataExport.ToJson(report);
+        using (var indexDocument = System.Text.Json.JsonDocument.Parse(metadataJson))
+        {
+            var root = indexDocument.RootElement;
+            Require(root.GetProperty("ExportKind").GetString() == "Wim360IndexMetadata" &&
+                    root.GetProperty("ImageCount").GetInt32() == 2 &&
+                    root.GetProperty("Indexes").GetArrayLength() == 2 &&
+                    root.GetProperty("Indexes")[1].GetProperty("Architecture").GetString() == "ARM64",
+                    "Index metadata JSON must remain independent of servicing inventory snapshots");
+        }
+        report.Images[0].Name = "=1+1";
+        Require(Wim360MetadataExport.ToCsv(report).Contains("\"'=1+1\""),
+                "WIM index CSV must protect against spreadsheet formula injection");
+        report.Images[0].Name = "Microsoft Windows PE";
+
+
         bool dtdRejected = false;
         try {
             Wim360Reader.ParseMetadataXml(
@@ -1097,6 +1121,11 @@ internal static class LayoutSmoke
             var inventoryButton = Find(dashboard, "btn360Inventory") as Button;
             Require(inventoryButton is not null && !inventoryButton.Enabled,
                     "WIM 360 inventory detail action must require a finished audit");
+            var indexCsvButton = Find(dashboard, "btn360ExportIndexCsv") as Button;
+            var indexJsonButton = Find(dashboard, "btn360ExportIndexJson") as Button;
+            Require(indexCsvButton is not null && indexCsvButton.Enabled &&
+                    indexJsonButton is not null && indexJsonButton.Enabled,
+                    "WIM 360 index metadata export should work without mounting");
             var selectedDetails = Find(dashboard, "txt360Details") as TextBox;
             Require(selectedDetails!.Text.Contains("WindowsPE") &&
                     selectedDetails.Text.Contains("10.0.26100"),
