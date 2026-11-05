@@ -290,6 +290,31 @@ internal static class LayoutSmoke
         Require(Wim360Reader.FormatReport(report).Contains("Windows packages: 3") &&
                 Wim360Reader.FormatReport(report).Contains("Driver packages: 2"),
                 "WIM 360 copy report must include mounted audit results");
+        var partial = Wim360Servicing.Summarize(@"C:\images\install.wim", 2,
+            @"C:\MountAuditFixture", Array.Empty<DriverStudioEngine.DriverPackage>(),
+            Array.Empty<Wim360Servicing.PackageEntry>(),
+            driverWarning: "Driver query timed out", packageWarning: "Package query failed");
+        var partialText = Wim360Servicing.FormatAudit(partial);
+        Require(partial.HasWarnings && partial.DriverWarning.Length > 0 &&
+                partial.PackageWarning.Length > 0 &&
+                partialText.Contains("Driver packages: unavailable") &&
+                partialText.Contains("Windows packages: unavailable") &&
+                partialText.Contains("PARTIAL AUDIT"),
+                "Partial DISM failures must be marked unavailable, never as zero counts");
+        var incompleteExport = Wim360SnapshotDiff.ParseSnapshotJson(
+            Wim360Catalog.ToJson(partial, Wim360Catalog.BuildRows(partial)));
+        Require(incompleteExport.DriverWarning.Length > 0 &&
+                incompleteExport.PackageWarning.Length > 0,
+                "Snapshot JSON must preserve sanitized driver/package errors");
+        var completeExport = Wim360SnapshotDiff.ParseSnapshotJson(
+            Wim360Catalog.ToJson(audit, Wim360Catalog.BuildRows(audit)));
+        var partialComparison = Wim360SnapshotDiff.Compare(completeExport, incompleteExport);
+        Require(partialComparison.RemovedCount == 0 &&
+                partialComparison.SuppressedMembershipCount >= 2 &&
+                partialComparison.Warnings.Any(w => w.Contains("Driver inventory")) &&
+                partialComparison.Warnings.Any(w => w.Contains("package inventory")),
+                "Partial driver/package inventory cannot create false snapshot removals");
+        Console.WriteLine("PASS partial mounted audit and safe incomplete inventory comparison");
         Console.WriteLine("PASS mounted WIM 360 driver/package audit and read-only report");
     }
 
