@@ -24,6 +24,7 @@ Public NotInheritable Class Wim360Dashboard
     Private ReadOnly mounts As Label
     Private ReadOnly status As Label
     Private ReadOnly indexTable As DataGridView
+    Private ReadOnly overviewText As TextBox
     Private ReadOnly details As TextBox
     Private ReadOnly useSelected As Button
     Private ReadOnly copyReport As Button
@@ -61,8 +62,8 @@ Public NotInheritable Class Wim360Dashboard
 
         dashboardLayout = New TableLayoutPanel With {
             .Name = "Wim360Layout",
-            .ColumnCount = 1, .RowCount = 7,
-            .Dock = DockStyle.Top, .Height = 731, .Width = 710,
+            .ColumnCount = 1, .RowCount = 8,
+            .Dock = DockStyle.Top, .Height = 891, .Width = 710,
             .BackColor = Color.White,
             .Margin = Padding.Empty, .Padding = New Padding(17, 13, 17, 18)
         }
@@ -70,7 +71,7 @@ Public NotInheritable Class Wim360Dashboard
         ' Scroll rather than truncate content on high-DPI or short viewports.
         Dim factor As Single = Math.Max(1.0F, Me.Font.Height / 16.0F)
         Dim stackSource As Boolean = factor > 1.15F
-        For Each height As Integer In {62, 66, 85, 36, 215, 163, 314}
+        For Each height As Integer In {62, 66, 85, 36, 190, 163, 163, 314}
             dashboardLayout.RowStyles.Add(New RowStyle(SizeType.Absolute,
                 CInt(Math.Ceiling(height * factor))))
         Next
@@ -204,6 +205,34 @@ Public NotInheritable Class Wim360Dashboard
         AddHandler indexTable.SelectionChanged, AddressOf IndexSelectionChanged
         dashboardLayout.Controls.Add(indexTable, 0, 4)
 
+        ' This summary is derived only from the metadata already returned by
+        ' Inspect. No additional WIM file reads or mounting are performed.
+        Dim overviewPanel As New TableLayoutPanel With {
+            .Name = "Wim360OverviewPanel",
+            .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 2,
+            .Margin = New Padding(0, 1, 0, 4),
+            .BackColor = Color.White
+        }
+        overviewPanel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+        overviewPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 28))
+        overviewPanel.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        dashboardLayout.Controls.Add(overviewPanel, 0, 5)
+        overviewPanel.Controls.Add(
+            MakeText("AUTOMATIC INDEX OVERVIEW  |  READ-ONLY METADATA",
+                     9.5F, True, ModernTheme.Blue), 0, 0)
+        overviewText = New TextBox With {
+            .Name = "txt360Overview", .Dock = DockStyle.Fill,
+            .ReadOnly = True, .Multiline = True, .WordWrap = True,
+            .ScrollBars = ScrollBars.Vertical,
+            .Font = ModernTheme.UiFont(9.4F),
+            .BackColor = Color.FromArgb(243, 249, 255),
+            .ForeColor = ModernTheme.TextInk,
+            .BorderStyle = BorderStyle.FixedSingle,
+            .Text = "Select an image and click Inspect for index differences and suggested comparisons.",
+            .Margin = New Padding(0, 1, 0, 3)
+        }
+        overviewPanel.Controls.Add(overviewText, 0, 1)
+
         Dim info As New TableLayoutPanel With {
             .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 2,
             .Margin = Padding.Empty, .BackColor = Color.White
@@ -211,7 +240,7 @@ Public NotInheritable Class Wim360Dashboard
         info.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         info.RowStyles.Add(New RowStyle(SizeType.Absolute, 29))
         info.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        dashboardLayout.Controls.Add(info, 0, 5)
+        dashboardLayout.Controls.Add(info, 0, 6)
         info.Controls.Add(MakeText("SELECTED INDEX  |  METADATA",
                                   9.5F, True, ModernTheme.Blue), 0, 0)
 
@@ -238,7 +267,7 @@ Public NotInheritable Class Wim360Dashboard
         Next
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
-        dashboardLayout.Controls.Add(actions, 0, 6)
+        dashboardLayout.Controls.Add(actions, 0, 7)
 
         useSelected = New Button With {
             .Name = "btn360UseInMount", .Text = "Use index in Mount",
@@ -333,6 +362,7 @@ Public NotInheritable Class Wim360Dashboard
         actions.Controls.Add(compareHelp, 1, 4)
 
         AddHandler fileBox.TextChanged, Sub(sender, e)
+            overviewText.Text = "File selection changed. Click Inspect to refresh the metadata overview."
             CancelMountedAudit()
             useSelected.Enabled = False
             copyReport.Enabled = False
@@ -430,6 +460,7 @@ Public NotInheritable Class Wim360Dashboard
         Dim generation = scanGeneration
         report = Nothing
         indexTable.Rows.Clear()
+        overviewText.Text = "Inspecting image metadata (read-only)..."
         details.Text = "Inspecting image metadata..."
         imageCount.Text = "—"
         fileSize.Text = "—"
@@ -444,6 +475,7 @@ Public NotInheritable Class Wim360Dashboard
         If String.IsNullOrWhiteSpace(path) Then
             status.Text = "Choose a .wim, .esd or .swm file first."
             details.Text = "WIM 360 only reads image metadata."
+            overviewText.Text = "Choose a WIM, ESD or SWM image, then click Inspect."
             mounts.Text = "Not checked"
             Return
         End If
@@ -470,6 +502,7 @@ Public NotInheritable Class Wim360Dashboard
             status.Text = "Cannot inspect image; open Tools > Report error to GitHub."
             details.Text = "No files were modified." & Environment.NewLine &
                            ErrorDiagnostics.Redact(ex.GetType().Name & ": " & ex.Message)
+            overviewText.Text = "Inspection failed. No index comparison was performed."
         Finally
             If Not Me.IsDisposed AndAlso generation = scanGeneration Then
                 scan.Enabled = True
@@ -484,6 +517,7 @@ Public NotInheritable Class Wim360Dashboard
 
     Private Sub ShowReport(value As Wim360Reader.WimReport)
         report = value
+        overviewText.Text = Wim360InspectOverview.Analyze(value).Text
         imageCount.Text = value.ImageCount.ToString()
         fileSize.Text = Wim360Reader.HumanSize(value.FileSizeBytes)
         Dim mounted = value.Images.Where(Function(x) x.MountStatus.StartsWith("Mounted",

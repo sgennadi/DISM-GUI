@@ -49,7 +49,15 @@ Select **WIM 360** at the top of the left navigation. Choose a `.wim` or
 `.esd` file, or select one in **Mount & Inspect** first. Click **Inspect** to
 read all image-index metadata through the Windows WIMGAPI in read-only mode.
 Select an index to view architecture, build, edition, languages and
-mount state. **Use index in Mount** transfers the selected WIM path and
+mount state. Right after **Inspect**, the new **Automatic index overview**
+summarizes all indexes' edition, Windows build, architecture and languages
+without mounting the image. It identifies shared builds, explicitly lists
+differences and recommends up to three pairs for **Compare indexes**, such
+as Home vs Pro on the same build. If metadata is missing, the overview
+does not guess that indexes are the same. It also warns that matching
+metadata is not proof of identical file contents. The overview is included
+in **Copy report**; it never changes the WIM.
+**Use index in Mount** transfers the selected WIM path and
 index to the original Mount form but **never mounts or modifies the image**.
 Use **Copy report** to copy the read-only text report. The new
 **Export indexes CSV** and **Export indexes JSON** buttons save an unmounted
