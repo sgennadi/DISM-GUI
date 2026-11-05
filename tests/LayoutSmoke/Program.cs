@@ -228,6 +228,107 @@ internal static class LayoutSmoke
         "<VERSION><MAJOR>10</MAJOR><MINOR>0</MINOR><BUILD>26100</BUILD></VERSION>" +
         "</WINDOWS></IMAGE></WIM>";
 
+    private static void VerifyThreeIndexComparison(Form owner)
+    {
+        var xml = WIM_METADATA_FIXTURE.Replace("</WIM>",
+            "<IMAGE INDEX=\"3\"><NAME>Windows 11 Enterprise</NAME>" +
+            "<WINDOWS><ARCH>9</ARCH><EDITIONID>Enterprise</EDITIONID>" +
+            "<VERSION><MAJOR>10</MAJOR><MINOR>0</MINOR><BUILD>26100</BUILD></VERSION>" +
+            "</WINDOWS></IMAGE></WIM>");
+        var report = Wim360Reader.ParseMetadataXml(
+            xml, @"C:\Images\install.wim", 128000000);
+        report.Images[0].Edition = "Home";
+        report.Images[1].Edition = "Pro";
+        report.Images[2].Edition = "Enterprise";
+        report.Images[0].Architecture = "x64";
+        report.Images[1].Architecture = "x64";
+        report.Images[2].Architecture = "x64";
+        var metadata = Wim360IndexComparer.Metadata(report, new[] { 1, 2, 3 });
+        Require(metadata.Indexes.Count == 3 && metadata.Rows.Count == 10,
+                "Index compare must expose metadata for all three selected indexes");
+        Require(metadata.Rows.Single(x => x.Name == "Edition").State == "Different" &&
+                metadata.Rows.Single(x => x.Name == "Architecture").State == "Present in all",
+                "Index compare must distinguish different and shared metadata");
+
+        var records = new[] {
+            new Wim360IndexComparer.Item { Index=1, Kind="Files", Key=@"Windows\System32\common.dll", Value="100 bytes" },
+            new Wim360IndexComparer.Item { Index=2, Kind="Files", Key=@"Windows\System32\common.dll", Value="100 bytes" },
+            new Wim360IndexComparer.Item { Index=3, Kind="Files", Key=@"Windows\System32\common.dll", Value="100 bytes" },
+            new Wim360IndexComparer.Item { Index=3, Kind="Files", Key=@"Windows\System32\unique.dll", Value="300 bytes" },
+            new Wim360IndexComparer.Item { Index=1, Kind="Files", Key=@"Windows\System32\missing.dll", Value="200 bytes" },
+            new Wim360IndexComparer.Item { Index=2, Kind="Files", Key=@"Windows\System32\missing.dll", Value="200 bytes" },
+            new Wim360IndexComparer.Item { Index=1, Kind="Files", Key=@"Windows\System32\changed.dll", Value="42 bytes" },
+            new Wim360IndexComparer.Item { Index=2, Kind="Files", Key=@"Windows\System32\changed.dll", Value="46 bytes" },
+            new Wim360IndexComparer.Item { Index=3, Kind="Files", Key=@"Windows\System32\changed.dll", Value="42 bytes" },
+            new Wim360IndexComparer.Item { Index=1, Kind="Files", Key="=HYPERLINK()", Value="1 bytes" }
+        };
+        var comparison = Wim360IndexComparer.CompareRecords(report.ImageFile,
+            "Mounted file paths / sizes", new[] { 1, 2, 3 }, records);
+        Require(comparison.Rows.Count == 5 &&
+                comparison.Rows.Single(x => x.Name.EndsWith("unique.dll")).State == "Only in Index 3" &&
+                comparison.Rows.Single(x => x.Name.EndsWith("missing.dll")).State == "Missing in some" &&
+                comparison.Rows.Single(x => x.Name.EndsWith("changed.dll")).State == "Different" &&
+                comparison.Rows.Single(x => x.Name.EndsWith("common.dll")).State == "Present in all",
+                "Presence matrix has incorrect missing/unique/different classifications");
+        Require(Wim360IndexComparer.Filter(comparison.Rows, "All types",
+                    "Missing / only in some", "").Count == 3 &&
+                Wim360IndexComparer.Filter(comparison.Rows, "All types",
+                    "Only in Index 3", "").Count == 1 &&
+                Wim360IndexComparer.Filter(comparison.Rows, "Files",
+                    "Different", "changed.dll").Count == 1,
+                "Index comparison filters must combine state, type and search");
+        var csv = Wim360IndexComparer.ToCsv(comparison, comparison.Rows);
+        Require(csv.Contains("\"Index 1\",\"Index 2\",\"Index 3\"") &&
+                csv.Contains("\"'=HYPERLINK()\"") &&
+                csv.Contains("\"—\""),
+                "Index comparison CSV missing headers, absent-item markers or formula protection");
+        report.Images[0].ServicingAudit = Wim360Servicing.Summarize(
+            report.ImageFile, 1, @"C:\Mounted1",
+            Array.Empty<DriverStudioEngine.DriverPackage>(),
+            new[] { new Wim360Servicing.PackageEntry {
+                Name="A-Package", State="Installed", ReleaseType="Update"
+            } });
+        report.Images[1].ServicingAudit = Wim360Servicing.Summarize(
+            report.ImageFile, 2, @"C:\Mounted2",
+            Array.Empty<DriverStudioEngine.DriverPackage>(),
+            new[] { new Wim360Servicing.PackageEntry {
+                Name="A-Package", State="Staged", ReleaseType="Update"
+            } });
+        report.Images[2].ServicingAudit = Wim360Servicing.Summarize(
+            report.ImageFile, 3, @"C:\Mounted3",
+            Array.Empty<DriverStudioEngine.DriverPackage>(),
+            Array.Empty<Wim360Servicing.PackageEntry>());
+        var audited = Wim360IndexComparer.AuditedInventory(report, new[] { 1, 2, 3 });
+        Require(audited.Rows.Count == 1 &&
+                audited.Rows[0].State == "Missing in some" &&
+                audited.Rows[0].At(3) == "—",
+                "Audited three-index inventory must show absent packages");
+        report.Images[1].ServicingAudit.PackageWarning = "Partial query";
+        bool blockedPartial = false;
+        try { Wim360IndexComparer.AuditedInventory(report, new[] { 1, 2, 3 }); }
+        catch (InvalidOperationException) { blockedPartial = true; }
+        Require(blockedPartial, "Partial audits must not produce false missing results");
+
+        using var dialog = new Wim360CompareIndexesForm(report);
+        dialog.Show(owner);
+        Application.DoEvents();
+        dialog.PreviewForTest(comparison);
+        Application.DoEvents();
+        var matrix = Find(dialog, "grid360IndexComparison") as DataGridView;
+        var state = Find(dialog, "cmb360IndexCompareState") as ComboBox;
+        var action = Find(dialog, "btn360RunIndexCompare") as Button;
+        Require(matrix is not null && matrix.VirtualMode &&
+                matrix.Columns.Count == 6 && matrix.RowCount == 5 &&
+                action is not null && action.Enabled, "Three-index comparison UI not initialized");
+        state!.SelectedItem = "Missing / only in some";
+        Application.DoEvents();
+        Require(matrix.RowCount == 3,
+                "Missing filter must include unique and partially absent paths");
+        Snapshot(dialog, "DISM-GUI-WIM360-Compare-Three-Indexes");
+        dialog.Close();
+        Console.WriteLine("PASS WIM 360 three-index metadata, files, inventory filters and CSV");
+    }
+
     private static void VerifyWimMetadata()
     {
         var report = Wim360Reader.ParseMetadataXml(
@@ -1088,6 +1189,7 @@ internal static class LayoutSmoke
             tabs!.SelectedIndex = 0;
             Application.DoEvents();
             VerifyWimMetadata();
+            VerifyThreeIndexComparison(form);
             VerifyMountedAudit();
             VerifyRuntimeDiagnostics();
             VerifyErrorDiagnostics();
