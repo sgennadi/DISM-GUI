@@ -149,6 +149,61 @@ internal static class WimMountIntegration
         }
     }
 
+    // Real 3-index WIM regression: DISM enumerates contents without mounting.
+    // All sources are temporary files created only by the CI test itself.
+    public static void VerifyOfflineThreeIndexes(string root)
+    {
+        if (Environment.GetEnvironmentVariable("DISMGUI_TEST_WIM_MOUNT") != "1")
+            return;
+        var wim = Path.Combine(root, "offline-3-index.wim");
+        for (var index = 1; index <= 3; index++)
+        {
+            var src = Path.Combine(root, "offline-source-" + index);
+            Directory.CreateDirectory(Path.Combine(src, "Windows", "System32"));
+            Directory.CreateDirectory(Path.Combine(src, "Documents", "Shared"));
+            File.WriteAllText(Path.Combine(src, "Windows", "System32", "common.txt"), "same");
+            if (index != 2)
+                File.WriteAllText(Path.Combine(src, "Windows", "System32", "not-in-2.txt"), "exists");
+            if (index == 3)
+            {
+                File.WriteAllText(Path.Combine(src, "Windows", "System32", "index3.txt"), "unique");
+                Directory.CreateDirectory(Path.Combine(src, "Documents", "Only3Empty"));
+            }
+            var cmd = new[] {
+                "/English", index == 1 ? "/Capture-Image" : "/Append-Image",
+                "/ImageFile:" + wim, "/CaptureDir:" + src,
+                "/Name:Index " + index
+            };
+            CheckDism(cmd, 180000);
+        }
+        var report = Wim360Reader.Inspect(wim);
+        if (report.ImageCount != 3)
+            throw new InvalidOperationException("Disposable image has the wrong index count.");
+        var before = Digest(wim);
+        var diff = Wim360OfflineList.Compare(report, new[] { 1, 2, 3 },
+                                             CancellationToken.None);
+        var common = diff.Rows.Single(x => x.Kind == "Files" &&
+                                           x.Name.EndsWith("common.txt", StringComparison.Ordinal));
+        var absent2 = diff.Rows.Single(x => x.Kind == "Files" &&
+                                            x.Name.EndsWith("not-in-2.txt", StringComparison.Ordinal));
+        var unique3 = diff.Rows.Single(x => x.Kind == "Files" &&
+                                            x.Name.EndsWith("index3.txt", StringComparison.Ordinal));
+        var emptyOnly3 = diff.Rows.Single(x => x.Kind == "Folders" &&
+                                               x.Name.EndsWith("Only3Empty", StringComparison.Ordinal));
+        if (common.State != "Present in all" ||
+            absent2.State != "Missing in some" || absent2.At(2) != "—" ||
+            unique3.State != "Only in Index 3" ||
+            emptyOnly3.State != "Only in Index 3" ||
+            diff.Rows.Any(x => x.Values.Values.Any(v => v != "Present")))
+            throw new InvalidOperationException("Offline three-index file/folder presence is wrong.");
+        if (before != Digest(wim) ||
+            report.Images.Any(x => x.MountStatus.StartsWith("Mounted",
+                                                StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("Offline index comparison modified or mounted the WIM.");
+        Console.WriteLine("PASS real 3-index DISM /List-Image offline file/folder presence, " +
+                          "unique/missing/empty-folder filters and unchanged WIM SHA-256.");
+    }
+
     public static void Verify(string image, string root)
     {
         if (Environment.GetEnvironmentVariable("DISMGUI_TEST_WIM_MOUNT") != "1")
