@@ -23,7 +23,20 @@ Public NotInheritable Class ModernTheme
     Public Shared ReadOnly Red As Color = Color.FromArgb(211, 70, 91)
 
     Public Shared Function UiFont(size As Single, Optional bold As Boolean = False) As Font
-        Return New Font("Segoe UI", size, If(bold, FontStyle.Bold, FontStyle.Regular), GraphicsUnit.Point)
+        ' LayoutSmoke runs at three simulated font scales in Windows CI.
+        ' Normal installed builds ALWAYS use the unchanged system UI size.
+        Dim factor As Single = 1.0F
+        If String.Equals(Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_ONLY"),
+                         "1", StringComparison.Ordinal) Then
+            Dim requested As Single
+            If Single.TryParse(Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_FONT_SCALE"),
+                               Globalization.NumberStyles.Float,
+                               Globalization.CultureInfo.InvariantCulture, requested) Then
+                factor = Math.Max(1.0F, Math.Min(1.75F, requested))
+            End If
+        End If
+        Return New Font("Segoe UI", size * factor,
+                        If(bold, FontStyle.Bold, FontStyle.Regular), GraphicsUnit.Point)
     End Function
 
     Private Shared Function RoundPath(bounds As Rectangle, radius As Integer) As GraphicsPath
