@@ -286,7 +286,10 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
                    Not root.TryGetProperty("delivery", delivery) OrElse
                    delivery.ValueKind <> JsonValueKind.Object Then Return Nothing
                 Dim declared As Guid
-                If Not Guid.TryParse(Field(eventJson, "id", 40), declared) OrElse
+                Dim rawId As JsonElement
+                If Not eventJson.TryGetProperty("id", rawId) OrElse
+                   rawId.ValueKind <> JsonValueKind.String OrElse
+                   Not Guid.TryParse(rawId.GetString(), declared) OrElse
                    declared <> fileId Then Return Nothing
                 If Field(eventJson, "schema", 60) <> UniversalDiagnosticsEmbedded.Schema OrElse
                    Field(eventJson, "project", 100) <> Project Then Return Nothing
@@ -345,8 +348,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
 
     Private Sub ShowSelected()
         Dim item = Selected()
-        preview.Text = If(item Is Nothing, "",
-                          If(item Is Nothing, "", SanitizeExport(item)))
+        preview.Text = If(item Is Nothing, "", SanitizeExport(item))
         Dim available = item IsNot Nothing
         copyButton.Enabled = available
         exportButton.Enabled = available
