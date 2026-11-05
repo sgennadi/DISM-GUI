@@ -7,7 +7,9 @@ ROOT = Path(__file__).resolve().parents[1]
 modules = (
     "ErrorDiagnostics.vb", "ErrorReportForm.vb", "RuntimeDiagnostics.vb",
     "Wim360SplitSet.vb", "IntegratedTestChecks.vb", "IntegratedTestCenterForm.vb",
-    "Wim360Servicing.vb", "Wim360MetadataExport.vb", "DriverStudioInstaller.vb",
+    "Wim360Servicing.vb", "Wim360MetadataExport.vb",
+    "Wim360IndexComparer.vb", "Wim360CompareIndexesForm.vb",
+    "DriverStudioInstaller.vb",
 )
 prepared = (ROOT / "tools" / "apply_modern.py").read_text(encoding="utf-8")
 issues = []
