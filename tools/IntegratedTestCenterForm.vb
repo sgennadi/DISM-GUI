@@ -193,6 +193,7 @@ Public NotInheritable Class IntegratedTestCenterForm
         copyButton.Enabled = False
         saveButton.Enabled = False
         supportButton.Enabled = False
+        ModernTheme.MakeDialogScrollable(Me, root, 940, 680)
         WindowGeometry.Install(Me, "Software\DISMGUI\IntegratedTestCenter")
         AddHandler Me.FormClosing, Sub(sender, e)
             If running IsNot Nothing Then
