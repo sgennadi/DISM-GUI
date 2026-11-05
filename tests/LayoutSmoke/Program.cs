@@ -1043,6 +1043,7 @@ internal static class LayoutSmoke
                     "WIM metadata inspection modified the source fixture");
             Console.WriteLine("PASS native WIMGAPI read-only WIM catalog: " +
                 inventory.Images[0].Name + ", " + inventory.FileSizeBytes + " bytes");
+            WimMountIntegration.ProbeOfflineList(image);
             WimMountIntegration.Verify(image, root);
             WimMountIntegration.VerifySplit(image, root);
         }
