@@ -120,7 +120,10 @@ Public NotInheritable Class Wim360SplitSet
                                                " belongs to a different or damaged split image.")
             End If
             manifest.Parts.Add(full)
-            manifest.TotalBytes = Math.AddExact(manifest.TotalBytes, item.Bytes)
+            If manifest.TotalBytes > Long.MaxValue - item.Bytes Then
+                Throw New InvalidDataException("SWM size exceeds the supported range.")
+            End If
+            manifest.TotalBytes += item.Bytes
         Next
         Return manifest
     End Function
