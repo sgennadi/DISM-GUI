@@ -29,7 +29,7 @@ def edit_once(path, old, new, label):
 for name in ("ModernTheme.vb", "ResponsiveSectionLayout.vb", "ResponsiveForms.vb", "WindowGeometry.vb", "UpdateManager.vb", "SupportContact.vb", "ErrorDiagnostics.vb", "ErrorReportForm.vb", "RuntimeDiagnostics.vb",
              "Wim360Reader.vb", "Wim360SplitSet.vb", "Wim360Dashboard.vb",
              "IntegratedTestChecks.vb", "IntegratedTestCenterForm.vb", "Wim360Servicing.vb",
-             "Wim360Catalog.vb", "Wim360MetadataExport.vb", "Wim360IndexComparer.vb",
+             "Wim360Catalog.vb", "Wim360MetadataExport.vb", "Wim360IndexComparer.vb", "Wim360OfflineList.vb",
              "Wim360CompareIndexesForm.vb", "Wim360InventoryForm.vb",
              "Wim360SnapshotDiff.vb", "Wim360CompareForm.vb", "DriverStudioEngine.vb",
              "DriverStudioInventory.vb", "DriverStudioPanel.vb",
