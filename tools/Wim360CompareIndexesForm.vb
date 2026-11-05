@@ -56,25 +56,53 @@ Public NotInheritable Class Wim360CompareIndexesForm
             ' Cosmetic only.
         End Try
 
+        ' A single scrollable viewport protects every action/heading at high
+        ' DPI and on small screens; the grid retains its own scrollbars.
+        Dim uiScale As Single = Math.Max(1.0F, Me.Font.Height / 17.0F)
+        Dim viewport As New Panel With {
+            .Name = "Wim360CompareIndexesViewport",
+            .Dock = DockStyle.Fill, .AutoScroll = True,
+            .BackColor = Color.White
+        }
+        Controls.Add(viewport)
         Dim root As New TableLayoutPanel With {
-            .Name = "Wim360CompareIndexesLayout", .Dock = DockStyle.Fill,
+            .Name = "Wim360CompareIndexesLayout",
+            .Dock = DockStyle.None, .Location = Point.Empty,
             .ColumnCount = 1, .RowCount = 6,
             .Padding = New Padding(15, 10, 15, 12), .BackColor = Color.White
         }
         root.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        For Each h In {72, 142, 56}
-            root.RowStyles.Add(New RowStyle(SizeType.Absolute, h))
+        For Each h In {76, 156, 62}
+            root.RowStyles.Add(New RowStyle(SizeType.Absolute,
+                CInt(Math.Ceiling(h * uiScale))))
         Next
         root.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        root.RowStyles.Add(New RowStyle(SizeType.Absolute, 65))
-        root.RowStyles.Add(New RowStyle(SizeType.Absolute, 55))
-        Controls.Add(root)
+        root.RowStyles.Add(New RowStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(80 * uiScale))))
+        root.RowStyles.Add(New RowStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(68 * uiScale))))
+        viewport.Controls.Add(root)
+        Dim adjustViewport As Action = Sub()
+            If root.IsDisposed OrElse viewport.IsDisposed Then Return
+            Dim requiredWidth = CInt(Math.Ceiling(990 * uiScale))
+            Dim requiredHeight = CInt(Math.Ceiling(76 + 156 + 62 + 80 + 68 + 235) *
+                                     uiScale) + root.Padding.Vertical
+            Dim wantedWidth = Math.Max(requiredWidth, viewport.ClientSize.Width - 1)
+            Dim wantedHeight = Math.Max(requiredHeight, viewport.ClientSize.Height - 1)
+            If root.Width <> wantedWidth OrElse root.Height <> wantedHeight Then
+                root.Size = New Size(wantedWidth, wantedHeight)
+            End If
+        End Sub
+        AddHandler viewport.ClientSizeChanged, Sub(sender, e) adjustViewport()
+        AddHandler Me.Shown, Sub(sender, e) adjustViewport()
+        adjustViewport()
 
         Dim heading As New TableLayoutPanel With {
             .Dock = DockStyle.Fill, .RowCount = 2, .ColumnCount = 1
         }
         heading.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        heading.RowStyles.Add(New RowStyle(SizeType.Absolute, 36))
+        heading.RowStyles.Add(New RowStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(40 * uiScale))))
         heading.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         Dim title = MakeLabel("COMPARE IMAGE INDEXES  |  WHAT EXISTS / WHAT IS MISSING",
                               13, True)
@@ -103,7 +131,8 @@ Public NotInheritable Class Wim360CompareIndexesForm
             .Margin = New Padding(0, 0, 12, 0)
         }
         selectArea.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        selectArea.RowStyles.Add(New RowStyle(SizeType.Absolute, 27))
+        selectArea.RowStyles.Add(New RowStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(32 * uiScale))))
         selectArea.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         selectArea.Controls.Add(MakeLabel("INDEXES TO COMPARE (CHOOSE 2–8)", 9.5F, True), 0, 0)
         selectedIndexes = New CheckedListBox With {
@@ -124,8 +153,10 @@ Public NotInheritable Class Wim360CompareIndexesForm
             .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 3
         }
         options.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        options.RowStyles.Add(New RowStyle(SizeType.Absolute, 27))
-        options.RowStyles.Add(New RowStyle(SizeType.Absolute, 42))
+        options.RowStyles.Add(New RowStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(32 * uiScale))))
+        options.RowStyles.Add(New RowStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(52 * uiScale))))
         options.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         options.Controls.Add(MakeLabel("WHAT TO COMPARE", 9.5F, True), 0, 0)
         modeBox = New ComboBox With {
@@ -135,14 +166,15 @@ Public NotInheritable Class Wim360CompareIndexesForm
         }
         modeBox.Items.AddRange(New Object() {
             "Index metadata (no mounting)",
-            "Files + folders (already mounted)",
+            "Files + folders (no mounting)",
+            "Files + sizes (already mounted)",
             "Drivers / packages / features (audited)"
         })
         modeBox.SelectedIndex = 0
         options.Controls.Add(modeBox, 0, 1)
         Dim explanation = MakeLabel(
-            "Metadata works immediately. For files/folders, mount each index separately. " &
-            "For components, first scan each mounted index.", 9, False)
+            "File paths: compare without mounting. File sizes and SHA-256: " &
+            "mount each index separately. Components: scan each mounted index.", 9, False)
         explanation.ForeColor = ModernTheme.Muted
         explanation.AutoEllipsis = False
         options.Controls.Add(explanation, 0, 2)
@@ -153,10 +185,13 @@ Public NotInheritable Class Wim360CompareIndexesForm
             .Margin = New Padding(0, 3, 0, 5)
         }
         filters.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        filters.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 150))
-        filters.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 245))
+        filters.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(155 * uiScale))))
+        filters.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(252 * uiScale))))
         filters.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        filters.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 100))
+        filters.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(112 * uiScale))))
         root.Controls.Add(filters, 0, 2)
         categoryBox = New ComboBox With {
             .Name = "cmb360IndexCompareType", .Dock = DockStyle.Fill,
@@ -219,7 +254,8 @@ Public NotInheritable Class Wim360CompareIndexesForm
             .Margin = New Padding(0, 4, 0, 4)
         }
         statusPanel.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        statusPanel.RowStyles.Add(New RowStyle(SizeType.Absolute, 27))
+        statusPanel.RowStyles.Add(New RowStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(31 * uiScale))))
         statusPanel.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         summaryLabel = MakeLabel("Select at least two indexes.", 9.4F, True)
         summaryLabel.Name = "lbl360IndexCompareSummary"
@@ -237,10 +273,10 @@ Public NotInheritable Class Wim360CompareIndexesForm
         }
         actions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 205))
-        actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 165))
-        actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 180))
-        actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 132))
+        For Each width In {245, 175, 205, 140}
+            actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
+                CInt(Math.Ceiling(width * uiScale))))
+        Next
         root.Controls.Add(actions, 0, 5)
         compareButton = New Button With {
             .Name = "btn360RunIndexCompare", .Text = "Compare selected indexes",
@@ -349,17 +385,27 @@ Public NotInheritable Class Wim360CompareIndexesForm
         selectedIndexes.Enabled = False
         modeBox.Enabled = False
         summaryLabel.Text = "Comparing indexes " & String.Join(", ", indexes) & "..."
-        hintLabel.Text = "Reading only. This may take longer for mounted Windows file trees."
+        hintLabel.Text = If(mode = 1,
+            "DISM /List-Image reads paths directly from the WIM. No mounting; no file sizes.",
+            "Read-only. Mounted file trees can take longer on large images.")
         Dim tokenSource As New CancellationTokenSource()
         job = tokenSource
+        Dim progress As IProgress(Of String) = New Progress(Of String)(Sub(message)
+            If Not Me.IsDisposed AndAlso Not tokenSource.IsCancellationRequested Then
+                summaryLabel.Text = message
+            End If
+        End Sub)
         Try
             Dim result = Await Task.Run(Function()
                 Select Case mode
                     Case 0
                         Return Wim360IndexComparer.Metadata(source, indexes)
                     Case 1
-                        Return Wim360IndexComparer.MountedFiles(source, indexes, tokenSource.Token)
+                        Return Wim360OfflineList.Compare(source, indexes,
+                                                         tokenSource.Token, progress)
                     Case 2
+                        Return Wim360IndexComparer.MountedFiles(source, indexes, tokenSource.Token)
+                    Case 3
                         Return Wim360IndexComparer.AuditedInventory(source, indexes)
                     Case Else
                         Throw New InvalidOperationException("Unknown comparison mode.")
