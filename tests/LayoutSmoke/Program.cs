@@ -618,32 +618,63 @@ internal static class LayoutSmoke
                     !payload.Contains("GH_TOKEN"),
                     "UniversalDiagnostics payload must be schema v1 and redact secrets/logs");
         }
-        var previous = Environment.GetEnvironmentVariable("UNIVERSAL_DIAGNOSTICS_EXE");
-        var oldStub = Environment.GetEnvironmentVariable("DISMGUI_TEST_UNIVERSAL_COLLECTOR");
-        var oldToken = Environment.GetEnvironmentVariable("GH_TOKEN");
+        var previous = Environment.GetEnvironmentVariable("UDX_STATE_DIR");
+        var temp = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+            "udx-embedded-" + Guid.NewGuid().ToString("N"));
         try
         {
-            var appHost = System.IO.Path.Combine(AppContext.BaseDirectory, "LayoutSmoke.exe");
-            Require(System.IO.File.Exists(appHost),
-                "Windows layout smoke EXE is required for local collector protocol testing");
-            Environment.SetEnvironmentVariable("UNIVERSAL_DIAGNOSTICS_EXE", appHost);
-            Environment.SetEnvironmentVariable("DISMGUI_TEST_UNIVERSAL_COLLECTOR", "1");
-            Environment.SetEnvironmentVariable("GH_TOKEN", "MUST_NOT_REACH_COLLECTOR");
-            var result = UniversalDiagnosticsBridge.CaptureAsync(payload).
-                GetAwaiter().GetResult();
-            Require(result.Success &&
-                    Guid.TryParse(result.ReportId, out _) &&
-                    result.Message.Contains("local queue") &&
+            Environment.SetEnvironmentVariable("UDX_STATE_DIR", temp);
+            var result = UniversalDiagnosticsBridge.CaptureAsync(payload)
+                .GetAwaiter().GetResult();
+            Require(result.Success && Guid.TryParse(result.ReportId, out _) &&
+                    result.Message.Contains("local diagnostics queue") &&
                     result.Message.Contains("Nothing was sent"),
-                "UniversalDiagnostics local capture handshake failed");
+                "Embedded UniversalDiagnostics local capture failed");
+
+            var projectFolder = UniversalDiagnosticsEmbedded.QueueDirectory(
+                "sgennadi/DISM-GUI");
+            var path = System.IO.Path.Combine(projectFolder,
+                result.ReportId + ".json");
+            Require(System.IO.File.Exists(path),
+                "Embedded diagnostic event was not stored in the expected queue");
+            var raw = System.IO.File.ReadAllText(path);
+            using (var record = System.Text.Json.JsonDocument.Parse(raw))
+            {
+                var root = record.RootElement;
+                var ev = root.GetProperty("event");
+                Require(ev.GetProperty("schema").GetString() == "universal-diagnostics/v1" &&
+                        ev.GetProperty("id").GetString() == result.ReportId &&
+                        ev.GetProperty("project").GetString() == "sgennadi/DISM-GUI" &&
+                        ev.GetProperty("version").GetString() == "4.3.10" &&
+                        ev.GetProperty("fingerprint").GetString()!.Length == 64 &&
+                        root.GetProperty("delivery").GetProperty("status").GetString() == "pending" &&
+                        root.GetProperty("delivery").GetProperty("url").GetString() == "" &&
+                        !ev.TryGetProperty("excerpt", out _),
+                    "Embedded queue record does not match universal-diagnostics/v1");
+            }
+            Require(!raw.Contains("PRIVATE_TEST_SECRET") &&
+                    !raw.Contains("tester") &&
+                    !raw.Contains("image.wim") &&
+                    !raw.Contains("GH_TOKEN"),
+                "Embedded queue leaked a private identifier");
+            var extra = """{"project":"sgennadi/DISM-GUI","component":"Diagnostics","summary":"Password: SUPER_SECRET_ABC\nC:\\Users\\tester\\private.txt"}""";
+            var secondary = UniversalDiagnosticsEmbedded.Capture(extra);
+            var secondaryRaw = System.IO.File.ReadAllText(secondary.Path);
+            Require(!secondaryRaw.Contains("SUPER_SECRET_ABC") &&
+                    !secondaryRaw.Contains("tester") &&
+                    !secondaryRaw.Contains("private.txt"),
+                "Canonical embedded core must redact untrusted summaries");
+            Require(System.IO.Directory.GetFiles(projectFolder, "*.json").Length == 2,
+                "Exactly two embedded test reports should be stored, without helper EXE");
         }
         finally
         {
-            Environment.SetEnvironmentVariable("UNIVERSAL_DIAGNOSTICS_EXE", previous);
-            Environment.SetEnvironmentVariable("DISMGUI_TEST_UNIVERSAL_COLLECTOR", oldStub);
-            Environment.SetEnvironmentVariable("GH_TOKEN", oldToken);
+            Environment.SetEnvironmentVariable("UDX_STATE_DIR", previous);
+            try { System.IO.Directory.Delete(temp, recursive: true); }
+            catch { /* Test files are disposable. */ }
         }
-        Console.WriteLine("PASS UniversalDiagnostics capture-json subprocess, private metadata and explicit local queue.");
+        Console.WriteLine("PASS embedded UniversalDiagnostics v1 queue, schema and redaction. No helper EXE.");
+
     }
 
     private static void VerifyErrorDiagnostics()
@@ -1380,28 +1411,8 @@ internal static class LayoutSmoke
     }
 
     [STAThread]
-    private static int Main(string[] args)
+    private static int Main()
     {
-        if (args.Length == 1 && args[0] == "capture-json" &&
-            Environment.GetEnvironmentVariable("DISMGUI_TEST_UNIVERSAL_COLLECTOR") == "1")
-        {
-            try
-            {
-                using var request = System.Text.Json.JsonDocument.Parse(
-                    Console.In.ReadToEnd());
-                var root = request.RootElement;
-                if (root.GetProperty("project").GetString() != "sgennadi/DISM-GUI" ||
-                    root.TryGetProperty("excerpt", out _) ||
-                    !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("GH_TOKEN")))
-                    return 6;
-                Console.WriteLine("{\"id\":\"212a7fd0-b0d6-486b-8f32-9443ce65fa00\"}");
-                return 0;
-            }
-            catch
-            {
-                return 7;
-            }
-        }
         try
         {
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
