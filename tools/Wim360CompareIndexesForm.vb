@@ -273,9 +273,9 @@ Public NotInheritable Class Wim360CompareIndexesForm
         }
         actions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        For Each width In {245, 175, 205, 140}
+        For Each columnWidth As Integer In {245, 175, 205, 140}
             actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
-                CInt(Math.Ceiling(width * uiScale))))
+                CInt(Math.Ceiling(columnWidth * uiScale))))
         Next
         root.Controls.Add(actions, 0, 5)
         compareButton = New Button With {
