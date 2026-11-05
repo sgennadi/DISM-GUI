@@ -207,7 +207,7 @@ Public NotInheritable Class ErrorReportForm
 
         queueButton = New Button With {
             .Name = "btnSupportUniversalQueue",
-            .Text = "Save to shared queue",
+            .Text = "Save locally (built-in)",
             .Dock = DockStyle.Fill, .Enabled = False,
             .Margin = New Padding(3, 3, 6, 1)
         }
@@ -291,11 +291,11 @@ Public NotInheritable Class ErrorReportForm
             area, version, titleBox.Text, descriptionBox.Text)
         If MessageBox.Show(Me,
             "Save only the redacted summary, error category and app version " &
-            "to the shared LOCAL diagnostics queue?" & Environment.NewLine &
+            "to the built-in LOCAL diagnostics queue?" & Environment.NewLine &
             Environment.NewLine &
             payload & Environment.NewLine & Environment.NewLine &
             "No raw DISM log, computer identity or GitHub token is included. " &
-            "Nothing is uploaded automatically.",
+            "No external program is needed. Nothing is uploaded automatically.",
             "Save local diagnostic", MessageBoxButtons.YesNo,
             MessageBoxIcon.Question) <> DialogResult.Yes Then Return
 
