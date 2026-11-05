@@ -328,6 +328,16 @@ internal static class LayoutSmoke
         Application.DoEvents();
         Require(matrix.RowCount == 3,
                 "Missing filter must include unique and partially absent paths");
+        state.SelectedItem = "Missing from Index 3";
+        Application.DoEvents();
+        Require(matrix.RowCount == 2,
+                "Missing-from-index filter must show paths absent in index 3");
+        state.SelectedItem = "Present in Index 3";
+        Application.DoEvents();
+        Require(matrix.RowCount == 3,
+                "Present-in-index filter must show only paths found in index 3");
+        state.SelectedItem = "All results";
+        Application.DoEvents();
         Snapshot(dialog, "DISM-GUI-WIM360-Compare-Three-Indexes");
         dialog.Close();
         Console.WriteLine("PASS WIM 360 three-index metadata, files, inventory filters and CSV");
