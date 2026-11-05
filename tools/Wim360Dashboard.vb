@@ -77,7 +77,7 @@ Public NotInheritable Class Wim360Dashboard
             Sum(Function(row) CInt(row.Height)) + dashboardLayout.Padding.Vertical + 8
         canvas.Controls.Add(dashboardLayout)
         AddHandler canvas.ClientSizeChanged, Sub(sender, e)
-            Dim newWidth = Math.Max(710, canvas.ClientSize.Width - 1)
+            Dim newWidth = Math.Max(CInt(Math.Ceiling(760 * factor)), canvas.ClientSize.Width - 1)
             If dashboardLayout.Width <> newWidth Then dashboardLayout.Width = newWidth
         End Sub
 
@@ -100,8 +100,8 @@ Public NotInheritable Class Wim360Dashboard
         }
         pathRow.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         pathRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        pathRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 165))
-        pathRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 130))
+        pathRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(165 * factor))))
+        pathRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(130 * factor))))
         dashboardLayout.Controls.Add(pathRow, 0, 1)
 
         fileBox = New TextBox With {
