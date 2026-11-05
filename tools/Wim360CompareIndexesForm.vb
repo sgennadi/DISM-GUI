@@ -135,13 +135,13 @@ Public NotInheritable Class Wim360CompareIndexesForm
         }
         modeBox.Items.AddRange(New Object() {
             "Index metadata (no mounting)",
-            "Files / paths (already mounted)",
+            "Files + folders (already mounted)",
             "Drivers / packages / features (audited)"
         })
         modeBox.SelectedIndex = 0
         options.Controls.Add(modeBox, 0, 1)
         Dim explanation = MakeLabel(
-            "Metadata works immediately. For Files, mount each index separately. " &
+            "Metadata works immediately. For files/folders, mount each index separately. " &
             "For components, first scan each mounted index.", 9, False)
         explanation.ForeColor = ModernTheme.Muted
         explanation.AutoEllipsis = False
@@ -482,7 +482,8 @@ Public NotInheritable Class Wim360CompareIndexesForm
         stateBox.Items.Clear()
         stateBox.Items.AddRange(New Object() {
             "All results", "Missing / only in some",
-            "Different", "Present in all", "Ambiguous duplicates"
+            "Different", "Exists in all", "Present in all",
+            "Ambiguous duplicates"
         })
         For Each index In result.Indexes
             stateBox.Items.Add("Only in Index " & index.ToString())
@@ -512,7 +513,8 @@ Public NotInheritable Class Wim360CompareIndexesForm
         If comparison Is Nothing Then Return
         visibleRows = Wim360IndexComparer.Filter(comparison.Rows,
             Convert.ToString(categoryBox.SelectedItem),
-            Convert.ToString(stateBox.SelectedItem), searchBox.Text)
+            Convert.ToString(stateBox.SelectedItem), searchBox.Text,
+            comparison.Indexes.Count)
         grid.RowCount = visibleRows.Count
         UpdateHashButton()
         Dim missing = visibleRows.Where(Function(x)
