@@ -334,7 +334,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
         Else
             actions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
             actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-            For Each columnWidth As Integer In {245, 175, 205, 140}
+            For Each columnWidth As Integer In {220, 165, 180, 114}
                 actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
                     CInt(Math.Ceiling(columnWidth * uiScale))))
             Next
