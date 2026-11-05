@@ -243,6 +243,23 @@ internal static class LayoutSmoke
         report.Images[0].Architecture = "x64";
         report.Images[1].Architecture = "x64";
         report.Images[2].Architecture = "x64";
+        // The offline DISM parser preserves folders (trailing slash) and file
+        // paths and must never accept a truncated/failed command as complete.
+        var rawList = "\\r\\nDeployment Image Servicing and Management tool\\r\\n" +
+            "\\\\r\\n\\Windows\\\\r\\n\\Windows\\System32\\\\r\\n" +
+            "\\Windows\\System32\\hello.txt\\r\\n" +
+            "The operation completed successfully.\\r\\n";
+        var parsedPaths = Wim360OfflineList.ParseEnglishListing(rawList, 1);
+        Require(parsedPaths.Count == 3 &&
+                parsedPaths.Count(x => x.Kind == "Folders") == 2 &&
+                parsedPaths.Single(x => x.Kind == "Files").Key ==
+                    @"Windows\System32\hello.txt",
+                "DISM offline /List-Image parser lost file/folder path information");
+        bool partialRejected = false;
+        try { Wim360OfflineList.ParseEnglishListing(
+            "\\Windows\\missing.txt\\r\\nError: 2", 1); }
+        catch (System.IO.InvalidDataException) { partialRejected = true; }
+        Require(partialRejected, "Offline WIM compare must refuse incomplete listings");
         var metadata = Wim360IndexComparer.Metadata(report, new[] { 1, 2, 3 });
         Require(metadata.Indexes.Count == 3 && metadata.Rows.Count == 10,
                 "Index compare must expose metadata for all three selected indexes");
