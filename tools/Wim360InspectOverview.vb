@@ -165,7 +165,7 @@ Public NotInheritable Class Wim360InspectOverview
                 OrderByDescending(Function(p) p.Score).
                 ThenBy(Function(p) p.FirstIndex).
                 ThenBy(Function(p) p.SecondIndex).
-                Take(Math.Min(3, ordered.Count - 1)).ToList()
+                Take(Math.Min(3, candidates.Count)).ToList()
             For Each pair In overview.SuggestedPairs
                 lines.Add("Compare " & pair.FirstIndex.ToString() & " vs " &
                           pair.SecondIndex.ToString() & ": " & pair.Reason & ".")
