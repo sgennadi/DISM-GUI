@@ -240,12 +240,10 @@ Public NotInheritable Class Wim360OfflineList
         End If
         ' Confirm that all selected indexes still exist before listing a potentially
         ' very large image; never compare stale or incomplete per-index data.
-        ' Refuse concurrent writes while comparing. A cached metadata timestamp
-        ' alone is not enough to guarantee that a large index remained stable.
-        ' This handle grants read access to DISM while rejecting write handles.
-        Using imageLock As New FileStream(imagePath, FileMode.Open,
-                                          FileAccess.Read, FileShare.Read)
-            Dim current = Wim360Reader.Inspect(imagePath)
+        ' Get-WindowsImageContent requires its own WIMAPI access handle.
+        ' A FileShare.Read-only lock is not compatible with that reader.
+        ' Check source identity and timestamps before/after each catalog scan.
+        Dim current = Wim360Reader.Inspect(imagePath)
             If current.ImageCount <> report.ImageCount OrElse
                current.Images.Any(Function(x) Not report.Images.Any(
                    Function(old) old.Index = x.Index AndAlso
@@ -253,24 +251,27 @@ Public NotInheritable Class Wim360OfflineList
                 Throw New InvalidOperationException(
                     "The WIM index catalog changed. Inspect again.")
             End If
-            Dim result = Wim360IndexComparer.CompareRecords(imagePath,
+            original.Refresh()
+        Dim lastWriteBeforeListing = original.LastWriteTimeUtc
+        Dim sizeBeforeListing = original.Length
+        Dim result = Wim360IndexComparer.CompareRecords(imagePath,
                         "Offline file/folder presence (no mount)",
                         chosen.Select(Function(x) x.Index),
                         EnumerateIndexBatches(imagePath, chosen, token, progress))
             original.Refresh()
-            If original.Length <> report.FileSizeBytes OrElse
-               original.LastWriteTimeUtc <> report.ModifiedUtc Then
+            If original.Length <> sizeBeforeListing OrElse
+               original.LastWriteTimeUtc <> lastWriteBeforeListing Then
                 Throw New IOException(
-                    "Source WIM changed during enumeration. Expected " &
-                    report.FileSizeBytes.ToString() & " bytes, " &
-                    report.ModifiedUtc.ToString("o") & "; actual " &
-                    original.Length.ToString() & " bytes, " &
-                    original.LastWriteTimeUtc.ToString("o") & ". Results discarded.")
+                    "Source WIM metadata changed while listing. Inspected " &
+                    report.ModifiedUtc.ToString("o") & "; before listing " &
+                    lastWriteBeforeListing.ToString("o") & ", " &
+                    sizeBeforeListing.ToString() & " bytes; after listing " &
+                    original.LastWriteTimeUtc.ToString("o") & ", " &
+                    original.Length.ToString() & " bytes. Results discarded.")
             End If
             result.Notes = "Read from the source WIM without mounting. " &
                 "Presence/absence only; no file sizes or SHA-256 hashes. " &
                 "Files with identical names may have different contents."
             Return result
-        End Using
     End Function
 End Class
