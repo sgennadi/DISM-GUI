@@ -101,6 +101,14 @@ internal static class WimMountIntegration
                 throw new InvalidOperationException(
                     "WIMGAPI mounted path does not match the selected image/index.");
 
+            var verifiedRoot = DriverStudioInventory.ValidateTarget(path, 1, mount);
+            if (!string.Equals(
+                Path.GetFullPath(verifiedRoot).TrimEnd(Path.DirectorySeparatorChar),
+                Path.GetFullPath(mount).TrimEnd(Path.DirectorySeparatorChar),
+                StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    "Driver Studio target validation returned an unexpected mount path.");
+
             var actualContents = Path.Combine(mount, "smoke.txt");
             if (!File.Exists(actualContents) ||
                 !File.ReadAllText(actualContents).Contains("read-only catalog"))
