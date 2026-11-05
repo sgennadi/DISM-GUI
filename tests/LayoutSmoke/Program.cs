@@ -258,6 +258,41 @@ internal static class LayoutSmoke
         Console.WriteLine("PASS WIM 360 metadata, architecture, report and XML safety tests");
     }
 
+    private static void VerifyMountedAudit()
+    {
+        const string json = "[{\"PackageName\":\"Package_A\",\"PackageState\":\"Installed\",\"ReleaseType\":\"Update\"}," +
+                            "{\"PackageName\":\"Package_B\",\"PackageState\":\"Install Pending\",\"ReleaseType\":\"Feature Pack\"}," +
+                            "{\"PackageName\":\"Package_C\",\"PackageState\":\"Staged\",\"ReleaseType\":\"Update\"}]";
+        var packages = Wim360Servicing.ParsePackagesJson(json);
+        Require(packages.Count == 3 && packages[1].State == "Install Pending",
+                "WIM 360 mounted package inventory lost package states");
+        Require(Wim360Servicing.ParsePackagesJson("[]").Count == 0 &&
+                Wim360Servicing.ParsePackagesJson("{\"PackageName\":\"One\",\"PackageState\":\"Installed\"}").Count == 1,
+                "Mounted package parser must accept empty arrays and PowerShell singleton JSON");
+        bool invalidRejected = false;
+        try { Wim360Servicing.ParsePackagesJson("[null]"); }
+        catch (System.IO.InvalidDataException) { invalidRejected = true; }
+        Require(invalidRejected, "Malformed package JSON must not give a misleading clean audit");
+        var drivers = new[] {
+            new DriverStudioEngine.DriverPackage { InfName = "a.inf", ClassName = "Net", Provider = "Microsoft", IsInbox = true },
+            new DriverStudioEngine.DriverPackage { InfName = "b.inf", ClassName = "Net", Provider = "Vendor", IsInbox = false }
+        };
+        var audit = Wim360Servicing.Summarize(@"C:\images\install.wim", 2,
+            @"C:\MountAuditFixture", drivers, packages);
+        Require(audit.DriverCount == 2 && audit.InboxDriverCount == 1 &&
+                audit.ThirdPartyDriverCount == 1 && audit.PackageCount == 3 &&
+                audit.InstalledPackageCount == 1 && audit.PendingPackageCount == 1 &&
+                audit.StagedPackageCount == 1 && audit.DriverClasses.Contains("Net (2)"),
+                "Mounted audit package/driver counts or class breakdown are incorrect");
+        var report = Wim360Reader.ParseMetadataXml(WIM_METADATA_FIXTURE,
+            @"C:\images\install.wim", 1024);
+        report.Images[1].ServicingAudit = audit;
+        Require(Wim360Reader.FormatReport(report).Contains("Windows packages: 3") &&
+                Wim360Reader.FormatReport(report).Contains("Driver packages: 2"),
+                "WIM 360 copy report must include mounted audit results");
+        Console.WriteLine("PASS mounted WIM 360 driver/package audit and read-only report");
+    }
+
     private static void VerifyNativeWimReader()
     {
         var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
@@ -492,6 +527,7 @@ internal static class LayoutSmoke
             tabs!.SelectedIndex = 0;
             Application.DoEvents();
             VerifyWimMetadata();
+            VerifyMountedAudit();
             VerifyNativeWimReader();
             var driverFixture = VerifyDriverStudioEngine();
             Require(tabs.TabPages.Count == 11 &&
@@ -513,6 +549,9 @@ internal static class LayoutSmoke
             var indexGrid = Find(dashboard, "grid360Indexes") as DataGridView;
             Require(indexGrid!.Rows.Count == 2,
                     "WIM 360 should display both indexes from the fixture");
+            var auditWimButton = Find(dashboard, "btn360AuditMounted") as Button;
+            Require(auditWimButton is not null && !auditWimButton.Enabled,
+                    "Mounted audit must be disabled for an unmounted WIM index");
             var selectedDetails = Find(dashboard, "txt360Details") as TextBox;
             Require(selectedDetails!.Text.Contains("WindowsPE") &&
                     selectedDetails.Text.Contains("10.0.26100"),
@@ -537,6 +576,14 @@ internal static class LayoutSmoke
                     StringComparison.OrdinalIgnoreCase)}");
             Require(selectedWimButton is not null && selectedWimButton.Enabled,
                     "WIM 360 Use in Mount action should be available after metadata load");
+            Require(currentReport is not null, "WIM 360 report fixture missing");
+            currentReport!.Images[0].MountStatus = "Mounted (read-only)";
+            currentReport.Images[0].MountFolder = @"C:\MountAuditFixture";
+            indexGrid.Rows[0].Selected = true;
+            dashboard.ActivateFromMount();
+            Application.DoEvents();
+            Require(auditWimButton.Enabled,
+                    "A read-only mounted index must enable Scan mounted index");
             indexGrid.Rows[1].Selected = true;
             Application.DoEvents();
             selectedWimButton.PerformClick();
