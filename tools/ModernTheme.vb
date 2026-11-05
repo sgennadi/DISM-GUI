@@ -862,6 +862,7 @@ Public NotInheritable Class ModernTheme
         exitButton.Margin = New Padding(4, 2, 0, 2)
         StyleButton(exitButton, "neutral")
         logHeader.Controls.Add(exitButton, 4, 0)
+        FitTableButtonCells(logHeader)
 
         output.Dock = DockStyle.Fill
         output.BackColor = Color.White
