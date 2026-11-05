@@ -27,7 +27,7 @@ class DismImageCommandsTest(unittest.TestCase):
         apply = ('            strDISMArguments = "/Apply-Image '
                  '/ImageFile:""" & strSource & """" & " /index:""" '
                  '& strAppendIndex & " /ApplyDir:" & strDest & """" & ""')
-        verified = apply.replace(' & ""', ' & " /Verify"')
+        verified = apply.rsplit(' & ""', 1)[0] + ' & " /Verify"'
         source = "\n".join([read_only, mount, apply, verified]) + "\n"
         output = patch_function()(source)
         self.assertEqual(output.count('" /Index:" & strIndex & " /MountDir:"'), 2)
