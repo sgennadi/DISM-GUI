@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Security;
 using System.Threading;
 using System.Threading.Tasks;
+using DISM_GUI;
 
 internal static class DirectGitHubContractTests
 {
