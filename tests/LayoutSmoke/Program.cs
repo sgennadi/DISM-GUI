@@ -1778,6 +1778,25 @@ internal static class LayoutSmoke
                 Application.DoEvents();
                 Require(updateForm.Text == $"DISM GUI {appVersion} - Updates",
                         "Update Center title must show actual version without v prefix");
+                var installedCaption = Find(updateForm, "lblUpdateInstalledVersion") as Label;
+                var latestCaption = Find(updateForm, "lblUpdateLatestVersion") as Label;
+                var upToDateCaption = typeof(UpdateManager).GetMethod(
+                    "UpToDateCaption", System.Reflection.BindingFlags.Static |
+                                       System.Reflection.BindingFlags.NonPublic);
+                var formattedReleaseVersion = typeof(UpdateManager).GetMethod(
+                    "DisplayVersion", System.Reflection.BindingFlags.Static |
+                                      System.Reflection.BindingFlags.NonPublic);
+                Require(installedCaption is not null && latestCaption is not null &&
+                        upToDateCaption is not null && formattedReleaseVersion is not null,
+                    "Update Center numeric version labels/formatters are missing");
+                Require(installedCaption!.Text.StartsWith("Installed: " + appVersion + " (") &&
+                        !installedCaption.Text.Contains("Installed: v", StringComparison.OrdinalIgnoreCase) &&
+                        !latestCaption!.Text.Contains("Latest stable: v", StringComparison.OrdinalIgnoreCase),
+                    "Installed/latest UI captions must never display v-prefixed versions");
+                var rawTagVersion = new Version(4, 3, 10);
+                Require((string)formattedReleaseVersion!.Invoke(null, new object[] { rawTagVersion })! == "4.3.10" &&
+                        (string)upToDateCaption!.Invoke(null, new object[] { rawTagVersion })! == "Up to date - 4.3.10",
+                    "Up to date must display numeric version without v prefix");
                 var notesBox = Find(updateForm, "txtReleaseChangelog") as TextBox;
                 var notesHeader = Find(updateForm, "lblChangelogTitle") as Label;
                 var notesLink = Find(updateForm, "lnkFullChangelog") as LinkLabel;
@@ -1823,9 +1842,10 @@ internal static class LayoutSmoke
                 System.Reflection.BindingFlags.Static);
             Require(formatter is not null, "Release changelog formatter missing");
             var formatted = (string)formatter!.Invoke(null, new object[] {
-                "## Changes\n- Fixed controls\nSee [Release](https://github.com/example)"
+                "## Changes in v4.3.10\n- Fixed controls\nSee [Release](https://github.com/example)"
             })!;
-            Require(formatted.Contains("Changes") &&
+            Require(formatted.Contains("Changes in 4.3.10") &&
+                    !formatted.Contains("v4.3.10", StringComparison.OrdinalIgnoreCase) &&
                     formatted.Contains("• Fixed controls") &&
                     formatted.Contains("See Release") &&
                     !formatted.Contains("](https://"),
