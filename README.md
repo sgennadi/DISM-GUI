@@ -67,9 +67,10 @@ selected by default; select any 2–8 using the checkbox list.
 
 - **Index metadata** works immediately, without a mount: name, description,
   edition, build, languages, architecture, installation type, image size.
-- **Files / paths** requires each chosen index to already be mounted to a
+- **Files + folders** requires each chosen index to already be mounted to a
   **different directory** (prefer read-only mounts). Refresh **Inspect** after
-  mounting. File comparison lists paths and lengths only, with explicit
+  mounting. The comparison includes **files, empty directories and folders**,
+  with file paths/sizes and folder presence, using explicit
   `Only in Index N`, `Missing in some`, `Different`, and
   `Present in all` states. The tool neither mounts nor unmounts images.
   Reparse points are deliberately skipped, and unreadable/incomplete file
@@ -79,6 +80,9 @@ selected by default; select any 2–8 using the checkbox list.
   refuses to report possibly false missing items.
 
 Use the Type, Result, and Search filters to find missing or changed items.
+**Exists in all** includes items present in every selected index even if
+their versions or sizes differ; **Present in all** means reported values
+are identical across all selected indexes.
 The selected indexes are shown as adjacent columns; horizontal scrolling
 is available. **Export filtered CSV** saves only visible rows. To check
 actual bytes, select one file in Files mode and choose **Verify SHA-256**.
@@ -88,7 +92,7 @@ operation can take time for large files. All operations are read-only.
 For example, for `install.wim` with indexes 1, 2 and 3, first use
 **Index metadata** to compare editions and builds. To compare the real
 `Windows\System32` contents, mount all three to separate directories,
-re-inspect the WIM, then select **Files / paths**. Filter by
+re-inspect the WIM, then select **Files + folders**. Filter by
 `Missing / only in some`, `Only in Index 3`, or `Different`.
 
 For an index that is **already mounted**, select it and click **Scan mounted
