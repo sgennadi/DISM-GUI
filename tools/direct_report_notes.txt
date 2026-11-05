@@ -1,0 +1,1 @@
+Direct user-authenticated GitHub issue submission requires the user's consent and GitHub App permissions.
