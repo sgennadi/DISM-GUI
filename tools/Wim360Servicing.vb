@@ -21,6 +21,18 @@ Public NotInheritable Class Wim360Servicing
         Public Property ReleaseType As String = ""
     End Class
 
+    Public NotInheritable Class ComponentEntry
+        Public Property Kind As String = ""
+        Public Property Name As String = ""
+        Public Property State As String = ""
+    End Class
+
+    Public NotInheritable Class ComponentInventory
+        Public Property Items As New List(Of ComponentEntry)()
+        Public Property FeatureWarning As String = ""
+        Public Property CapabilityWarning As String = ""
+    End Class
+
     Public NotInheritable Class AuditResult
         Public Property ImageFile As String = ""
         Public Property Index As Integer
@@ -36,6 +48,15 @@ Public NotInheritable Class Wim360Servicing
         Public Property DriverClasses As String = ""
         Public Property DriverProviders As String = ""
         Public Property PendingPackages As String = ""
+        Public Property Drivers As New List(Of DriverStudioEngine.DriverPackage)()
+        Public Property Packages As New List(Of PackageEntry)()
+        Public Property Components As New List(Of ComponentEntry)()
+        Public Property FeatureCount As Integer
+        Public Property EnabledFeatureCount As Integer
+        Public Property CapabilityCount As Integer
+        Public Property InstalledCapabilityCount As Integer
+        Public Property FeatureWarning As String = ""
+        Public Property CapabilityWarning As String = ""
     End Class
 
     Private Shared Function StringField(parent As JsonElement, field As String) As String
@@ -86,13 +107,18 @@ Public NotInheritable Class Wim360Servicing
         Return result
     End Function
 
+    ' Optional component inputs retain compatibility with 4.3.3 call sites.
     Public Shared Function Summarize(wimFile As String, index As Integer,
         mountFolder As String, drivers As IEnumerable(Of DriverStudioEngine.DriverPackage),
-        packages As IEnumerable(Of PackageEntry)) As AuditResult
+        packages As IEnumerable(Of PackageEntry),
+        Optional components As IEnumerable(Of ComponentEntry) = Nothing,
+        Optional featureWarning As String = "",
+        Optional capabilityWarning As String = "") As AuditResult
         If drivers Is Nothing Then Throw New ArgumentNullException(NameOf(drivers))
         If packages Is Nothing Then Throw New ArgumentNullException(NameOf(packages))
         Dim drv = drivers.ToList()
         Dim pkgs = packages.ToList()
+        Dim comps = If(components, Enumerable.Empty(Of ComponentEntry)()).ToList()
         Dim classes = drv.Where(Function(d) Not String.IsNullOrWhiteSpace(d.ClassName)).
             GroupBy(Function(d) d.ClassName, StringComparer.OrdinalIgnoreCase).
             OrderByDescending(Function(g) g.Count()).
@@ -125,7 +151,22 @@ Public NotInheritable Class Wim360Servicing
             .DriverClasses = If(classes.Any(), String.Join(", ", classes), "Not listed"),
             .DriverProviders = If(providers.Any(), String.Join(", ", providers), "Not listed"),
             .PendingPackages = If(pending.Count = 0, "None",
-                String.Join(", ", pending.Take(4).Select(Function(p) p.Name)))
+                String.Join(", ", pending.Take(4).Select(Function(p) p.Name))),
+            .Drivers = drv,
+            .Packages = pkgs,
+            .Components = comps,
+            .FeatureCount = comps.Where(Function(c) c.Kind = "Features").Count(),
+            .EnabledFeatureCount = comps.Where(Function(c)
+                Return c.Kind = "Features" AndAlso
+                    String.Equals(c.State, "Enabled", StringComparison.OrdinalIgnoreCase)
+            End Function).Count(),
+            .CapabilityCount = comps.Where(Function(c) c.Kind = "Capabilities").Count(),
+            .InstalledCapabilityCount = comps.Where(Function(c)
+                Return c.Kind = "Capabilities" AndAlso
+                    String.Equals(c.State, "Installed", StringComparison.OrdinalIgnoreCase)
+            End Function).Count(),
+            .FeatureWarning = If(featureWarning, ""),
+            .CapabilityWarning = If(capabilityWarning, "")
         }
     End Function
 
@@ -143,8 +184,136 @@ Public NotInheritable Class Wim360Servicing
                 " (" & value.InstalledPackageCount.ToString() & " installed, " &
                 value.PendingPackageCount.ToString() & " pending, " &
                 value.StagedPackageCount.ToString() & " staged)",
-            "Pending packages (up to 4): " & value.PendingPackages
+            "Pending packages (up to 4): " & value.PendingPackages,
+            "Optional features: " & value.FeatureCount.ToString() &
+                " (" & value.EnabledFeatureCount.ToString() & " enabled)",
+            "Capabilities: " & value.CapabilityCount.ToString() &
+                " (" & value.InstalledCapabilityCount.ToString() & " installed)",
+            If(value.FeatureWarning.Length > 0,
+               "Optional features not available: " & value.FeatureWarning, ""),
+            If(value.CapabilityWarning.Length > 0,
+               "Capabilities not available: " & value.CapabilityWarning, "")
         })
+    End Function
+
+    ' Component results use a single JSON envelope; each read has its own
+    ' warning so WinPE images lacking one API still retain available data.
+    Public Shared Function ParseComponentsJson(json As String) As ComponentInventory
+        If String.IsNullOrWhiteSpace(json) OrElse json.Length > 16 * 1024 * 1024 Then
+            Throw New InvalidDataException("Windows component inventory is missing or larger than 16 MB.")
+        End If
+        Dim result As New ComponentInventory()
+        Using parsed = JsonDocument.Parse(json, New JsonDocumentOptions With {
+            .MaxDepth = 12,
+            .AllowTrailingCommas = False,
+            .CommentHandling = JsonCommentHandling.Disallow
+        })
+            Dim root = parsed.RootElement
+            If root.ValueKind <> JsonValueKind.Object Then
+                Throw New InvalidDataException("Expected Windows component inventory JSON object.")
+            End If
+            result.FeatureWarning = StringField(root, "FeatureWarning")
+            result.CapabilityWarning = StringField(root, "CapabilityWarning")
+            For Each kind As String In {"Features", "Capabilities"}
+                Dim children As JsonElement
+                If Not root.TryGetProperty(kind, children) OrElse
+                   children.ValueKind <> JsonValueKind.Array Then
+                    Throw New InvalidDataException("Missing Windows component array: " & kind)
+                End If
+                For Each entry As JsonElement In children.EnumerateArray()
+                    If entry.ValueKind <> JsonValueKind.Object Then
+                        Throw New InvalidDataException("Malformed Windows component item.")
+                    End If
+                    Dim name = StringField(entry, "Name")
+                    If String.IsNullOrWhiteSpace(name) Then
+                        Throw New InvalidDataException("Windows component has no name.")
+                    End If
+                    result.Items.Add(New ComponentEntry With {
+                        .Kind = kind,
+                        .Name = name,
+                        .State = StringField(entry, "State")
+                    })
+                    If result.Items.Count > 20000 Then
+                        Throw New InvalidDataException("Windows component inventory exceeds 20000 entries.")
+                    End If
+                Next
+            Next
+        End Using
+        Return result
+    End Function
+
+    Private Shared Async Function ReadComponentsAsync(mountFolder As String,
+        cancellation As CancellationToken) As Task(Of ComponentInventory)
+        Dim safeLiteral = "'" & mountFolder.Replace("'", "''") & "'"
+        Dim script = String.Join(vbLf, {
+            "$ErrorActionPreference = 'Stop'",
+            "$ProgressPreference = 'SilentlyContinue'",
+            "Import-Module Dism -ErrorAction Stop",
+            "$features = @()",
+            "$capabilities = @()",
+            "$fWarning = ''",
+            "$cWarning = ''",
+            "try {",
+            "  $features = @(Get-WindowsOptionalFeature -Path " & safeLiteral &
+               " -ErrorAction Stop | ForEach-Object {",
+            "    [PSCustomObject]@{ Name = [string]$_.FeatureName; State = [string]$_.State }",
+            "  })",
+            "} catch { $fWarning = [string]$_.Exception.Message }",
+            "try {",
+            "  $capabilities = @(Get-WindowsCapability -Path " & safeLiteral &
+               " -ErrorAction Stop | ForEach-Object {",
+            "    [PSCustomObject]@{ Name = [string]$_.Name; State = [string]$_.State }",
+            "  })",
+            "} catch { $cWarning = [string]$_.Exception.Message }",
+            "$result = [PSCustomObject]@{",
+            "  Features = @($features)",
+            "  Capabilities = @($capabilities)",
+            "  FeatureWarning = $fWarning",
+            "  CapabilityWarning = $cWarning",
+            "}",
+            "ConvertTo-Json -InputObject $result -Depth 4 -Compress"
+        })
+        Dim startInfo As New ProcessStartInfo With {
+            .FileName = PowerShellExe(), .UseShellExecute = False,
+            .CreateNoWindow = True, .RedirectStandardOutput = True,
+            .RedirectStandardError = True
+        }
+        For Each arg As String In {"-NoProfile", "-NonInteractive",
+                                   "-EncodedCommand",
+                                   Convert.ToBase64String(Encoding.Unicode.GetBytes(script))}
+            startInfo.ArgumentList.Add(arg)
+        Next
+        Using command As New Process With {.StartInfo = startInfo}
+            If Not command.Start() Then
+                Throw New Win32Exception("Unable to run mounted Windows component inventory.")
+            End If
+            Using budget = CancellationTokenSource.CreateLinkedTokenSource(cancellation)
+                budget.CancelAfter(TimeSpan.FromMinutes(5))
+                Try
+                    Dim stdoutTask = command.StandardOutput.ReadToEndAsync(budget.Token)
+                    Dim stderrTask = command.StandardError.ReadToEndAsync(budget.Token)
+                    Await command.WaitForExitAsync(budget.Token)
+                    Dim stdout = Await stdoutTask
+                    Dim stderr = Await stderrTask
+                    If command.ExitCode <> 0 Then
+                        Throw New InvalidOperationException("Get-WindowsOptionalFeature / " &
+                            "Get-WindowsCapability failed (exit " & command.ExitCode.ToString() &
+                            "): " & stderr.Substring(0, Math.Min(stderr.Length, 1600)))
+                    End If
+                    Return ParseComponentsJson(stdout)
+                Catch ex As OperationCanceledException
+                    If cancellation.IsCancellationRequested Then Throw
+                    Throw New TimeoutException("Component inventory timed out after 5 minutes. No image changes.")
+                Finally
+                    If Not command.HasExited Then
+                        Try
+                            command.Kill(True)
+                        Catch
+                        End Try
+                    End If
+                End Try
+            End Using
+        End Using
     End Function
 
     Private Shared Function PowerShellExe() As String
@@ -232,9 +401,13 @@ Public NotInheritable Class Wim360Servicing
         cancellation.ThrowIfCancellationRequested()
         Dim packages = Await ReadPackagesAsync(root, cancellation)
         cancellation.ThrowIfCancellationRequested()
+        Dim components = Await ReadComponentsAsync(root, cancellation)
+        cancellation.ThrowIfCancellationRequested()
         Await Task.Run(Function()
             Return DriverStudioInventory.ValidateTarget(wimFile, index, root)
         End Function, cancellation)
-        Return Summarize(wimFile, index, root, drivers, packages)
+        Return Summarize(wimFile, index, root, drivers, packages,
+                         components.Items, components.FeatureWarning,
+                         components.CapabilityWarning)
     End Function
 End Class

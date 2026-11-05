@@ -58,10 +58,25 @@ index**. WIM 360 validates the exact image file, index and mount directory,
 then reads the driver inventory (including inbox drivers) and Windows package
 inventory with the DISM PowerShell module. The details and copied report
 show total/third-party/inbox drivers, common driver classes and providers,
-installed/staged/pending packages and a scan timestamp. This is **read-only**,
+installed/staged/pending packages, optional Windows features, Windows
+capabilities and a scan timestamp. This is **read-only**,
 works with read-only mounts, and can take several minutes. It never mounts,
 installs, commits, discards or changes the image. Re-run **Inspect** after
 external mount changes and re-scan after installing drivers or packages.
+
+After scanning, open **Inventory details** for the full per-item catalog:
+driver original/published INF, class, version and vendor; Windows package
+state and release type; optional Windows features; and Windows capabilities.
+The separate resizable window supports combined Type, State and text filters,
+column sorting, and long-value tooltips. Export filtered results to CSV
+(UTF-8 with BOM and safe spreadsheet escaping) or JSON (schema version, source
+image/index, timestamp and partial-result warnings). Its size and location
+are saved separately from the main DISM GUI window.
+
+The optional features and Windows capabilities queries are independent.
+Unsupported servicing APIs on specialized WinPE images produce a warning
+instead of falsely reporting a complete inventory. Nothing in this viewer
+changes the image. Run Scan mounted index again after servicing changes.
 
 WIM 360 still cannot inspect split `.swm` sets. For actual image servicing,
 use the existing DISM sections only after verifying image backups.
