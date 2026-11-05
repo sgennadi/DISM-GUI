@@ -169,6 +169,15 @@ Public NotInheritable Class ModernTheme
             Dim headerFont = If(grid.ColumnHeadersDefaultCellStyle.Font, grid.Font)
             grid.ColumnHeadersHeight = Math.Max(grid.ColumnHeadersHeight,
                                                 headerFont.Height + 18)
+            ' Keep grid headers legible. The DataGridView itself scrolls
+            ' horizontally; narrowing columns is not a valid DPI fix.
+            For Each column As DataGridViewColumn In grid.Columns
+                Dim headerWidth = TextRenderer.MeasureText(
+                    If(column.HeaderText, ""), headerFont).Width + 26
+                Dim expected = Math.Max(headerWidth,
+                    CInt(Math.Ceiling(column.Width * Math.Min(1.75F, scale))))
+                column.Width = Math.Max(column.Width, expected)
+            Next
         End If
         For Each child As Control In control.Controls
             ScaleDialogTables(child, scale)
