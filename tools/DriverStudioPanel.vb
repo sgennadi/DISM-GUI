@@ -114,7 +114,7 @@ Public NotInheritable Class DriverStudioPanel
                                          "DRIVER STUDIO  |  VERSION CHECK",
                                          "DRIVER STUDIO  |  SMART VERSION DETECTION"),
                                         12.4F, True, ModernTheme.TextInk), 0, 0)
-        heading.Controls.Add(WriteLabel("Read-only scan. Compares with the selected mounted WIM index.",
+        heading.Controls.Add(WriteLabel("Read-only driver version comparison",
                                         9.1F, False, ModernTheme.Muted), 0, 1)
 
         Dim sourceRow As New TableLayoutPanel With {
