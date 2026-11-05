@@ -110,7 +110,7 @@ Public NotInheritable Class Wim360Catalog
     Private Shared Function CsvCell(value As String) As String
         Dim safe = If(value, "")
         ' Prevent Excel/Calc formula execution from untrusted INF/package names.
-        Dim trimmed = safe.TrimStart(" "c, ControlChars.Tab, ControlChars.Cr, ControlChars.Lf)
+        Dim trimmed = safe.TrimStart({" "c, ChrW(9), ChrW(13), ChrW(10)})
         If trimmed.Length > 0 AndAlso "=+-@".Contains(trimmed(0)) Then
             safe = "'" & safe
         End If

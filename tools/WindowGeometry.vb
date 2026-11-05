@@ -17,10 +17,11 @@ Public NotInheritable Class WindowGeometry
         Return fallback
     End Function
 
-    Public Shared Sub Install(form As Form)
+    ' Optional key isolates inventory and dialog placement from main-window geometry.
+    Public Shared Sub Install(form As Form, Optional settingsKeyName As String = SettingsKey)
         Dim maximize As Boolean = False
         Try
-            Using key = Registry.CurrentUser.OpenSubKey(SettingsKey, False)
+            Using key = Registry.CurrentUser.OpenSubKey(settingsKeyName, False)
                 If key IsNot Nothing Then
                     Dim left = ReadInt(key, "WindowLeft", Integer.MinValue)
                     Dim top = ReadInt(key, "WindowTop", Integer.MinValue)
@@ -76,7 +77,7 @@ Public NotInheritable Class WindowGeometry
                 Dim bounds = If(form.WindowState = FormWindowState.Normal,
                                 form.Bounds, form.RestoreBounds)
                 If bounds.Width < 500 OrElse bounds.Height < 400 Then Return
-                Using key = Registry.CurrentUser.CreateSubKey(SettingsKey)
+                Using key = Registry.CurrentUser.CreateSubKey(settingsKeyName)
                     If key Is Nothing Then Return
                     key.SetValue("WindowLeft", bounds.X, RegistryValueKind.DWord)
                     key.SetValue("WindowTop", bounds.Y, RegistryValueKind.DWord)

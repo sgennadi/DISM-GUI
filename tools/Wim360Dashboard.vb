@@ -27,6 +27,7 @@ Public NotInheritable Class Wim360Dashboard
     Private ReadOnly useSelected As Button
     Private ReadOnly copyReport As Button
     Private ReadOnly auditMounted As Button
+    Private ReadOnly inventoryButton As Button
     Private report As Wim360Reader.WimReport
     Private scanGeneration As Integer
     Private isAuditing As Boolean
@@ -237,15 +238,24 @@ Public NotInheritable Class Wim360Dashboard
         AddHandler auditMounted.Click, AddressOf AuditMountedClicked
         actions.Controls.Add(auditMounted, 0, 1)
 
-        Dim hint = MakeText("Read-only • no image changes", 8.7F, False, ModernTheme.Muted)
+        inventoryButton = New Button With {
+            .Name = "btn360Inventory", .Text = "Inventory details",
+            .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 8, 4),
+            .Enabled = False
+        }
+        ModernTheme.StyleButton(inventoryButton, "browse")
+        AddHandler inventoryButton.Click, AddressOf InventoryClicked
+        actions.Controls.Add(inventoryButton, 1, 1)
+
+        Dim hint = MakeText("Read-only • no changes", 8.4F, False, ModernTheme.Muted)
         hint.TextAlign = ContentAlignment.MiddleLeft
-        actions.Controls.Add(hint, 1, 1)
-        actions.SetColumnSpan(hint, 2)
+        actions.Controls.Add(hint, 2, 1)
         AddHandler fileBox.TextChanged, Sub(sender, e)
             CancelMountedAudit()
             useSelected.Enabled = False
             copyReport.Enabled = False
             auditMounted.Enabled = False
+            inventoryButton.Enabled = False
         End Sub
         AddHandler Me.Disposed, Sub(sender, e) CancelMountedAudit()
     End Sub
@@ -342,6 +352,7 @@ Public NotInheritable Class Wim360Dashboard
         useSelected.Enabled = False
         copyReport.Enabled = False
         auditMounted.Enabled = False
+        inventoryButton.Enabled = False
         If String.IsNullOrWhiteSpace(path) Then
             status.Text = "Choose a .wim or .esd file first."
             details.Text = "WIM 360 only reads image metadata."
@@ -445,6 +456,10 @@ Public NotInheritable Class Wim360Dashboard
                           StringComparison.OrdinalIgnoreCase) AndAlso
             selected.MountStatus.StartsWith("Mounted", StringComparison.OrdinalIgnoreCase) AndAlso
             Not String.IsNullOrWhiteSpace(selected.MountFolder)
+        inventoryButton.Enabled = selected IsNot Nothing AndAlso
+            selected.ServicingAudit IsNot Nothing AndAlso report IsNot Nothing AndAlso
+            String.Equals(fileBox.Text.Trim(), report.ImageFile,
+                          StringComparison.OrdinalIgnoreCase)
         If selected Is Nothing Then Return
         details.Text = "Index " & selected.Index.ToString() & "  |  " & selected.Name &
                        Environment.NewLine &
@@ -509,7 +524,8 @@ Public NotInheritable Class Wim360Dashboard
             selected.ServicingAudit = audit
             status.Text = "Mounted index " & selected.Index.ToString() &
                 " audited: " & audit.DriverCount.ToString() & " drivers, " &
-                audit.PackageCount.ToString() & " Windows packages. No changes."
+                audit.PackageCount.ToString() & " packages, " &
+                audit.Components.Count.ToString() & " components. No changes."
         Catch ex As OperationCanceledException
             If Not Me.IsDisposed AndAlso Object.ReferenceEquals(report, imageReport) Then
                 status.Text = "Mounted audit canceled; no image changes were made."
@@ -532,6 +548,14 @@ Public NotInheritable Class Wim360Dashboard
                 End If
             End If
         End Try
+    End Sub
+
+    Private Sub InventoryClicked(sender As Object, e As EventArgs)
+        Dim selected = SelectedImage()
+        If selected Is Nothing OrElse selected.ServicingAudit Is Nothing Then Return
+        Using popup As New Wim360InventoryForm(selected.ServicingAudit)
+            popup.ShowDialog(Me.FindForm())
+        End Using
     End Sub
 
     Private Sub UseClicked(sender As Object, e As EventArgs)
