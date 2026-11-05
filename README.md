@@ -94,6 +94,27 @@ suppressed when the related inventory returned a warning. Duplicate identities
 are reported as ambiguous, rather than silently treated as a change. Always
 export with cleared Type/State/Search filters to get a complete comparison.
 
+### Real WIM mount integration test (4.3.6)
+
+The Windows x64 CI runner creates a disposable WIM using `dism.exe
+/Capture-Image`, then mounts **index 1 in read-only mode** with `/Mount-Image
+/ReadOnly`. WIM 360 verifies the actual mounted-image registration and
+matching WIM/index/path; the test reads the mounted file without modifying
+the source. A `/Unmount-Image /Discard` in a `finally` block and a SHA-256
+comparison verify safe cleanup. Test code **never mounts a production image**,
+never commits, and never installs a driver/package. Failures block release.
+
+The test WIM only contains fixture files and a dummy `Windows` directory.
+It **cannot** validate Windows driver/package/feature servicing APIs. To
+check those, open a disposable copy of a real Windows `install.wim` on an
+elevated Windows workstation, run **Scan mounted index**, review feature
+warnings and export an unfiltered JSON snapshot. This remains a manual test.
+
+For local testing the read-only mount check is opt-in; in an elevated
+PowerShell session set `$env:DISMGUI_TEST_WIM_MOUNT='1'` before running
+`dotnet run --project tests/LayoutSmoke/LayoutSmoke.csproj`.
+It is enabled automatically on the x64 GitHub CI runner.
+
 WIM 360 still cannot inspect split `.swm` sets. For actual image servicing,
 use the existing DISM sections only after verifying image backups.
 

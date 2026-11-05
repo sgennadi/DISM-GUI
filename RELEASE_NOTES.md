@@ -1,27 +1,18 @@
-# DISM GUI 4.3.5
+# DISM GUI 4.3.6
 
-## WIM 360 — Offline Snapshot Comparison
+## WIM 360 — Real Read-only Mount Validation
 
-- Added **Compare JSON snapshots**, a separate resizable high-DPI viewer for two locally saved WIM 360 inventory JSON files; no WIM mounting or DISM servicing.
-- Displays **Added**, **Removed**, and **Changed** driver packages, Windows packages, optional features, and Windows capabilities, including before/after states, versions, providers and changed-field descriptions.
-- Interactive virtualized comparison table, filters by change/type, free-text search, column sorting, and **Export CSV / Export JSON** for the currently displayed changes.
-- Snapshot exports upgraded from schema 1 to **schema 2**, which includes the source's total inventory row count and an independently verified **IsCompleteInventory** flag.
-- **Safety:** Added/Removed detection requires *both* snapshots to contain the complete inventory. Legacy schema-1 and filtered snapshots suppress membership changes rather than guessing missing records are deleted.
-- Unsupported optional feature/capability queries suppress membership comparisons for those categories individually; version/state comparisons of shared records still work.
-- Duplicate inventory identities are flagged as ambiguous; inputs have size, type, index and schema checks, and spreadsheet-formula-safe CSV output.
-- The comparison dialog saves its size and position separately, shows warnings and is available even without a mounted image.
-- Extended CI tests cover legacy and filtered exports, before/after version and state changes, added/removed counts, partial category warnings, ambiguous identities, exports, and real WinForms interaction/layout.
+- Adds an **actual DISM mount integration test** to Windows x64 CI instead of relying exclusively on mocked snapshot and metadata fixtures.
+- Captures a small disposable WIM, mounts index 1 with **/ReadOnly**, verifies WIMGAPI identifies **Mounted (read-only)**, checks the WIM index/path and reads mounted contents.
+- Performs **/Unmount-Image /Discard** in guaranteed cleanup and checks the source WIM SHA-256 remains unchanged. A mount, cleanup, or hash failure stops the release.
+- Test WIM includes a dummy Windows directory to exercise selected-image path validation; **it is not an operating system image**.
+- The same test is opt-in for local elevated Windows smoke runs through the **DISMGUI_TEST_WIM_MOUNT=1** environment variable.
+- All existing WinForms layout, JSON comparison, Driver Studio INF and portable x86/x64/ARM64 build tests remain.
 
-## Preserved functionality
+## Safety and limitations
 
-- **WIM 360 / Scan mounted index** remains read-only and requires a verified existing mount.
-- **Inventory details** retains searchable driver/package/feature/capability results and CSV/JSON export.
-- **Driver Studio** selective per-INF installation remains separate and requires explicit confirmation.
-- No implicit Mount / Unmount / Commit / Discard.
-
-## Validation and limitations
-
-- Windows CI builds portable .NET 10 versions for x86, x64 and ARM64 and tests the WinForms UI.
-- Live component and driver inventory must still be verified on disposable mounted Windows/WinPE WIMs. Diff tests use representative saved inventories.
-- WIM 360 still does not support split .swm image sets.
+- The CI mount test operates only on files created under a fresh temporary directory; it never mounts or alters customer WIMs.
+- The artificial WIM does not support Get-WindowsDriver, Get-WindowsPackage, Get-WindowsOptionalFeature or Get-WindowsCapability. These operations still require a separate real Windows WIM test on a disposable copy.
+- Read-only scan and snapshot comparison functions are unchanged; no automatic commit or package installation is introduced.
+- UI scaling at non-default DPI still requires interactive testing on Windows at 125%, 150% and 200% as runner display settings are not representative.
 - Original DISM GUI by Mike Celone (mikecel79/DISMGUI); attribution retained.

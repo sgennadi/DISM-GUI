@@ -1,0 +1,162 @@
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Runtime.ExceptionServices;
+using System.Security.Cryptography;
+using System.Threading;
+using DISM_GUI;
+
+// Creates one disposable, non-OS WIM with DISM, mounts it READ ONLY,
+// checks WIMGAPI mount state and dismounts without committing image changes.
+// This proves the mount/metadata integration, not Windows servicing APIs.
+internal static class WimMountIntegration
+{
+    private static (int ExitCode, string Output) RunDism(string[] args, int timeoutMs)
+    {
+        var start = new ProcessStartInfo("dism.exe")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        foreach (var arg in args) start.ArgumentList.Add(arg);
+        using var process = new Process { StartInfo = start };
+        if (!process.Start())
+            throw new InvalidOperationException("Unable to start Windows DISM.");
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(timeoutMs))
+        {
+            process.Kill(entireProcessTree: true);
+            process.WaitForExit(10000);
+            throw new TimeoutException("Windows DISM timed out: " + string.Join(" ", args));
+        }
+        var output = stdout.GetAwaiter().GetResult() + "\n" +
+                     stderr.GetAwaiter().GetResult();
+        return (process.ExitCode, output);
+    }
+
+    private static void CheckDism(string[] args, int timeoutMs)
+    {
+        var result = RunDism(args, timeoutMs);
+        if (result.ExitCode != 0)
+            throw new InvalidOperationException("DISM returned " + result.ExitCode +
+                " for " + string.Join(" ", args) + ":\n" +
+                result.Output[^Math.Min(result.Output.Length, 2200)..]);
+    }
+
+    private static string Digest(string image)
+    {
+        using var stream = File.Open(image, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        return Convert.ToHexString(SHA256.HashData(stream));
+    }
+
+    public static void Verify(string image, string root)
+    {
+        if (Environment.GetEnvironmentVariable("DISMGUI_TEST_WIM_MOUNT") != "1")
+        {
+            Console.WriteLine("SKIP disposable read-only DISM mount integration (opt-in)");
+            return;
+        }
+
+        var path = Path.GetFullPath(image);
+        var mount = Path.Combine(root, "read-only-mount");
+        Directory.CreateDirectory(mount);
+        var beforeHash = Digest(path);
+        bool attemptedMount = false;
+        Exception? primaryError = null;
+        Exception? cleanupError = null;
+
+        try
+        {
+            attemptedMount = true;
+            CheckDism(new[]
+            {
+                "/English", "/Mount-Image", "/ImageFile:" + path,
+                "/Index:1", "/MountDir:" + mount, "/ReadOnly"
+            }, 180000);
+
+            Wim360Reader.WimReport? inspected = null;
+            for (var i = 0; i < 10; i++)
+            {
+                inspected = Wim360Reader.Inspect(path);
+                if (inspected.Images.Single().MountStatus == "Mounted (read-only)")
+                    break;
+                Thread.Sleep(350);
+            }
+            if (inspected is null || inspected.ImageCount != 1 ||
+                inspected.Images[0].MountStatus != "Mounted (read-only)")
+                throw new InvalidOperationException(
+                    "WIMGAPI did not recognize the real DISM read-only mount: " +
+                    inspected?.Images.FirstOrDefault()?.MountStatus + " / " +
+                    inspected?.MountScanWarning);
+
+            var actualMount = Path.GetFullPath(inspected.Images[0].MountFolder).
+                TrimEnd(Path.DirectorySeparatorChar);
+            if (!string.Equals(actualMount,
+                Path.GetFullPath(mount).TrimEnd(Path.DirectorySeparatorChar),
+                StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    "WIMGAPI mounted path does not match the selected image/index.");
+
+            var verifiedRoot = DriverStudioInventory.ValidateTarget(path, 1, mount);
+            if (!string.Equals(
+                Path.GetFullPath(verifiedRoot).TrimEnd(Path.DirectorySeparatorChar),
+                Path.GetFullPath(mount).TrimEnd(Path.DirectorySeparatorChar),
+                StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    "Driver Studio target validation returned an unexpected mount path.");
+
+            var actualContents = Path.Combine(mount, "smoke.txt");
+            if (!File.Exists(actualContents) ||
+                !File.ReadAllText(actualContents).Contains("read-only catalog"))
+                throw new InvalidOperationException(
+                    "DISM read-only mounted contents differ from captured source.");
+            Console.WriteLine("PASS real DISM /ReadOnly mount recognized by WIMGAPI; " +
+                "image/index/path and mounted contents agree.");
+        }
+        catch (Exception ex)
+        {
+            primaryError = ex;
+        }
+        finally
+        {
+            if (attemptedMount)
+            {
+                try
+                {
+                    CheckDism(new[]
+                    {
+                        "/English", "/Unmount-Image", "/MountDir:" + mount, "/Discard"
+                    }, 180000);
+                }
+                catch (Exception ex)
+                {
+                    cleanupError = ex;
+                    Console.WriteLine("DISM WIM cleanup failure; test mount may remain: " +
+                        ex.Message);
+                }
+            }
+        }
+
+        // Never delete the mounted directory on cleanup failure.
+        if (cleanupError != null)
+            throw new AggregateException("Read-only WIM mount test cleanup failed.",
+                new[] { primaryError, cleanupError }.OfType<Exception>());
+        if (primaryError != null)
+            ExceptionDispatchInfo.Capture(primaryError).Throw();
+
+        var after = Wim360Reader.Inspect(path);
+        if (after.Images.Single().MountStatus is not ("Not mounted" or "Not checked"))
+            throw new InvalidOperationException(
+                "DISM /Discard left a mounted image behind: " + after.Images[0].MountStatus);
+        if (!string.Equals(beforeHash, Digest(path), StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                "Read-only mount/dismount changed source WIM SHA-256 unexpectedly.");
+        if (File.Exists(Path.Combine(mount, "smoke.txt")))
+            throw new InvalidOperationException("Unmount left mounted image contents exposed.");
+        Console.WriteLine("PASS DISM /Discard unmount, no image change, SHA-256 stable.");
+    }
+}

@@ -36,9 +36,11 @@ jobs:
         shell: pwsh
         run: |
           python -c "from pathlib import Path; s=Path('DISM GUI/frmMain.vb').read_text(encoding='utf-8-sig'); assert 'ChooseFolderModern(' in s and 'ShowUnmountResult(' in s; print('Patched source OK')"
-      - name: Smoke-test live WinForms layout (x64)
+      - name: Smoke-test WinForms and real read-only WIM mount (x64)
         if: matrix.rid == 'win-x64'
         shell: pwsh
+        env:
+          DISMGUI_TEST_WIM_MOUNT: '1'
         run: dotnet run --project tests/LayoutSmoke/LayoutSmoke.csproj --configuration Release -p:Platform=AnyCPU
       - name: Upload WinForms layout screenshots (x64)
         if: matrix.rid == 'win-x64'
