@@ -1,6 +1,7 @@
 Imports System
 Imports System.Diagnostics
 Imports System.Drawing
+Imports System.IO
 Imports System.Windows.Forms
 
 ' User-controlled support workflow. No automatic upload or GitHub API token.
