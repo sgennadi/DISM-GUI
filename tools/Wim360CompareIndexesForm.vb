@@ -93,7 +93,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
             CInt(Math.Ceiling(52 + 17 * (uiScale - 1))),
             CInt(Math.Ceiling(80 * uiScale)))
         Dim actionsHeight As Integer = If(stackedLayout,
-            CInt(Math.Ceiling(85 + 29 * (uiScale - 1))),
+            CInt(Math.Ceiling(51 + 15 * (uiScale - 1))),
             CInt(Math.Ceiling(68 * uiScale)))
         Dim minimumGridHeight As Integer = If(stackedLayout, 147,
                                              CInt(Math.Ceiling(235 * uiScale)))
@@ -322,15 +322,15 @@ Public NotInheritable Class Wim360CompareIndexesForm
 
         Dim actions As New TableLayoutPanel With {
             .Dock = DockStyle.Fill,
-            .ColumnCount = If(stackedLayout, 2, 5),
-            .RowCount = If(stackedLayout, 2, 1),
+            .ColumnCount = If(stackedLayout, 4, 5),
+            .RowCount = 1,
             .Margin = Padding.Empty
         }
         If stackedLayout Then
-            actions.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
-            actions.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
-            actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
-            actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
+            actions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+            For Each pct As Single In {33.0F, 23.0F, 27.0F, 17.0F}
+                actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, pct))
+            Next
         Else
             actions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
             actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
@@ -341,7 +341,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
         End If
         root.Controls.Add(actions, 0, 5)
         compareButton = New Button With {
-            .Name = "btn360RunIndexCompare", .Text = "Compare selected indexes",
+            .Name = "btn360RunIndexCompare", .Text = If(stackedLayout, "Compare indexes", "Compare selected indexes"),
             .Dock = DockStyle.Fill, .Margin = New Padding(4, 7, 6, 4)
         }
         ModernTheme.StyleButton(compareButton, "primary")
@@ -354,20 +354,18 @@ Public NotInheritable Class Wim360CompareIndexesForm
         ModernTheme.StyleButton(hashButton, "secondary")
         actions.Controls.Add(hashButton, If(stackedLayout, 1, 2), 0)
         exportButton = New Button With {
-            .Name = "btn360IndexCompareCsv", .Text = "Export filtered CSV",
+            .Name = "btn360IndexCompareCsv", .Text = If(stackedLayout, "Export CSV", "Export filtered CSV"),
             .Dock = DockStyle.Fill, .Margin = New Padding(4, 7, 6, 4),
             .Enabled = False
         }
         ModernTheme.StyleButton(exportButton, "browse")
-        actions.Controls.Add(exportButton, If(stackedLayout, 0, 3),
-                             If(stackedLayout, 1, 0))
+        actions.Controls.Add(exportButton, If(stackedLayout, 2, 3), 0)
         closeButton = New Button With {
             .Name = "btn360IndexCompareClose", .Text = "Close",
             .Dock = DockStyle.Fill, .Margin = New Padding(4, 7, 0, 4)
         }
         ModernTheme.StyleButton(closeButton, "neutral")
-        actions.Controls.Add(closeButton, If(stackedLayout, 1, 4),
-                             If(stackedLayout, 1, 0))
+        actions.Controls.Add(closeButton, If(stackedLayout, 3, 4), 0)
         Me.CancelButton = closeButton
 
         AddHandler compareButton.Click, AddressOf CompareClicked
@@ -509,7 +507,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
             tokenSource.Dispose()
             working = False
             If Not Me.IsDisposed Then
-                compareButton.Text = "Compare selected indexes"
+                compareButton.Text = If(stackedLayout, "Compare indexes", "Compare selected indexes")
                 compareButton.Enabled = True
                 selectedIndexes.Enabled = True
                 modeBox.Enabled = True
@@ -571,7 +569,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
             tokenSource.Dispose()
             working = False
             If Not Me.IsDisposed Then
-                compareButton.Text = "Compare selected indexes"
+                compareButton.Text = If(stackedLayout, "Compare indexes", "Compare selected indexes")
                 compareButton.Enabled = True
                 exportButton.Enabled = comparison IsNot Nothing
                 selectedIndexes.Enabled = True
