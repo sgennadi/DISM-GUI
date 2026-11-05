@@ -427,6 +427,17 @@ internal static class LayoutSmoke
         Require(matrix is not null && matrix.VirtualMode &&
                 matrix.Columns.Count == 6 && matrix.RowCount == 5 &&
                 action is not null && action.Enabled, "Three-index comparison UI not initialized");
+        // A scrollable dialog is not sufficient if the actual comparison grid
+        // starts below the viewport at 125-175% UI font scaling.
+        var matrixViewport = Find(dialog, "Wim360CompareIndexesViewport") as Panel;
+        Require(matrixViewport is not null, "Comparison viewport missing");
+        var visibleMatrix = Rectangle.Intersect(
+            matrix.RectangleToScreen(matrix.ClientRectangle),
+            matrixViewport!.RectangleToScreen(matrixViewport.ClientRectangle));
+        Require(visibleMatrix.Height >= 118,
+            $"WIM 360 comparison grid hidden below the fold: " +
+            $"visible={visibleMatrix.Height}px, " +
+            $"fontScale={Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_FONT_SCALE")}");
         state!.SelectedItem = "Missing / only in some";
         Application.DoEvents();
         Require(matrix.RowCount == 3,
