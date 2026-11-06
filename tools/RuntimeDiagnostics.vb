@@ -92,13 +92,13 @@ Public NotInheritable Class RuntimeDiagnostics
                 End If
                 File.AppendAllText(log, line, New UTF8Encoding(False))
             End SyncLock
-            ' Parallel local formats are now connected. The shared queue only
-            ' receives coarse, deduplicated metadata, never the journal detail.
-            UniversalDiagnosticsRuntime.RecordFailure(area, kind, code)
         Catch
             ' Diagnostics are never permitted to crash DISM GUI or interrupt
             ' imaging, even if the profile is read-only or disk is full.
         End Try
+        ' A broken/locked legacy journal must not suppress the universal
+        ' queue. Each independent local capture protects servicing from errors.
+        UniversalDiagnosticsRuntime.RecordFailure(area, kind, code)
     End Sub
 
     Public Shared Sub RecordException(area As String, failure As Exception)

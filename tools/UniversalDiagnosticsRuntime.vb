@@ -16,7 +16,7 @@ Public NotInheritable Class UniversalDiagnosticsRuntime
 
     Private Const Project As String = "sgennadi/DISM-GUI"
     Private Const MaxQueueRecords As Integer = 1500
-    Private Const MaxRecentScan As Integer = 450
+    Private Const MaxRecentScan As Integer = MaxQueueRecords
     Private Shared ReadOnly Gate As New Object()
     Private Shared ReadOnly Seen As New Dictionary(Of String, DateTime)(
         StringComparer.Ordinal)

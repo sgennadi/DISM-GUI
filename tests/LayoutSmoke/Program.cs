@@ -714,6 +714,15 @@ internal static class LayoutSmoke
                     !privateRecord.Contains("private-person") &&
                     !privateRecord.Contains("secret.wim"),
                 "Unknown failure area must never leak a user-controlled path");
+            // The shared queue must still capture when the older journal's
+            // directory becomes unwritable or is a regular file.
+            var blockedJournal = System.IO.Path.Combine(temp, "not-a-directory");
+            System.IO.File.WriteAllText(blockedJournal, "test fixture");
+            Environment.SetEnvironmentVariable("DISMGUI_TEST_LOG_DIRECTORY", blockedJournal);
+            RuntimeDiagnostics.RecordDismExit("DISM command", "99");
+            Environment.SetEnvironmentVariable("DISMGUI_TEST_LOG_DIRECTORY", temp);
+            Require(System.IO.Directory.GetFiles(queueFolder, "*.json").Length == 5,
+                "Shared queue must survive an unavailable legacy journal");
             var raw = System.IO.File.ReadAllText(
                 System.IO.Path.Combine(temp, "events.log"));
             Require(raw.Contains("sig=") &&
@@ -1686,6 +1695,18 @@ internal static class LayoutSmoke
     [STAThread]
     private static int Main()
     {
+        // Isolate ALL smoke-test reports, including exceptions from layout
+        // fixtures, from the user's real local diagnostics folders.
+        var previousUdx = Environment.GetEnvironmentVariable("UDX_STATE_DIR");
+        var previousTest = Environment.GetEnvironmentVariable("DISMGUI_TEST_DIAGNOSTICS");
+        var previousLogDir = Environment.GetEnvironmentVariable("DISMGUI_TEST_LOG_DIRECTORY");
+        var scratch = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+            "DISMGUI-LayoutSmoke-" + Guid.NewGuid().ToString("N"));
+        Environment.SetEnvironmentVariable("UDX_STATE_DIR",
+            System.IO.Path.Combine(scratch, "universal"));
+        Environment.SetEnvironmentVariable("DISMGUI_TEST_DIAGNOSTICS", "1");
+        Environment.SetEnvironmentVariable("DISMGUI_TEST_LOG_DIRECTORY",
+            System.IO.Path.Combine(scratch, "runtime"));
         try
         {
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
@@ -2169,6 +2190,14 @@ internal static class LayoutSmoke
         {
             Console.Error.WriteLine("UI layout regression: " + ex);
             return 1;
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("UDX_STATE_DIR", previousUdx);
+            Environment.SetEnvironmentVariable("DISMGUI_TEST_DIAGNOSTICS", previousTest);
+            Environment.SetEnvironmentVariable("DISMGUI_TEST_LOG_DIRECTORY", previousLogDir);
+            try { if (System.IO.Directory.Exists(scratch)) System.IO.Directory.Delete(scratch, true); }
+            catch { /* CI fixture cleanup is best effort. */ }
         }
     }
 }
