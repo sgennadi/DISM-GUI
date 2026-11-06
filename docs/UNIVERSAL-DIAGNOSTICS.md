@@ -4,8 +4,9 @@ DISM GUI includes the canonical .NET source from
 [UniversalDiagnocticsModule](https://github.com/sgennadi/UniversalDiagnocticsModule/tree/main/embedded/dotnet)
 **inside the application EXE**. There is no independent diagnostics collector
 to install, no subprocess, and no network interaction during local capture.
-The DISM GUI version stays **4.3.10**. This integration is built separately
-in PR #11; it does not overwrite the already published 4.3.10 release.
+The DISM GUI version stays **4.3.10**. This integration is included in unified draft
+[PR #13](https://github.com/sgennadi/DISM-GUI/pull/13);
+it does not overwrite the already published 4.3.10 release.
 
 ## Usage
 
@@ -16,6 +17,11 @@ in PR #11; it does not overwrite the already published 4.3.10 release.
 4. Click **Save locally (built-in)**. Review the exact sanitized JSON summary
    in the confirmation dialog, then click **Yes** to capture.
 5. The dialog shows the generated report ID.
+6. Open **Saved diagnostics** to inspect the local queue. Choose an event
+   and click **Open GitHub draft...** to review a second confirmation.
+   This copies a sanitized JSON report and opens an Issue draft in the browser.
+   The operator must sign in and click **Submit** on GitHub. An opened draft
+   does not change the local report's delivery status.
 
 The embedded core creates an atomic UTF-8 event:
 \`%LOCALAPPDATA%\UniversalDiagnostics\<project-hash>\<report-id>.json\`
@@ -26,7 +32,8 @@ No \`excerpt\`, DISM output, Windows username, machine identity, local file
 paths, environment variables or GitHub tokens are included.
 
 **Nothing is uploaded automatically**. The existing manual browser-based
-GitHub Issue draft works independently. The universal repository's optional
+GitHub Issue draft works independently. A saved queue item also offers a
+separate, manually reviewed browser Issue draft; it never sends in the background. The universal repository's optional
 standalone CLI/EXE can later inspect and submit these same queue records,
 with explicit authorization/review, but it is NOT needed for normal app use.
 

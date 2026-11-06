@@ -221,7 +221,11 @@ automatically.
 The canonical `universal-diagnostics/v1` source is compiled **into DISM GUI**.
 In **Tools → Report error**, review the preview and use
 **Save locally (built-in)** to write a redacted report to the shared
-per-project queue. Nothing is sent to GitHub without separate review.
+per-project queue. The **Saved diagnostics** window can search, copy,
+export, or open a reviewed report as a prefilled **GitHub Issue draft** after
+explicit confirmation. The sanitized JSON is copied to the clipboard;
+the operator must sign in and press **Submit** on GitHub. Opening a draft
+does not mark the local event as submitted. No background upload occurs.
 
 There is **no required collector EXE, DLL, installer or GitHub token**.
 The original DISM diagnostics, support contact and manual Issue draft remain.

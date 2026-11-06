@@ -37,6 +37,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
     Private ReadOnly exportButton As Button
     Private ReadOnly copyButton As Button
     Private ReadOnly deleteButton As Button
+    Private ReadOnly draftButton As Button
 
     Public Sub New()
         Me.Name = "UniversalDiagnosticsQueueForm"
@@ -220,13 +221,15 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         End Sub
         buttons.Controls.Add(openFolder, 0, 1)
 
-        Dim info As New Label With {
-            .Text = "Preview and export only. No GitHub submission.",
-            .Dock = DockStyle.Fill, .TextAlign = ContentAlignment.MiddleCenter,
-            .ForeColor = ModernTheme.Muted, .AutoEllipsis = True,
-            .Margin = New Padding(0, 0, 0, 0)
+        draftButton = New Button With {
+            .Name = "btnUniversalQueueGitHubDraft",
+            .Text = "Open GitHub draft...",
+            .Dock = DockStyle.Fill, .Enabled = False,
+            .Margin = New Padding(3, 2, 7, 2)
         }
-        buttons.Controls.Add(info, 1, 1)
+        ModernTheme.StyleButton(draftButton, "secondary")
+        AddHandler draftButton.Click, AddressOf OpenReviewedDraft
+        buttons.Controls.Add(draftButton, 1, 1)
 
         Dim close As New Button With {
             .Name = "btnUniversalQueueClose", .Text = "Close",
@@ -353,6 +356,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         copyButton.Enabled = available
         exportButton.Enabled = available
         deleteButton.Enabled = available
+        draftButton.Enabled = available
     End Sub
 
     Public Sub RefreshRecords()
@@ -410,6 +414,31 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
             grid.ResumeLayout(True)
         End Try
         ShowSelected()
+    End Sub
+
+    Private Sub OpenReviewedDraft(sender As Object, e As EventArgs)
+        Dim item = Selected()
+        If item Is Nothing OrElse Not draftButton.Enabled Then Return
+        ' Opening a draft does not acknowledge delivery or change queue state.
+        Dim safeJson = ErrorDiagnostics.Redact(SanitizeExport(item))
+        If MessageBox.Show(Me,
+            "Review the selected sanitized report in the preview." &
+            Environment.NewLine & Environment.NewLine &
+            "Open a prefilled GitHub Issue draft in your browser?" &
+            Environment.NewLine &
+            "The preview is included in the browser URL and your clipboard." &
+            Environment.NewLine & Environment.NewLine &
+            "Nothing is sent automatically. You must sign in and submit on GitHub.",
+            "Review before opening GitHub", MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning) <> DialogResult.Yes Then Return
+        Try
+            Clipboard.SetText(safeJson)
+            ErrorDiagnostics.OpenGitHubIssue(
+                "DISM GUI diagnostic " & item.Component & " " & item.Code, safeJson)
+            footnote.Text = "Draft opened. Submit in GitHub manually; local status unchanged."
+        Catch ex As Exception
+            footnote.Text = "Could not open GitHub draft (" & ex.GetType().Name & ")."
+        End Try
     End Sub
 
     Private Sub ExportSelected(sender As Object, e As EventArgs)

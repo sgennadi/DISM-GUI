@@ -774,6 +774,40 @@ internal static class LayoutSmoke
                 "Canonical embedded core must redact untrusted summaries");
             Require(System.IO.Directory.GetFiles(projectFolder, "*.json").Length == 2,
                 "Exactly two embedded test reports should be stored, without helper EXE");
+            // A saved event can be reviewed and used in a manually submitted
+            // browser Issue draft. Never invoke the live browser in CI.
+            using (var saved = new UniversalDiagnosticsQueueForm())
+            {
+                saved.Show();
+                Application.DoEvents();
+                var queueGrid = Find(saved, "gridUniversalQueue") as DataGridView;
+                var draftButton = Find(saved, "btnUniversalQueueGitHubDraft") as Button;
+                var queuePreview = Find(saved, "txtUniversalQueuePreview") as TextBox;
+                var statusFilter = Find(saved, "cmbUniversalQueueStatus") as ComboBox;
+                Require(queueGrid is not null && draftButton is not null &&
+                        queuePreview is not null && statusFilter is not null &&
+                        queueGrid.Rows.Count == 2,
+                    "The saved diagnostics queue must load the two test events");
+                queueGrid!.ClearSelection();
+                queueGrid.Rows[0].Selected = true;
+                Application.DoEvents();
+                Require(draftButton!.Enabled &&
+                        queuePreview!.Text.Contains("universal-diagnostics/v1") &&
+                        !queuePreview.Text.Contains("SUPER_SECRET_ABC") &&
+                        !queuePreview.Text.Contains("PRIVATE_TEST_SECRET") &&
+                        !queuePreview.Text.Contains("private.txt"),
+                    "Saved GitHub draft must use sanitized, explicitly selected data");
+                var queueDraft = Uri.UnescapeDataString(ErrorDiagnostics.BuildGitHubIssueUrl(
+                    "DISM GUI saved diagnostic", queuePreview.Text));
+                Require(queueDraft.Contains("universal-diagnostics/v1") &&
+                        !queueDraft.Contains("SUPER_SECRET_ABC"),
+                    "Saved reports must produce a sanitized manual Issue draft URL");
+                statusFilter!.SelectedItem = "Submitted";
+                Application.DoEvents();
+                Require(queueGrid.Rows.Count == 0 && !draftButton.Enabled,
+                    "Draft button must disable without a selected record");
+                saved.Close();
+            }
         }
         finally
         {
