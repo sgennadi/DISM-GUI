@@ -216,6 +216,20 @@ opens a draft addressed to **[sgennadi@hotmail.com](mailto:sgennadi@hotmail.com?
 including the installed version and architecture. No message is sent
 automatically.
 
+## Grouped workspaces and update indicator (4.3.13 development)
+
+The original Mount and Drivers DISM commands remain available as nested
+**Mount & Servicing** under **WIM 360** and **Driver commands** under
+**Driver Studio**. The legacy tab indices and handlers remain unchanged,
+but the other numbered sections now run from **01 Packages** to
+**07 Apply** without empty 01/02 navigation positions.
+
+When a newer stable release is verified at startup, the **Tools** button
+turns deep orange with a high-contrast white exclamation mark. When the
+check finds no newer release or is unavailable, Tools remains white.
+The menu continues to show the exact stable release version and keeps
+the manual update action.
+
 ## Unified local runtime diagnostics (4.3.12)
 
 [PR #14](https://github.com/sgennadi/DISM-GUI/pull/14) routes real

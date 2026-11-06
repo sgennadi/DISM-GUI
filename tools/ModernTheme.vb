@@ -526,9 +526,7 @@ Public NotInheritable Class ModernTheme
             .Dock = DockStyle.Fill, .Margin = New Padding(10, 14, 0, 14)
         }
         StyleButton(toolsButton, "neutral")
-        toolsButton.FlatAppearance.BorderColor = Color.FromArgb(202, 228, 247)
-        toolsButton.BackColor = Color.White
-        toolsButton.ForeColor = Color.FromArgb(27, 78, 132)
+        ApplyToolsUpdateVisual(toolsButton)
         toolsButton.ContextMenuStrip = toolsMenu
         AddHandler toolsButton.Click, Sub(sender, e)
             toolsMenu.Show(toolsButton, New Point(0, toolsButton.Height))
@@ -704,6 +702,20 @@ Public NotInheritable Class ModernTheme
         AddHandler wimNav.Click, Sub(sender, e) tabs.SelectedIndex = wimPageIndex
         side.Controls.Add(wimNav)
 
+        ' Mount is now a WIM 360 sub-workspace. Keep the original TabPage 0
+        ' and event handlers for safe Mount/Dismount/Commit semantics.
+        Dim mountNav As New Button With {
+            .Name = "navWimMount", .Text = "    Mount & Servicing",
+            .Size = New Size(198, 37), .Margin = New Padding(15, 0, 2, 8),
+            .FlatStyle = FlatStyle.Flat, .TextAlign = ContentAlignment.MiddleLeft,
+            .Font = UiFont(9.1F), .ForeColor = TextInk, .BackColor = Color.White,
+            .Cursor = Cursors.Hand, .UseVisualStyleBackColor = False,
+            .AccessibleDescription = "WIM 360: mount, dismount and inspect the selected image"
+        }
+        mountNav.FlatAppearance.BorderColor = Color.FromArgb(198, 215, 234)
+        AddHandler mountNav.Click, Sub(sender, e) tabs.SelectedIndex = 0
+        side.Controls.Add(mountNav)
+
         Dim studioNav As New Button With {
             .Name = "navDriverStudio", .Text = "  Driver Studio",
             .Size = New Size(211, 45), .Margin = New Padding(2, 0, 2, 14),
@@ -717,6 +729,20 @@ Public NotInheritable Class ModernTheme
             tabs.SelectedIndex = studioPageIndex
         End Sub
         side.Controls.Add(studioNav)
+
+        ' Legacy Drivers operations are now a Driver Studio sub-workspace.
+        ' The original TabPage 1 remains intact for all DISM driver handlers.
+        Dim driverCommandsNav As New Button With {
+            .Name = "navDriverCommands", .Text = "    Driver commands",
+            .Size = New Size(198, 37), .Margin = New Padding(15, 0, 2, 10),
+            .FlatStyle = FlatStyle.Flat, .TextAlign = ContentAlignment.MiddleLeft,
+            .Font = UiFont(9.1F), .ForeColor = TextInk, .BackColor = Color.White,
+            .Cursor = Cursors.Hand, .UseVisualStyleBackColor = False,
+            .AccessibleDescription = "Driver Studio: legacy add, remove and export drivers"
+        }
+        driverCommandsNav.FlatAppearance.BorderColor = Color.FromArgb(198, 215, 234)
+        AddHandler driverCommandsNav.Click, Sub(sender, e) tabs.SelectedIndex = 1
+        side.Controls.Add(driverCommandsNav)
 
         Dim sectionNames As String() = {"Mount & Inspect", "Drivers", "Packages",
             "Windows Features", "Editions", "Unattend XML",
@@ -732,15 +758,16 @@ Public NotInheritable Class ModernTheme
         Dim setActive As Action(Of Integer) = Sub(index)
             For n As Integer = 0 To navButtons.Count - 1
                 Dim b = navButtons(n)
-                b.BackColor = If(n = index, Blue, Color.White)
-                b.ForeColor = If(n = index, Color.White, TextInk)
+                Dim pageIndex = n + 2
+                b.BackColor = If(pageIndex = index, Blue, Color.White)
+                b.ForeColor = If(pageIndex = index, Color.White, TextInk)
                 b.FlatAppearance.BorderSize = 1
-                b.FlatAppearance.BorderColor = If(n = index, Blue, Color.FromArgb(211, 225, 243))
-                b.FlatAppearance.MouseOverBackColor = If(n = index,
+                b.FlatAppearance.BorderColor = If(pageIndex = index, Blue, Color.FromArgb(211, 225, 243))
+                b.FlatAppearance.MouseOverBackColor = If(pageIndex = index,
                        Color.FromArgb(12, 70, 180), Color.FromArgb(211, 230, 254))
             Next
-            Dim onWim = index = wimPageIndex
-            Dim onStudio = index = studioPageIndex
+            Dim onWim = index = wimPageIndex OrElse index = 0
+            Dim onStudio = index = studioPageIndex OrElse index = 1
             wimNav.BackColor = If(onWim, Blue, Color.White)
             wimNav.ForeColor = If(onWim, Color.White, TextInk)
             wimNav.FlatAppearance.BorderColor = If(onWim, Blue,
@@ -749,15 +776,27 @@ Public NotInheritable Class ModernTheme
             studioNav.ForeColor = If(onStudio, Color.White, TextInk)
             studioNav.FlatAppearance.BorderColor = If(onStudio, Blue,
                                                         Color.FromArgb(198, 215, 234))
-            pageHeading.Text = If(onWim, "WIM 360",
-                                  If(onStudio, "DRIVER STUDIO",
-                                     sectionNames(Math.Min(index, 8)).ToUpperInvariant()))
+            mountNav.BackColor = If(index = 0, Color.FromArgb(218, 235, 254), Color.White)
+            mountNav.ForeColor = If(index = 0, Color.FromArgb(15, 69, 150), TextInk)
+            mountNav.FlatAppearance.BorderColor = If(index = 0, Blue,
+                                                       Color.FromArgb(198, 215, 234))
+            driverCommandsNav.BackColor = If(index = 1, Color.FromArgb(218, 235, 254), Color.White)
+            driverCommandsNav.ForeColor = If(index = 1, Color.FromArgb(15, 69, 150), TextInk)
+            driverCommandsNav.FlatAppearance.BorderColor = If(index = 1, Blue,
+                                                                Color.FromArgb(198, 215, 234))
+            pageHeading.Text = If(index = 0, "WIM 360  /  MOUNT & SERVICING",
+                                  If(index = 1, "DRIVER STUDIO  /  DRIVER COMMANDS",
+                                     If(index = wimPageIndex, "WIM 360",
+                                        If(index = studioPageIndex, "DRIVER STUDIO",
+                                           sectionNames(Math.Min(index, 8)).ToUpperInvariant()))))
         End Sub
 
-        For i As Integer = 0 To sectionNames.Length - 1
+        ' Original TabPages 0/1 remain for compatibility but are not numbered.
+        ' With Mount/Drivers grouped above, Packages becomes 01, Features 02.
+        For i As Integer = 2 To sectionNames.Length - 1
             Dim index As Integer = i
             Dim navBtn As New Button With {
-                .Name = "nav" & i.ToString(), .Text = (i + 1).ToString("00") &
+                .Name = "nav" & i.ToString(), .Text = (i - 1).ToString("00") &
                    "  " & shortNavigationNames(i),
                 .Size = New Size(211, 43), .Margin = New Padding(2, 1, 2, 6),
                 .FlatStyle = FlatStyle.Flat, .TextAlign = ContentAlignment.MiddleLeft,
@@ -776,6 +815,8 @@ Public NotInheritable Class ModernTheme
             wimNav.Width = Math.Max(176, side.ClientSize.Width -
                                    side.Padding.Left - side.Padding.Right - 13)
             studioNav.Width = wimNav.Width
+            mountNav.Width = Math.Max(162, wimNav.Width - 13)
+            driverCommandsNav.Width = mountNav.Width
             For Each b In navButtons
                 b.Width = Math.Max(176, side.ClientSize.Width - side.Padding.Left -
                                    side.Padding.Right - 13)
@@ -926,6 +967,35 @@ Public NotInheritable Class ModernTheme
         frm.ResumeLayout(True)
     End Sub
 
+    ' One visual state for both startup release checks and offline UI tests.
+    ' A verified newer release uses a saturated warm color on the blue header,
+    ' white text and an explicit exclamation marker rather than a pale tint.
+    Public Shared Sub ApplyToolsUpdateVisual(button As Button,
+                                             Optional newerVersion As String = "")
+        If button Is Nothing OrElse button.IsDisposed Then Return
+        Dim isNew = Not String.IsNullOrWhiteSpace(newerVersion)
+        button.UseVisualStyleBackColor = False
+        button.FlatStyle = FlatStyle.Flat
+        button.FlatAppearance.BorderSize = If(isNew, 2, 1)
+        button.BackColor = If(isNew, Color.FromArgb(166, 58, 4), Color.White)
+        button.ForeColor = If(isNew, Color.White, Color.FromArgb(27, 78, 132))
+        button.FlatAppearance.BorderColor = If(isNew,
+            Color.FromArgb(255, 206, 86), Color.FromArgb(202, 228, 247))
+        button.FlatAppearance.MouseOverBackColor = If(isNew,
+            Color.FromArgb(132, 44, 2), Color.FromArgb(235, 245, 255))
+        button.FlatAppearance.MouseDownBackColor = If(isNew,
+            Color.FromArgb(107, 36, 1), Color.FromArgb(218, 235, 254))
+        button.Text = If(isNew, "Tools  !  " & ChrW(&H25BE),
+                        "Tools  " & ChrW(&H25BE))
+        button.AccessibleName = If(isNew, "Tools - update available",
+                                   "Tools")
+        button.AccessibleDescription = If(isNew,
+            "A newer verified DISM GUI stable release " & newerVersion &
+            " is available. Open Tools then Update.",
+            "Open the Tools menu")
+        button.Invalidate()
+    End Sub
+
     Private Shared Async Sub NotifyUpdateInMenuAsync(toolsButton As Button,
                                                        menuItem As ToolStripMenuItem,
                                                        statusItem As ToolStripMenuItem)
@@ -933,13 +1003,12 @@ Public NotInheritable Class ModernTheme
             Dim available = Await UpdateManager.CheckForUpdatesAsync()
             If toolsButton.IsDisposed OrElse statusItem.IsDisposed Then Return
             If String.IsNullOrWhiteSpace(available) Then
+                ApplyToolsUpdateVisual(toolsButton)
                 statusItem.Text = "No newer verified release detected"
                 statusItem.ForeColor = Muted
                 Return
             End If
-            toolsButton.Text = "Tools  " & ChrW(&H2022) & " " & ChrW(&H25BE)
-            toolsButton.ForeColor = Color.FromArgb(12, 110, 67)
-            toolsButton.BackColor = Color.FromArgb(233, 250, 240)
+            ApplyToolsUpdateVisual(toolsButton, available)
             statusItem.Text = "New stable release: " & available
             statusItem.ForeColor = Color.FromArgb(12, 124, 75)
             menuItem.Text = "Update to " & available & "..."
@@ -949,6 +1018,7 @@ Public NotInheritable Class ModernTheme
             tips.SetToolTip(toolsButton, "DISM GUI " & available &
                                           " is available. Open Tools > Update.")
         Catch
+            ApplyToolsUpdateVisual(toolsButton)
             If Not statusItem.IsDisposed Then
                 statusItem.Text = "Update status unavailable"
                 statusItem.ForeColor = Muted
