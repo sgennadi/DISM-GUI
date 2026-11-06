@@ -2114,6 +2114,19 @@ internal static class LayoutSmoke
                     integrityAudit.Enabled,
                     "Driver Studio must expose a discoverable read-only package integrity audit");
             VerifyReadableButton(integrityAudit!, "Driver Studio package audit high-DPI button");
+            var auditScroll = Find(studioPanel, "DriverStudioViewport") as Panel;
+            Require(auditScroll is not null && auditScroll.AutoScroll,
+                    "Driver Studio audit controls need a scrollable viewport");
+            auditScroll!.ScrollControlIntoView(integrityAudit!);
+            Application.DoEvents();
+            var auditBounds = integrityAudit!.RectangleToScreen(integrityAudit.ClientRectangle);
+            var viewportBoundsAudit = auditScroll.RectangleToScreen(auditScroll.ClientRectangle);
+            Require(Rectangle.Intersect(auditBounds, viewportBoundsAudit).Height >=
+                    integrityAudit.Height - 4,
+                    "Audit selected action cannot be reached without clipping at high DPI");
+            Snapshot(form, "DISM-GUI-Driver-Studio-Audit");
+            auditScroll.AutoScrollPosition = Point.Empty;
+            Application.DoEvents();
             var installStudio = Find(studioPanel, "btnStudioInstallSelected") as Button;
             var stopStudio = Find(studioPanel, "btnStudioStopAfterCurrent") as Button;
             Require(installStudio is not null && stopStudio is not null &&
