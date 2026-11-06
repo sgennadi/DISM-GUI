@@ -841,9 +841,9 @@ Public NotInheritable Class DriverStudioPanel
                 Try
                     Dim afterInventory = Await DriverStudioInventory.ReadMountedAsync(
                         comparedWim, comparedIndex, comparedMount, CancellationToken.None)
-                    Dim confirmed = appliedPackages.Count(Function(p)
+                    Dim confirmed = appliedPackages.Where(Function(p)
                         Return DriverStudioInstaller.IsPresentInInventory(p, afterInventory)
-                    End Function)
+                    End Function).Count()
                     importHistory.Add("Postflight: " & confirmed.ToString() &
                         "/" & appliedPackages.Count.ToString() &
                         " successful DISM packages found in mounted driver inventory.")
