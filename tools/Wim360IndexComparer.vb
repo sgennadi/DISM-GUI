@@ -194,13 +194,108 @@ Public NotInheritable Class Wim360IndexComparer
         Return result
     End Function
 
-    ' Hash one selected file across every mounted index where it exists.
-    ' This is opt-in because full hashing of a Windows image can be expensive.
+    ' Hashing is intentionally opt-in. The single-file action also supports
+    ' missing-index rows; the bounded batch is for files of identical size
+    ' in *every* index, where size-only comparison cannot establish equality.
     Public Shared Function VerifyFileHashes(report As Wim360Reader.WimReport,
                                            indexes As IEnumerable(Of Integer),
                                            original As Row,
                                            token As CancellationToken) As Row
         If report Is Nothing Then Throw New ArgumentNullException(NameOf(report))
+        Dim chosen = SelectedIndexes(report, indexes)
+        Dim fresh = Wim360Reader.Inspect(report.ImageFile)
+        Dim current = SelectedIndexes(fresh, chosen.Select(Function(x) x.Index))
+        Return VerifyFileHashesCore(report.ImageFile, current, original, token)
+    End Function
+
+    ' Refuse silently truncated work. The operator must narrow the Type,
+    ' Result or Search filters if the visible set exceeds either limit.
+    ' A 1 GiB cap measures total bytes read across all selected image indexes.
+    Public Shared Function PlanHashBatch(comparison As Result,
+                                         visible As IEnumerable(Of Row),
+                                         Optional maxPaths As Integer = 50,
+                                         Optional maxReadBytes As Long = 1073741824L) As List(Of Row)
+        If comparison Is Nothing Then Throw New ArgumentNullException(NameOf(comparison))
+        If visible Is Nothing Then Throw New ArgumentNullException(NameOf(visible))
+        If comparison.Mode <> "Mounted file paths / sizes" OrElse
+           comparison.Indexes.Count < 2 OrElse comparison.Indexes.Count > 8 Then
+            Throw New InvalidOperationException(
+                "Batch SHA-256 requires a completed mounted-file comparison.")
+        End If
+        If maxPaths < 1 OrElse maxReadBytes < 1 Then
+            Throw New ArgumentOutOfRangeException(NameOf(maxPaths))
+        End If
+        Dim selected As New List(Of Row)()
+        Dim totalBytes As Long = 0
+        For Each item In visible
+            If item Is Nothing OrElse item.Kind <> "Files" OrElse
+               item.State <> "Present in all" OrElse
+               item.PresentCount <> comparison.Indexes.Count Then Continue For
+            Dim first As String = Nothing
+            If Not item.Values.TryGetValue(comparison.Indexes(0), first) OrElse
+               Not first.EndsWith(" bytes", StringComparison.Ordinal) Then Continue For
+            Dim size As Long
+            If Not Long.TryParse(first.Substring(0, first.Length - 6),
+                                 NumberStyles.None, CultureInfo.InvariantCulture, size) OrElse
+               size < 0 Then Continue For
+            If comparison.Indexes.Any(Function(i)
+                    Return Not item.Values.ContainsKey(i) OrElse
+                           Not String.Equals(item.Values(i), first, StringComparison.Ordinal)
+               End Function) Then Continue For
+            If selected.Count >= maxPaths Then
+                Throw New InvalidOperationException(
+                    "More than " & maxPaths.ToString() &
+                    " same-size files match the filters. Narrow Search or Result first.")
+            End If
+            If size > (maxReadBytes - totalBytes) \ comparison.Indexes.Count Then
+                Throw New InvalidOperationException(
+                    "Visible files exceed the 1 GiB SHA-256 read budget. " &
+                    "Narrow Search or Result first.")
+            End If
+            totalBytes += size * comparison.Indexes.Count
+            selected.Add(item)
+        Next
+        Return selected
+    End Function
+
+    ' Inspect mount registrations only once per batch, not once per file.
+    ' Return an all-or-nothing list: cancellation and file changes must not
+    ' replace half of the comparison with partially verified hash values.
+    Public Shared Function VerifyFileHashesBatch(report As Wim360Reader.WimReport,
+                            indexes As IEnumerable(Of Integer),
+                            rows As IEnumerable(Of Row),
+                            token As CancellationToken,
+                            Optional progress As IProgress(Of String) = Nothing) As List(Of Row)
+        If report Is Nothing Then Throw New ArgumentNullException(NameOf(report))
+        Dim chosen = SelectedIndexes(report, indexes)
+        Dim descriptor As New Result With {
+            .Mode = "Mounted file paths / sizes",
+            .Indexes = chosen.Select(Function(x) x.Index).ToList()
+        }
+        Dim candidates = PlanHashBatch(descriptor, rows)
+        If candidates.Count = 0 Then
+            Throw New InvalidOperationException(
+                "No matching same-size files exist in every index. " &
+                "Choose All results or Exists in all, then narrow Search.")
+        End If
+        token.ThrowIfCancellationRequested()
+        Dim fresh = Wim360Reader.Inspect(report.ImageFile)
+        Dim current = SelectedIndexes(fresh, chosen.Select(Function(x) x.Index))
+        Dim verified As New List(Of Row)()
+        For Each item In candidates
+            token.ThrowIfCancellationRequested()
+            If progress IsNot Nothing Then
+                progress.Report("SHA-256 " & (verified.Count + 1).ToString() &
+                    "/" & candidates.Count.ToString() & ": " & item.Name)
+            End If
+            verified.Add(VerifyFileHashesCore(report.ImageFile, current, item, token))
+        Next
+        Return verified
+    End Function
+
+    Private Shared Function VerifyFileHashesCore(imageFile As String,
+                          current As List(Of Wim360Reader.ImageInfo),
+                          original As Row, token As CancellationToken) As Row
         If original Is Nothing OrElse
            Not String.Equals(original.Kind, "Files", StringComparison.OrdinalIgnoreCase) Then
             Throw New ArgumentException("Choose a file row to verify by SHA-256.")
@@ -209,55 +304,94 @@ Public NotInheritable Class Wim360IndexComparer
            original.Name.IndexOf(ChrW(0)) >= 0 Then
             Throw New InvalidOperationException("Invalid relative file path.")
         End If
-        Dim chosen = SelectedIndexes(report, indexes)
-        Dim fresh = Wim360Reader.Inspect(report.ImageFile)
-        Dim current = SelectedIndexes(fresh, chosen.Select(Function(x) x.Index))
+        Dim segments = original.Name.Split(
+            New Char() {Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar},
+            StringSplitOptions.RemoveEmptyEntries)
+        If segments.Length = 0 OrElse segments.Any(Function(x) x = "." OrElse x = "..") Then
+            Throw New InvalidOperationException("Invalid relative file path.")
+        End If
         Dim records As New List(Of Item)()
         For Each image In current
             token.ThrowIfCancellationRequested()
             If Not original.Values.ContainsKey(image.Index) Then Continue For
             If Not image.MountStatus.StartsWith("Mounted", StringComparison.OrdinalIgnoreCase) OrElse
-               String.IsNullOrWhiteSpace(image.MountFolder) Then
+               String.IsNullOrWhiteSpace(image.MountFolder) OrElse
+               Not Directory.Exists(image.MountFolder) Then
                 Throw New InvalidOperationException(
                     "Index " & image.Index.ToString() &
                     " is no longer mounted. Refresh the comparison.")
             End If
             Dim basePath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(image.MountFolder))
-            Dim rootPrefix = basePath & Path.DirectorySeparatorChar
+            Dim rootPrefix = If(Path.EndsInDirectorySeparator(basePath),
+                                basePath, basePath & Path.DirectorySeparatorChar)
             Dim fullName = Path.GetFullPath(Path.Combine(basePath, original.Name))
             If Not fullName.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase) OrElse
                Not File.Exists(fullName) Then
                 Throw New InvalidOperationException(
                     "A file has moved or is outside the mounted image. Recompare the indexes.")
             End If
+            ' Reject junctions or symlinks in *parent* folders as well as the file.
+            ' A folder swapped for a junction since listing must not let a
+            ' read-only verification escape the selected mount directory.
+            Dim parent = Path.GetDirectoryName(fullName)
+            While Not String.Equals(parent, basePath, StringComparison.OrdinalIgnoreCase)
+                If String.IsNullOrEmpty(parent) OrElse
+                   Not parent.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase) OrElse
+                   (File.GetAttributes(parent) And FileAttributes.ReparsePoint) = FileAttributes.ReparsePoint Then
+                    Throw New InvalidOperationException(
+                        "SHA-256 verification excludes reparse points and paths outside the mount.")
+                End If
+                parent = Path.GetDirectoryName(parent)
+            End While
             If (File.GetAttributes(fullName) And FileAttributes.ReparsePoint) = FileAttributes.ReparsePoint Then
                 Throw New InvalidOperationException(
                     "SHA-256 verification intentionally excludes reparse points.")
             End If
+            Dim fileInfo As New FileInfo(fullName)
+            Dim initialSize As Long = fileInfo.Length
+            Dim initialWriteTime = fileInfo.LastWriteTimeUtc
+            Dim recordedValue = original.Values(image.Index)
+            If recordedValue.EndsWith(" bytes", StringComparison.Ordinal) Then
+                Dim recordedSize As Long
+                If Not Long.TryParse(recordedValue.Substring(0, recordedValue.Length - 6),
+                                     NumberStyles.None, CultureInfo.InvariantCulture,
+                                     recordedSize) OrElse recordedSize <> initialSize Then
+                    Throw New InvalidOperationException(
+                        "A file size changed since the comparison. Run Compare indexes again.")
+                End If
+            End If
             Dim hashBytes As Byte()
+            Dim totalRead As Long = 0
             Using stream As New FileStream(fullName, FileMode.Open, FileAccess.Read,
-                                           FileShare.ReadWrite Or FileShare.Delete)
+                                           FileShare.Read)
                 Using hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256)
                     Dim buffer(131071) As Byte
                     While True
                         token.ThrowIfCancellationRequested()
                         Dim read = stream.Read(buffer, 0, buffer.Length)
                         If read <= 0 Then Exit While
+                        totalRead += read
                         hash.AppendData(buffer, 0, read)
                     End While
                     hashBytes = hash.GetHashAndReset()
                 End Using
             End Using
+            fileInfo.Refresh()
+            If totalRead <> initialSize OrElse fileInfo.Length <> initialSize OrElse
+               fileInfo.LastWriteTimeUtc <> initialWriteTime Then
+                Throw New InvalidOperationException(
+                    "A file changed while hashing. Refresh the comparison.")
+            End If
             records.Add(New Item With {
                 .Index = image.Index, .Kind = "Files", .Key = original.Name,
                 .Value = Convert.ToHexString(hashBytes)
             })
         Next
-        Dim compared = CompareRecords(report.ImageFile, "SHA-256 verification",
-            chosen.Select(Function(x) x.Index), records)
+        Dim compared = CompareRecords(imageFile, "SHA-256 verification",
+            current.Select(Function(x) x.Index), records)
         Dim checkedRow = compared.Rows.Single()
-        checkedRow.Notes = "SHA-256 verified for the available copies at scan time. " &
-            "Absent indexes remain absent. Large files may take time to hash."
+        checkedRow.Notes = "SHA-256 verified for available mounted files. " &
+            "Other paths still compare presence and size only."
         Return checkedRow
     End Function
 

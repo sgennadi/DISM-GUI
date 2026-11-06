@@ -22,6 +22,9 @@ Public NotInheritable Class Wim360CompareIndexesForm
     Private ReadOnly compareButton As Button
     Private ReadOnly exportButton As Button
     Private ReadOnly hashButton As Button
+    Private ReadOnly hashMenu As ContextMenuStrip
+    Private ReadOnly hashSingleMenuItem As ToolStripMenuItem
+    Private ReadOnly hashBatchMenuItem As ToolStripMenuItem
     Private ReadOnly closeButton As Button
     Private ReadOnly summaryLabel As Label
     Private ReadOnly hintLabel As Label
@@ -361,12 +364,21 @@ Public NotInheritable Class Wim360CompareIndexesForm
         ModernTheme.StyleButton(compareButton, "primary")
         actions.Controls.Add(compareButton, If(stackedLayout, 0, 1), 0)
         hashButton = New Button With {
-            .Name = "btn360IndexCompareHash", .Text = "Verify SHA-256",
+            .Name = "btn360IndexCompareHash", .Text = "SHA-256...",
             .Dock = DockStyle.Fill, .Margin = New Padding(4, 7, 6, 4),
             .Enabled = False
         }
         ModernTheme.StyleButton(hashButton, "secondary")
+        detailsTip.SetToolTip(hashButton,
+            "Verify the selected mounted file or a bounded batch of filtered same-size files.")
         actions.Controls.Add(hashButton, If(stackedLayout, 1, 2), 0)
+        hashMenu = New ContextMenuStrip()
+        hashSingleMenuItem = New ToolStripMenuItem("Verify selected file")
+        hashBatchMenuItem = New ToolStripMenuItem("Verify filtered same-size files (max 50)")
+        hashMenu.Items.Add(hashSingleMenuItem)
+        hashMenu.Items.Add(hashBatchMenuItem)
+        AddHandler hashSingleMenuItem.Click, AddressOf HashSingleClicked
+        AddHandler hashBatchMenuItem.Click, AddressOf HashBatchClicked
         exportButton = New Button With {
             .Name = "btn360IndexCompareCsv", .Text = If(stackedLayout, "Export CSV", "Export filtered CSV"),
             .Dock = DockStyle.Fill, .Margin = New Padding(4, 7, 6, 4),
@@ -425,6 +437,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
         AddHandler Me.FormClosed, Sub(sender, e)
             searchDelay.Stop()
             searchDelay.Dispose()
+            hashMenu.Dispose()
         End Sub
         WindowGeometry.Install(Me, "Software\DISMGUI\Wim360IndexComparison")
 
@@ -532,15 +545,26 @@ Public NotInheritable Class Wim360CompareIndexesForm
     End Sub
 
     Private Sub UpdateHashButton()
-        hashButton.Enabled = Not working AndAlso
-            comparison IsNot Nothing AndAlso
-            comparison.Mode = "Mounted file paths / sizes" AndAlso
+        Dim available = Not working AndAlso comparison IsNot Nothing AndAlso
+            comparison.Mode = "Mounted file paths / sizes"
+        hashSingleMenuItem.Enabled = available AndAlso
             grid.SelectedRows.Count > 0 AndAlso grid.SelectedRows(0).Index >= 0 AndAlso
             grid.SelectedRows(0).Index < visibleRows.Count AndAlso
             visibleRows(grid.SelectedRows(0).Index).Kind = "Files"
+        hashBatchMenuItem.Enabled = available AndAlso visibleRows.Any(Function(x)
+            Return x.Kind = "Files" AndAlso x.State = "Present in all" AndAlso
+                x.PresentCount = comparison.Indexes.Count AndAlso
+                x.At(comparison.Indexes(0)).EndsWith(" bytes", StringComparison.Ordinal)
+        End Function)
+        hashButton.Enabled = hashSingleMenuItem.Enabled OrElse hashBatchMenuItem.Enabled
     End Sub
 
-    Private Async Sub HashClicked(sender As Object, e As EventArgs)
+    Private Sub HashClicked(sender As Object, e As EventArgs)
+        If Not hashButton.Enabled OrElse working Then Return
+        hashMenu.Show(hashButton, New Point(0, hashButton.Height))
+    End Sub
+
+    Private Async Sub HashSingleClicked(sender As Object, e As EventArgs)
         If working OrElse comparison Is Nothing OrElse
            comparison.Mode <> "Mounted file paths / sizes" OrElse
            grid.SelectedRows.Count = 0 Then Return
@@ -577,6 +601,108 @@ Public NotInheritable Class Wim360CompareIndexesForm
             ErrorDiagnostics.RememberFailure("WIM 360 SHA-256 verification", ex)
             If Not Me.IsDisposed Then
                 summaryLabel.Text = "Unable to verify SHA-256."
+                hintLabel.Text = ex.Message
+                detailsTip.SetToolTip(hintLabel, ex.Message)
+            End If
+        Finally
+            If Object.ReferenceEquals(job, tokenSource) Then job = Nothing
+            tokenSource.Dispose()
+            working = False
+            If Not Me.IsDisposed Then
+                compareButton.Text = If(Me.Font.Height / 17.0F > 1.15F,
+                                        "Compare indexes", "Compare selected indexes")
+                compareButton.Enabled = True
+                exportButton.Enabled = comparison IsNot Nothing
+                selectedIndexes.Enabled = True
+                modeBox.Enabled = True
+                UpdateHashButton()
+            End If
+        End Try
+    End Sub
+
+
+    Private Async Sub HashBatchClicked(sender As Object, e As EventArgs)
+        If working OrElse comparison Is Nothing OrElse
+           comparison.Mode <> "Mounted file paths / sizes" Then Return
+        Dim candidateRows As List(Of Wim360IndexComparer.Row)
+        Try
+            candidateRows = Wim360IndexComparer.PlanHashBatch(comparison, visibleRows)
+            If candidateRows.Count = 0 Then
+                MessageBox.Show(Me, "No same-size files are present in all selected indexes " &
+                    "under the current filters. Change Result or Search and retry.",
+                    "WIM 360 - SHA-256", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                Return
+            End If
+        Catch ex As InvalidOperationException
+            MessageBox.Show(Me, ex.Message, "WIM 360 - SHA-256",
+                            MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End Try
+        If MessageBox.Show(Me,
+            "Verify SHA-256 for " & candidateRows.Count.ToString("N0") &
+            " filtered files across " & comparison.Indexes.Count.ToString() &
+            " mounted indexes?" & Environment.NewLine & Environment.NewLine &
+            "Read-only. Maximum: 50 paths / 1 GiB combined reads." &
+            Environment.NewLine &
+            "This can require substantial disk I/O. Cancel scan stops between read blocks." &
+            Environment.NewLine &
+            "No partial results are applied if the scan fails or is canceled.",
+            "WIM 360 - Batch SHA-256", MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) <> DialogResult.Yes Then Return
+
+        Dim selected = comparison.Indexes.ToArray()
+        working = True
+        compareButton.Text = "Cancel scan"
+        compareButton.Enabled = True
+        hashButton.Enabled = False
+        exportButton.Enabled = False
+        selectedIndexes.Enabled = False
+        modeBox.Enabled = False
+        summaryLabel.Text = "Starting bounded SHA-256 verification..."
+        Dim tokenSource As New CancellationTokenSource()
+        job = tokenSource
+        Dim progress As IProgress(Of String) = New Progress(Of String)(Sub(message)
+            If Not Me.IsDisposed AndAlso Not tokenSource.IsCancellationRequested Then
+                summaryLabel.Text = message
+            End If
+        End Sub)
+        Try
+            Dim verified = Await Task.Run(Function()
+                Return Wim360IndexComparer.VerifyFileHashesBatch(
+                    source, selected, candidateRows, tokenSource.Token, progress)
+            End Function)
+            If Me.IsDisposed OrElse tokenSource.IsCancellationRequested Then Return
+
+            ' Validate every replacement before modifying the displayed comparison.
+            Dim replacements As New Dictionary(Of Integer, Wim360IndexComparer.Row)()
+            For Each checkedRow In verified
+                Dim index = comparison.Rows.FindIndex(Function(x)
+                    Return x.Kind = checkedRow.Kind AndAlso
+                           String.Equals(x.Name, checkedRow.Name,
+                                         StringComparison.OrdinalIgnoreCase)
+                End Function)
+                If index < 0 OrElse replacements.ContainsKey(index) Then
+                    Throw New InvalidOperationException(
+                        "Comparison changed while verifying hashes. Run Compare indexes again.")
+                End If
+                replacements.Add(index, checkedRow)
+            Next
+            Dim completeRows = comparison.Rows.ToList()
+            For Each replacement In replacements
+                completeRows(replacement.Key) = replacement.Value
+            Next
+            comparison.Rows = completeRows
+            ApplyFilter()
+            summaryLabel.Text = "SHA-256 checked for " & verified.Count.ToString("N0") &
+                " paths; results reflect file bytes, not merely equal sizes."
+            hintLabel.Text = "Only verified rows contain SHA-256 values. " &
+                "All remaining rows still compare path presence and file sizes."
+        Catch ex As OperationCanceledException
+            If Not Me.IsDisposed Then summaryLabel.Text = "Batch SHA-256 canceled; no partial hashes applied."
+        Catch ex As Exception
+            ErrorDiagnostics.RememberFailure("WIM 360 batch SHA-256 verification", ex)
+            If Not Me.IsDisposed Then
+                summaryLabel.Text = "Batch SHA-256 failed; no partial hashes applied."
                 hintLabel.Text = ex.Message
                 detailsTip.SetToolTip(hintLabel, ex.Message)
             End If

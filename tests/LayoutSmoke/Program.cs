@@ -333,6 +333,50 @@ internal static class LayoutSmoke
                 allPresent.Any(x => x.Name.EndsWith("common.dll")),
                 "Exists in all must include different-size files still present everywhere");
 
+        // A same-size file may still have different bytes. Bound the number
+        // and total read size before any hashing or mount inspection begins.
+        var hashPlan = Wim360IndexComparer.PlanHashBatch(comparison, comparison.Rows);
+        Require(hashPlan.Count == 1 && hashPlan[0].Name.EndsWith("common.dll"),
+                "SHA-256 batch may only select same-size files present in every index");
+        Require(Wim360IndexComparer.PlanHashBatch(comparison, comparison.Rows,
+                maxPaths: 1, maxReadBytes: 300).Count == 1,
+                "SHA-256 byte budget must count all three mounted indexes");
+        bool byteBudgetRejected = false;
+        try
+        {
+            Wim360IndexComparer.PlanHashBatch(comparison, comparison.Rows,
+                maxPaths: 1, maxReadBytes: 299);
+        }
+        catch (InvalidOperationException) { byteBudgetRejected = true; }
+        Require(byteBudgetRejected,
+                "SHA-256 batch must reject a budget too small for all selected indexes");
+        var extraHashRow = new Wim360IndexComparer.Row {
+            Kind = "Files", Name = @"Windows\System32\other.dll",
+            State = "Present in all", PresentCount = 3,
+            Values = new System.Collections.Generic.Dictionary<int, string> {
+                [1] = "1 bytes", [2] = "1 bytes", [3] = "1 bytes"
+            }
+        };
+        bool pathLimitRejected = false;
+        try
+        {
+            Wim360IndexComparer.PlanHashBatch(comparison,
+                hashPlan.Concat(new[] { extraHashRow }), maxPaths: 1);
+        }
+        catch (InvalidOperationException) { pathLimitRejected = true; }
+        Require(pathLimitRejected,
+                "SHA-256 batch must not silently truncate results at its file-count limit");
+        var changedSize = new Wim360IndexComparer.Row {
+            Kind = "Files", Name = @"Windows\System32\changed.dll",
+            State = "Different", PresentCount = 3,
+            Values = new System.Collections.Generic.Dictionary<int, string> {
+                [1] = "1 bytes", [2] = "2 bytes", [3] = "1 bytes"
+            }
+        };
+        Require(Wim360IndexComparer.PlanHashBatch(comparison,
+                    new[] { changedSize }).Count == 0,
+                "Batch hash planner must exclude known different-size files");
+
         // A realistic multi-index catalog must be merged in a single pass.
         // This deliberately yields records lazily instead of materializing
         // a cross-product of all index paths in the test harness.
@@ -480,6 +524,17 @@ internal static class LayoutSmoke
                     $"visible={clipped.Height}x{clipped.Width}, " +
                     $"required={footerButton.Height}x{footerButton.Width}");
         }
+        // A footer can technically be visible while its caption is clipped.
+        // Protect the compact SHA-256 menu label at simulated 175% DPI.
+        var hashAction = Find(dialog, "btn360IndexCompareHash") as Button;
+        Require(hashAction is not null && hashAction.Text == "SHA-256...",
+                "SHA-256 menu must have a concise, discoverable caption");
+        var hashCaption = TextRenderer.MeasureText(hashAction!.Text, hashAction.Font,
+            new Size(2000, 80), TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
+        Require(hashCaption.Width + hashAction.Padding.Horizontal + 8 <=
+                hashAction.ClientSize.Width,
+                "SHA-256 menu caption is clipped horizontally at high DPI");
+
         var thirdIndexRect = matrix.GetColumnDisplayRectangle(5, false);
         Require(thirdIndexRect.Width > 80 &&
                 thirdIndexRect.Right <= matrix.ClientSize.Width,

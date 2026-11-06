@@ -121,6 +121,29 @@ For example, for `install.wim` with indexes 1, 2 and 3, first use
 or calculate SHA-256, mount the selected indexes in separate read-only
 directories and switch to **Files + sizes (already mounted)**.
 
+### Bounded batch SHA-256 for mounted indexes (next candidate)
+
+In **WIM 360 → Compare indexes**, select **Files + sizes (already mounted)**
+then click **SHA-256...**. Choose **Verify selected file** for one
+highlighted file, or **Verify filtered same-size files** for files present in
+all selected indexes with equal reported sizes. The latter uses the active
+Type / Result / Search filters. Narrow the filters to **at most 50 matching
+files**, with **at most 1 GiB of total file reads across all indexes**. The
+app rejects larger batches rather than silently truncating the results.
+
+The user must confirm the batch; progress appears in the status line and
+**Cancel scan** stops at the next cancellation check. No image is mounted,
+modified, committed, or discarded by hashing. Verified rows replace file
+sizes with SHA-256 fingerprints, and other rows continue to show path and
+size differences. Batch results are applied only if all selected files
+were successfully checked. If files disappear, change size during reading,
+become reparse points or escape their expected mount folder, the whole
+batch fails without displaying partial hashes. This protects against
+misleading claims that equal file sizes prove equal file contents.
+
+**Release 4.3.14:** these read-only hash options are part of the tested
+portable app. Version 4.3.13 remains available unchanged as a fallback.
+
 For an index that is **already mounted**, select it and click **Scan mounted
 index**. WIM 360 validates the exact image file, index and mount directory,
 then reads the driver inventory (including inbox drivers) and Windows package
@@ -265,7 +288,7 @@ does not mark the local event as submitted. No background upload occurs.
 There is **no required collector EXE, DLL, installer or GitHub token**.
 The original DISM diagnostics, support contact and manual Issue draft remain.
 See [embedded integration details](docs/UNIVERSAL-DIAGNOSTICS.md).
-Current stable version: **4.3.13**. Earlier releases remain available.
+Current stable version: **4.3.14**. Earlier releases remain available.
 
 ## Other dialogs: 175% horizontal-scroll fixes (4.3.10 test branch)
 
