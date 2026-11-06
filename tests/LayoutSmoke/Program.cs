@@ -840,7 +840,22 @@ internal static class LayoutSmoke
                         submittedButton is not null && pendingButton is not null &&
                         queueGrid.Rows.Count == 2,
                     "The saved diagnostics queue must load the two test events");
-                var queueHeaderFont = queueGrid!.ColumnHeadersDefaultCellStyle.Font
+                var dateCell = Convert.ToString(queueGrid!.Rows[0].Cells[0].Value);
+                var fullTimestamp = queueGrid.Rows[0].Cells[0].ToolTipText;
+                Require(dateCell is not null && dateCell.Length == 16 &&
+                        dateCell[10] == ' ' && !dateCell.Contains("[IPv6]") &&
+                        fullTimestamp.Length == 20 &&
+                        fullTimestamp.Contains('T') && fullTimestamp.EndsWith("Z"),
+                    "Queue list must show readable compact UTC with full ISO timestamp in tooltip");
+                var copyAction = Find(saved, "btnUniversalQueueCopy") as Button;
+                var exportAction = Find(saved, "btnUniversalQueueExport") as Button;
+                var folderAction = Find(saved, "btnUniversalQueueFolder") as Button;
+                Require(copyAction?.Text == "Copy JSON" &&
+                        exportAction?.Text == "Export JSON..." &&
+                        folderAction?.Text == "Open folder" &&
+                        draftButton!.Text == "GitHub draft...",
+                    "Saved diagnostics action captions must fit small high-DPI windows");
+                var queueHeaderFont = queueGrid.ColumnHeadersDefaultCellStyle.Font
                     ?? queueGrid.Font;
                 var headerHeight = TextRenderer.MeasureText("Date (UTC)",
                     queueHeaderFont, new Size(1600, 120),
