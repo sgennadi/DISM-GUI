@@ -1688,6 +1688,12 @@ internal static class LayoutSmoke
                 "Device=\"Contoso Ethernet\"",
                 ""
             }));
+            // Create a deliberately unsigned CAT; tests must not claim it is
+            // trusted. Package manifests can be checked without any writes.
+            var catalog = System.IO.Path.Combine(temp, "contoso.cat");
+            var payload = System.IO.Path.Combine(temp, "contoso.sys");
+            System.IO.File.WriteAllText(catalog, "CI unsigned catalog fixture");
+            System.IO.File.WriteAllText(payload, "CI driver payload v1");
             var source = DriverStudioEngine.ReadInf(driver);
             Require(source.InfName == "contoso.inf" &&
                     source.Version == "2.1.4.0" &&
@@ -1696,8 +1702,48 @@ internal static class LayoutSmoke
                     source.DriverDate == "11/03/2026" &&
                     source.HardwareIds.Any(x => x.Contains("VEN_1234")) &&
                     source.Sha256.Length == 64 &&
-                    string.IsNullOrEmpty(source.ValidationError),
-                    "INF parser lost DriverVer, strings, provider, class, hardware IDs or hash");
+                    string.IsNullOrEmpty(source.ValidationError) &&
+                    source.Architectures.Contains("AMD64") &&
+                    source.CatalogFiles["CatalogFile"] == "contoso.cat",
+                    "INF parser lost DriverVer, strings, CAT, architecture, HWIDs or hash");
+
+            var initialAudit = DriverStudioPackageAudit.Audit(source, "x64", checkSignature: false);
+            Require(initialAudit.FileCount == 3 &&
+                    initialAudit.ManifestSha256.Length == 64 &&
+                    initialAudit.CatalogName == "contoso.cat" &&
+                    initialAudit.CatalogStatus == "Not checked" &&
+                    !initialAudit.CanInstall,
+                    "Unsigned or unchecked CAT must never authorize DISM writes");
+            var unchangedAudit = DriverStudioPackageAudit.Audit(source, "AMD64", checkSignature: false);
+            Require(initialAudit.ManifestSha256 == unchangedAudit.ManifestSha256,
+                    "Read-only package hash must be stable across repeated audits");
+            System.IO.File.AppendAllText(payload, "tampered");
+            var tamperedAudit = DriverStudioPackageAudit.Audit(source, "x64", checkSignature: false);
+            Require(initialAudit.ManifestSha256 != tamperedAudit.ManifestSha256,
+                    "Package audit failed to detect a modified non-INF payload");
+            System.IO.File.WriteAllText(payload, "CI driver payload v1");
+            var restoredAudit = DriverStudioPackageAudit.Audit(source, "x64", checkSignature: false);
+            Require(restoredAudit.ManifestSha256 == initialAudit.ManifestSha256,
+                    "Restoring exact package bytes should restore the package fingerprint");
+            System.IO.File.WriteAllText(System.IO.Path.Combine(temp, "extra.dll"), "new payload");
+            var addedAudit = DriverStudioPackageAudit.Audit(source, "x64", checkSignature: false);
+            Require(initialAudit.ManifestSha256 != addedAudit.ManifestSha256,
+                    "Adding a payload file must invalidate a saved driver package fingerprint");
+            System.IO.File.Delete(System.IO.Path.Combine(temp, "extra.dll"));
+            System.IO.File.Delete(catalog);
+            var missingCatalog = DriverStudioPackageAudit.Audit(source, "x64", checkSignature: false);
+            Require(!missingCatalog.CanInstall &&
+                    missingCatalog.CatalogStatus == "Missing" &&
+                    missingCatalog.Warnings.Any(w => w.Contains("missing")),
+                    "Missing declared catalog must produce an explicit audit warning");
+            System.IO.File.WriteAllText(catalog, "CI unsigned catalog fixture");
+
+            var armOnly = DriverStudioEngine.ReadInf(driver);
+            armOnly.Architectures = new System.Collections.Generic.List<string> { "ARM64" };
+            Require(DriverStudioEngine.ArchitectureMismatch(armOnly, "x64") &&
+                    !DriverStudioEngine.ArchitectureMismatch(source, "x64") &&
+                    DriverStudioEngine.ArchitectureMismatch(source, "ARM64"),
+                    "Architecture hints must identify known target mismatches");
 
             var json = "[{\"InfName\":\"contoso.inf\",\"PublishedName\":\"oem8.inf\"," +
                 "\"Provider\":\"Contoso Corporation\",\"ClassName\":\"Net\"," +
@@ -1707,6 +1753,20 @@ internal static class LayoutSmoke
                     inventory[0].PublishedName == "oem8.inf" &&
                     !inventory[0].IsInbox,
                     "Driver Studio structured installed-driver inventory parse failed");
+            Require(DriverStudioInstaller.IsPresentInInventory(source, inventory) &&
+                    !DriverStudioInstaller.IsPresentInInventory(armOnly, new[] {
+                        new DriverStudioEngine.DriverPackage {
+                            InfName="other.inf", Provider="Contoso Corporation",
+                            ClassName="Net", Version="2.1.4.0",
+                            DriverDate="2026-11-03" }
+                    }),
+                    "Postflight installed driver verification must use source INF identity");
+            var mismatchedArchitecture = DriverStudioEngine.CompareCandidates(
+                new[] { armOnly }, Array.Empty<DriverStudioEngine.DriverPackage>(),
+                true, "x64");
+            Require(mismatchedArchitecture[0].Status == "Review" &&
+                    !mismatchedArchitecture[0].Selected,
+                    "An explicitly incompatible INF architecture must block automatic selection");
             var same = DriverStudioEngine.CompareCandidates(new[] { source }, inventory, true);
             Require(same[0].Status == "Same version" && !same[0].Selected,
                     "Same version and date must be recognized and skipped by default");
@@ -1801,6 +1861,7 @@ internal static class LayoutSmoke
                     "Selective install must build a single INF command without unsafe flags");
             Console.WriteLine("PASS selective import preflight, stale inventory/hash rejection and safe DISM args");
             Console.WriteLine("PASS Driver Studio INF parsing, duplicates, versions and inventory safety");
+            Console.WriteLine("PASS read-only full package manifests, CAT warnings, tamper and architecture checks");
             return (source, inventory[0]);
         }
         finally
