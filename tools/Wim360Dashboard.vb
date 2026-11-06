@@ -74,7 +74,7 @@ Public NotInheritable Class Wim360Dashboard
         ' Scroll rather than truncate content on high-DPI or short viewports.
         Dim factor As Single = Math.Max(1.0F, Me.Font.Height / 16.0F)
         Dim stackSource As Boolean = factor > 1.15F
-        For Each height As Integer In {62, 66, 85, 36, 190, 205, 163, 314}
+        For Each height As Integer In {62, 66, 85, 36, 190, 205, 163, 374}
             dashboardLayout.RowStyles.Add(New RowStyle(SizeType.Absolute,
                 CInt(Math.Ceiling(height * factor))))
         Next
@@ -296,12 +296,12 @@ Public NotInheritable Class Wim360Dashboard
         info.Controls.Add(details, 0, 1)
 
         Dim actions As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 5,
+            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 6,
             .Margin = New Padding(0, 5, 0, 0),
             .BackColor = Color.White
         }
-        For i As Integer = 1 To 5
-            actions.RowStyles.Add(New RowStyle(SizeType.Percent, 20.0F))
+        For i As Integer = 1 To 6
+            actions.RowStyles.Add(New RowStyle(SizeType.Percent, CSng(100.0 / 6.0)))
         Next
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
@@ -409,6 +409,23 @@ Public NotInheritable Class Wim360Dashboard
             End Using
         End Sub
         actions.Controls.Add(compareOther, 1, 4)
+
+        Dim health As New Button With {
+            .Name = "btn360MountHealth", .Text = "Mount health",
+            .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 9, 4)
+        }
+        ModernTheme.StyleButton(health, "secondary")
+        AddHandler health.Click, Sub(sender, e)
+            Using viewer As New WimMountHealthForm(fileBox.Text.Trim())
+                viewer.ShowDialog(Me.FindForm())
+            End Using
+        End Sub
+        actions.Controls.Add(health, 0, 5)
+        Dim healthHint = MakeText("Mount status + local recovery journal",
+                                  9.0F, False, ModernTheme.Muted)
+        healthHint.Name = "lbl360MountHealthHint"
+        healthHint.Margin = New Padding(2, 2, 0, 2)
+        actions.Controls.Add(healthHint, 1, 5)
 
         AddHandler fileBox.TextChanged, Sub(sender, e)
             overviewText.Text = "File selection changed. Click Inspect to refresh the metadata overview."

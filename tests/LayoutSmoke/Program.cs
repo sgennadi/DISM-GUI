@@ -914,6 +914,131 @@ internal static class LayoutSmoke
         Console.WriteLine("PASS WIM 360 Inspect automatic metadata overview and compare guidance");
     }
 
+    private static void VerifyWimMountSafety(Form owner)
+    {
+        var temp = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+            "DISMGUI-Mount-Safety-" + Guid.NewGuid().ToString("N"));
+        var previous = Environment.GetEnvironmentVariable("DISMGUI_TEST_MOUNT_JOURNAL");
+        System.IO.Directory.CreateDirectory(temp);
+        Environment.SetEnvironmentVariable("DISMGUI_TEST_MOUNT_JOURNAL",
+            System.IO.Path.Combine(temp, "journal"));
+        try
+        {
+            var imagePath = System.IO.Path.Combine(temp, "test.wim");
+            System.IO.File.WriteAllText(imagePath, "synthetic fixture - no real mount");
+            var mount = System.IO.Path.Combine(temp, "mount");
+            System.IO.Directory.CreateDirectory(mount);
+            var report = new Wim360Reader.WimReport { ImageFile = imagePath };
+            report.Images.Add(new Wim360Reader.ImageInfo {
+                Index = 1, Name = "Synthetic WIM 1",
+                MountFolder = mount, MountStatus = "Mounted (R/W)"
+            });
+            report.Images.Add(new Wim360Reader.ImageInfo {
+                Index = 2, Name = "Synthetic WIM 2",
+                MountFolder = mount, MountStatus = "Mounted (read-only)"
+            });
+            var writable = WimMountSafety.ValidateRegisteredTarget(report, 1,
+                mount, true);
+            Require(writable.Commit && writable.ImageIndex == 1 &&
+                    writable.MountStatus == "Mounted (R/W)" &&
+                    writable.MountFolder == mount,
+                    "WIM dismount preflight rejected a valid registered R/W target");
+            var readable = WimMountSafety.ValidateRegisteredTarget(report, 2,
+                mount, false);
+            Require(!readable.Commit && readable.ImageIndex == 2,
+                    "WIM read-only mount must support explicit Discard");
+            bool readOnlyCommitRejected = false;
+            try { WimMountSafety.ValidateRegisteredTarget(report, 2, mount, true); }
+            catch (InvalidOperationException) { readOnlyCommitRejected = true; }
+            Require(readOnlyCommitRejected,
+                    "Commit must be blocked for a read-only WIM mount");
+            var differentFolder = System.IO.Path.Combine(temp, "wrong-mount");
+            System.IO.Directory.CreateDirectory(differentFolder);
+            bool staleFolderRejected = false;
+            try { WimMountSafety.ValidateRegisteredTarget(report, 1,
+                      differentFolder, false); }
+            catch (InvalidOperationException) { staleFolderRejected = true; }
+            Require(staleFolderRejected, "Stale mount folder must prevent DISM");
+            bool wrongIndexRejected = false;
+            try { WimMountSafety.ValidateRegisteredTarget(report, 3, mount, false); }
+            catch (InvalidOperationException) { wrongIndexRejected = true; }
+            Require(wrongIndexRejected, "WIM index mismatch must prevent DISM");
+            report.Images[0].MountStatus = "Needs remount";
+            bool unsafeStateRejected = false;
+            try { WimMountSafety.ValidateRegisteredTarget(report, 1, mount, false); }
+            catch (InvalidOperationException) { unsafeStateRejected = true; }
+            Require(unsafeStateRejected,
+                    "Needs-remount state must fail closed, never run cleanup");
+            report.Images[0].MountStatus = "Mounted (R/W)";
+            var pending = WimMountSafety.BeginDismount(writable);
+            var first = WimMountSafety.RecentOperations();
+            Require(first.Count == 1 && first[0].Id == pending.Id &&
+                    first[0].State == "Pending" && first[0].Action == "Commit",
+                    "Safety journal must persist a pending Commit BEFORE DISM");
+            var interruption = WimMountSafety.RecentOperations()[0];
+            Require(interruption.FinishedUtc == null &&
+                    interruption.Detail.Contains("not yet verified"),
+                    "Interrupted Commit cannot be labeled successful");
+            WimMountSafety.FinishDismount(pending, false, "87",
+                "DISM returned an error; inspect mount manually");
+            var failed = WimMountSafety.RecentOperations()[0];
+            Require(failed.State == "Review required" &&
+                    failed.ExitCode == "87" &&
+                    failed.Detail.Contains("inspect mount manually"),
+                    "Failed DISM result must preserve an explicit review-required record");
+            var discard = WimMountSafety.BeginDismount(readable);
+            WimMountSafety.FinishDismount(discard, true, "0", "");
+            Require(WimMountSafety.RecentOperations().Count == 2 &&
+                    WimMountSafety.RecentOperations().Any(x =>
+                        x.Id == discard.Id && x.State == "Verified"),
+                    "Verified dismount must be distinguished from an interrupted operation");
+            var health = WimMountSafety.BuildHealthReport();
+            Require(health.Contains("MOUNT HEALTH") &&
+                    health.Contains("Review required") &&
+                    health.Contains("Commit") && health.Contains("Discard") &&
+                    health.Contains("Never automatically") == false &&
+                    health.Contains("Do not run /Cleanup-Mountpoints"),
+                    "Read-only mount health report must show all results and safe recovery guidance");
+            using var dialog = new WimMountHealthForm("");
+            dialog.Show(owner);
+            Application.DoEvents();
+            var reportBox = Find(dialog, "txtMountHealthReport") as TextBox;
+            var refresh = Find(dialog, "btnMountHealthRefresh") as Button;
+            var copy = Find(dialog, "btnMountHealthCopy") as Button;
+            var close = Find(dialog, "btnMountHealthClose") as Button;
+            Require(reportBox is not null && reportBox.ReadOnly &&
+                    reportBox.Multiline && reportBox.ScrollBars == ScrollBars.Both &&
+                    refresh is not null && copy is not null && close is not null,
+                    "WIM 360 Mount Health GUI must be read-only and contain refresh/copy/close");
+            var subtitle = Find(dialog, "lblMountHealthSubtitle") as Label;
+            var imageInput = Find(dialog, "txtMountHealthSource") as TextBox;
+            Require(subtitle is not null && imageInput is not null &&
+                    subtitle.Text.Contains("read-only"),
+                    "Mount Health must expose a clear read-only subtitle");
+            var subtitleMeasure = TextRenderer.MeasureText(subtitle!.Text, subtitle.Font,
+                new Size(2500, 120), TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
+            var subtitleBounds = subtitle.RectangleToScreen(subtitle.ClientRectangle);
+            var sourceBounds = imageInput!.RectangleToScreen(imageInput.ClientRectangle);
+            Require(subtitle.ClientSize.Height >= subtitle.Font.Height + 2 &&
+                    subtitleMeasure.Width + 4 <= subtitle.ClientSize.Width &&
+                    subtitleBounds.Bottom + 3 <= sourceBounds.Top,
+                    "Mount Health subtitle is clipped or overlaps the path field at high DPI");
+            VerifyReadableButton(refresh!, "WIM Mount Health refresh");
+            VerifyReadableButton(copy!, "WIM Mount Health copy");
+            VerifyReadableButton(close!, "WIM Mount Health close");
+            Snapshot(dialog, "DISM-GUI-WIM360-Mount-Health");
+            dialog.Close();
+            Console.WriteLine("PASS WIM dismount preflight, stale selection, read-only Commit " +
+                "rejection, pending/error/verified local journal and high-DPI health dialog");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("DISMGUI_TEST_MOUNT_JOURNAL", previous);
+            try { System.IO.Directory.Delete(temp, recursive: true); }
+            catch { /* Temporary safety-test fixture only. */ }
+        }
+    }
+
     private static void VerifyWimMetadata()
     {
         var report = Wim360Reader.ParseMetadataXml(
@@ -1907,6 +2032,7 @@ internal static class LayoutSmoke
             WimMountIntegration.VerifyLargeThreeIndexWim(root);
             WimMountIntegration.Verify(image, root);
             WimMountIntegration.VerifySplit(image, root);
+            WimMountIntegration.VerifyWritableCommitDiscard(image, root);
         }
         finally
         {
@@ -2171,6 +2297,7 @@ internal static class LayoutSmoke
             tabs!.SelectedIndex = 0;
             Application.DoEvents();
             VerifyWimMetadata();
+            VerifyWimMountSafety(form);
             VerifyThreeIndexComparison(form);
             VerifyCrossImageComparison(form);
             VerifyMountedAudit();
@@ -2260,6 +2387,11 @@ internal static class LayoutSmoke
             var auditWimButton = Find(dashboard, "btn360AuditMounted") as Button;
             Require(auditWimButton is not null && !auditWimButton.Enabled,
                     "Mounted audit must be disabled for an unmounted WIM index");
+            var mountHealth = Find(dashboard, "btn360MountHealth") as Button;
+            Require(mountHealth is not null && mountHealth.Enabled &&
+                    mountHealth.Text == "Mount health",
+                    "WIM 360 must expose read-only Mount Health even without a valid image");
+            VerifyReadableButton(mountHealth!, "WIM 360 Mount Health action");
             var inventoryButton = Find(dashboard, "btn360Inventory") as Button;
             Require(inventoryButton is not null && !inventoryButton.Enabled,
                     "WIM 360 inventory detail action must require a finished audit");

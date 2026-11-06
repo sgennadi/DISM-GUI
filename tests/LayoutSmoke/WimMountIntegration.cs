@@ -469,6 +469,150 @@ internal static class WimMountIntegration
                           "and unchanged WIM SHA-256.");
     }
 
+    // WRITE testing is strictly limited to a separate copy of a disposable
+    // CI-captured WIM. Nothing is written to the user's image, existing mounts,
+    // host Windows, or any production servicing store.
+    public static void VerifyWritableCommitDiscard(string disposableImage, string root)
+    {
+        if (Environment.GetEnvironmentVariable("DISMGUI_TEST_WIM_MOUNT") != "1")
+        {
+            Console.WriteLine("SKIP disposable WIM R/W Commit/Discard test (opt-in)");
+            return;
+        }
+        var rootPath = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) +
+                       Path.DirectorySeparatorChar;
+        var source = Path.GetFullPath(disposableImage);
+        if (!source.StartsWith(rootPath, StringComparison.OrdinalIgnoreCase) ||
+            !File.Exists(source))
+            throw new InvalidOperationException(
+                "Writable WIM tests only accept a previously captured disposable CI image.");
+        var writableImage = Path.Combine(root, "disposable-write-commit-discard.wim");
+        File.Copy(source, writableImage, overwrite: false);
+        var commitMount = Path.Combine(root, "rw-commit-mount");
+        var discardMount = Path.Combine(root, "rw-discard-mount");
+        var verificationMount = Path.Combine(root, "committed-readonly-verification");
+        Directory.CreateDirectory(commitMount);
+        Directory.CreateDirectory(discardMount);
+        Directory.CreateDirectory(verificationMount);
+
+        var oldJournal = Environment.GetEnvironmentVariable("DISMGUI_TEST_MOUNT_JOURNAL");
+        Environment.SetEnvironmentVariable("DISMGUI_TEST_MOUNT_JOURNAL",
+            Path.Combine(root, "rw-test-local-journal"));
+        bool activeCommit = false, activeDiscard = false, activeReadOnly = false;
+        try
+        {
+            void RequireRegistered(string expected)
+            {
+                for (int attempt = 0; attempt < 16; attempt++)
+                {
+                    var observed = Wim360Reader.Inspect(writableImage).Images.Single();
+                    if (observed.MountStatus == expected) return;
+                    Thread.Sleep(250);
+                }
+                throw new InvalidOperationException(
+                    "Expected registered mount state " + expected + " for disposable WIM.");
+            }
+            CheckDism(new[] { "/English", "/Mount-Image", "/ImageFile:" + writableImage,
+                "/Index:1", "/MountDir:" + commitMount }, 180000);
+            activeCommit = true;
+            RequireRegistered("Mounted (R/W)");
+            var token = WimMountSafety.ValidateDismount(
+                writableImage, "1", commitMount, commit: true);
+            bool wronglyAccepted = false;
+            try {
+                WimMountSafety.ValidateDismount(
+                    writableImage, "1", discardMount, commit: true);
+                wronglyAccepted = true;
+            } catch (InvalidOperationException) { }
+            if (wronglyAccepted)
+                throw new InvalidOperationException(
+                    "Unsafe preflight accepted an unrelated mount folder.");
+            File.WriteAllText(Path.Combine(commitMount, "added-by-disposable-ci.txt"),
+                "Committed only inside a throwaway WIM created during CI");
+            var pending = WimMountSafety.BeginDismount(token);
+            CheckDism(new[] { "/English", "/Unmount-Image",
+                "/MountDir:" + commitMount, "/Commit" }, 180000);
+            activeCommit = false;
+            if (!WimMountSafety.VerifyNoLongerMounted(token))
+                throw new InvalidOperationException(
+                    "DISM reported successful Commit but WIMGAPI still lists a mounted index.");
+            WimMountSafety.FinishDismount(pending, true, "0", "");
+
+            var committedHash = Digest(writableImage);
+            CheckDism(new[] { "/English", "/Mount-Image", "/ImageFile:" + writableImage,
+                "/Index:1", "/MountDir:" + discardMount }, 180000);
+            activeDiscard = true;
+            RequireRegistered("Mounted (R/W)");
+            if (!File.Exists(Path.Combine(discardMount, "added-by-disposable-ci.txt")))
+                throw new InvalidOperationException(
+                    "Committed data is absent after mounting the copied WIM a second time.");
+            File.WriteAllText(Path.Combine(discardMount, "should-not-persist-ci.txt"),
+                "Discarded, not committed");
+            var discardToken = WimMountSafety.ValidateDismount(
+                writableImage, "1", discardMount, commit: false);
+            var discardJournal = WimMountSafety.BeginDismount(discardToken);
+            CheckDism(new[] { "/English", "/Unmount-Image",
+                "/MountDir:" + discardMount, "/Discard" }, 180000);
+            activeDiscard = false;
+            if (!WimMountSafety.VerifyNoLongerMounted(discardToken))
+                throw new InvalidOperationException(
+                    "DISM reported successful Discard but mount is still registered.");
+            WimMountSafety.FinishDismount(discardJournal, true, "0", "");
+            if (committedHash != Digest(writableImage))
+                throw new InvalidOperationException(
+                    "Discard changed the disposable WIM bytes after a previously verified Commit.");
+
+            CheckDism(new[] { "/English", "/Mount-Image", "/ImageFile:" + writableImage,
+                "/Index:1", "/MountDir:" + verificationMount, "/ReadOnly" }, 180000);
+            activeReadOnly = true;
+            RequireRegistered("Mounted (read-only)");
+            if (!File.Exists(Path.Combine(verificationMount, "added-by-disposable-ci.txt")) ||
+                File.Exists(Path.Combine(verificationMount, "should-not-persist-ci.txt")))
+                throw new InvalidOperationException(
+                    "Commit/Discard persistence check failed inside the re-mounted WIM.");
+            var roToken = WimMountSafety.ValidateDismount(
+                writableImage, "1", verificationMount, commit: false);
+            CheckDism(new[] { "/English", "/Unmount-Image",
+                "/MountDir:" + verificationMount, "/Discard" }, 180000);
+            activeReadOnly = false;
+            if (!WimMountSafety.VerifyNoLongerMounted(roToken) ||
+                committedHash != Digest(writableImage))
+                throw new InvalidOperationException(
+                    "Read-only verification did not fully dismount or changed WIM contents.");
+            var records = WimMountSafety.RecentOperations();
+            if (records.Count != 2 || records.Any(x =>
+                    x.State != "Verified" || x.ExitCode != "0"))
+                throw new InvalidOperationException(
+                    "The two real DISM operations were not recorded as postflight-verified.");
+            Console.WriteLine("PASS actual disposable WIM /Commit, /Discard, " +
+                "postflight WIMGAPI, persisted/removed files, SHA-256 and recovery journal.");
+        }
+        finally
+        {
+            // On ANY failure, no directory is deleted until DISM confirms
+            // the corresponding test mount has been dismounted.
+            var cleanup = new System.Collections.Generic.List<Exception>();
+            foreach (var item in new[] {
+                (Path: verificationMount, Mounted: activeReadOnly),
+                (Path: discardMount, Mounted: activeDiscard),
+                (Path: commitMount, Mounted: activeCommit)
+            })
+            {
+                if (!item.Mounted) continue;
+                try {
+                    CheckDism(new[] { "/English", "/Unmount-Image",
+                        "/MountDir:" + item.Path, "/Discard" }, 180000);
+                }
+                catch (Exception ex) { cleanup.Add(ex); }
+            }
+            Environment.SetEnvironmentVariable("DISMGUI_TEST_MOUNT_JOURNAL", oldJournal);
+            if (cleanup.Count > 0)
+                throw new AggregateException(
+                    "A disposable test WIM mount could not be safely dismounted. " +
+                    "Manual inspection is required; do not delete it.", cleanup);
+        }
+    }
+
     public static void Verify(string image, string root)
     {
         if (Environment.GetEnvironmentVariable("DISMGUI_TEST_WIM_MOUNT") != "1")

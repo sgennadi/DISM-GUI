@@ -40,6 +40,8 @@ def main():
     helpers = '''    ' Persist last locations separately for each kind of picker.
     Private Const RecentKey As String = "Software\\DISMGUI\\RecentPaths"
     Private closeAfterUnmount As Boolean = False
+    Private activeDismountTarget As WimMountSafety.Target = Nothing
+    Private activeDismountJournal As WimMountSafety.OperationRecord = Nothing
 
     Private Function RecentDirectory(ByVal category As String) As String
         Try
@@ -112,35 +114,79 @@ def main():
     End Function
 
     Private Sub StartUnmount()
-        If BackgroundWorkerDisMount.IsBusy Then Return
+        If BackgroundWorkerDisMount.IsBusy OrElse BackgroundWorkerMount.IsBusy OrElse
+           BackgroundWorkerDISMCommand.IsBusy Then Return
         Dim commit = AskUnmountAction()
         If Not commit.HasValue Then Return
-        Dim folder = txtMount.Text.Trim().Trim(""""c)
-        If String.IsNullOrWhiteSpace(folder) OrElse Not System.IO.Directory.Exists(folder) Then
-            MessageBox.Show(Me, "Please select a valid mount folder.", "DISM GUI",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning)
+        Dim chosen As WimMountSafety.Target
+        Try
+            ' WIMGAPI registration is the source of truth, NOT old UI fields.
+            chosen = WimMountSafety.ValidateDismount(
+                txtWIM.Text, cmbIndex.Text, txtMount.Text, commit.Value)
+        Catch ex As Exception
+            RuntimeDiagnostics.RecordException("DISM dismount preflight", ex)
+            MessageBox.Show(Me,
+                "DISM was NOT started. Refresh WIM 360 / inspect the selected index." &
+                Environment.NewLine & ex.Message,
+                "Dismount safety check", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             Return
-        End If
-        blnDISMCommit = commit.Value
-        strFolderName = folder
-        strIndex = cmbIndex.Text
-        strWIM = txtWIM.Text
+        End Try
+        Try
+            ' Failure to persist the recovery journal prevents starting DISM.
+            activeDismountJournal = WimMountSafety.BeginDismount(chosen)
+        Catch ex As Exception
+            RuntimeDiagnostics.RecordException("DISM dismount journal", ex)
+            MessageBox.Show(Me, "DISM was NOT started because the local safety " &
+                "journal could not be written." & Environment.NewLine & ex.Message,
+                "Dismount safety check", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Return
+        End Try
+        activeDismountTarget = chosen
+        blnDISMCommit = chosen.Commit
+        strFolderName = chosen.MountFolder
+        strIndex = chosen.ImageIndex.ToString(
+            Globalization.CultureInfo.InvariantCulture)
+        strWIM = chosen.ImageFile
         txtOutput.Text = ""
+        strOutput = ""
         strDISMExitCode = ""
-        BackgroundWorkerDisMount.RunWorkerAsync()
+        Try
+            BackgroundWorkerDisMount.RunWorkerAsync()
+        Catch ex As Exception
+            RuntimeDiagnostics.RecordException("DISM dismount start", ex)
+            Try
+                WimMountSafety.FinishDismount(activeDismountJournal, False, "",
+                    "DISM worker failed to start: " & ex.GetType().Name)
+            Catch
+            End Try
+            activeDismountTarget = Nothing
+            activeDismountJournal = Nothing
+            MessageBox.Show(Me, "DISM was NOT started: " & ex.Message,
+                            "Dismount failed", MessageBoxButtons.OK, MessageBoxIcon.Error)
+            Return
+        End Try
         frmProgress.ShowDialog(Me)
         txtOutput.Text = strOutput
     End Sub
 
-    Private Sub ShowUnmountResult(ByVal success As Boolean, ByVal failure As String)
+    Private Sub ShowUnmountResult(ByVal dismounted As Boolean,
+                                  ByVal journalSaved As Boolean, ByVal failure As String)
         If Me.IsDisposed OrElse Me.Disposing Then Return
+        Dim verified = dismounted AndAlso journalSaved
         Dim caption = "DISM GUI - Dismount WIM"
-        Dim message = If(success, "WIM image successfully dismounted.",
-                         "WIM could not be dismounted. " & failure & Environment.NewLine &
-                         "See the DISM output for details.")
+        Dim message = If(verified, "WIM image successfully dismounted.",
+                         If(dismounted,
+                            "WIM was successfully dismounted, but the local safety journal " &
+                            "could not be updated. " & failure & Environment.NewLine &
+                            "Mount selection has been refreshed. Inspect Mount health.",
+                            "Dismount was not verified. " & failure & Environment.NewLine &
+                            "Review WIM 360 > Mount health before any manual recovery. " &
+                            "Never automatically retry an interrupted Commit." &
+                            Environment.NewLine & "See the DISM output for details."))
         Me.Activate()
         MessageBox.Show(Me, message, caption, MessageBoxButtons.OK,
-                        If(success, MessageBoxIcon.Information, MessageBoxIcon.Error))
+                        If(verified, MessageBoxIcon.Information,
+                           If(dismounted, MessageBoxIcon.Warning, MessageBoxIcon.Error)))
     End Sub
 
 '''
@@ -219,23 +265,75 @@ def main():
     End Sub
 
     Private Sub BackgroundWorkerDisMount_RunWorkerCompleted''', "unmount streams")
+    # Validate once on the foreground UI thread and once immediately
+    # before DISM.Start() in the background worker. External mount changes
+    # between the confirmation and actual process launch must fail closed.
+    worker_begin = data.find("    Private Sub BackgroundWorkerDisMount_DoWork")
+    worker_end = data.find("    Private Sub BackgroundWorkerDisMount_RunWorkerCompleted",
+                           worker_begin + 1)
+    if worker_begin < 0 or worker_end < 0:
+        raise RuntimeError("Cannot locate DISM dismount worker for final safety guard")
+    dismount_worker = data[worker_begin:worker_end]
+    # The pinned upstream has one DISM.Start in each Commit/Discard branch.
+    # Validate once BEFORE selecting either command, not only one branch.
+    branch_start = "        If blnDISMCommit = True Then\n"
+    if (dismount_worker.count(branch_start) != 1 or
+            dismount_worker.count("            DISM.Start()\n") != 2):
+        raise RuntimeError(
+            "Expected one Commit/Discard decision with two DISM process launches")
+    dismount_worker = dismount_worker.replace(branch_start,
+        "        ' Immediately revalidate the mount, index and access mode.\n"
+        "        WimMountSafety.ValidateDismount(strWIM, strIndex, strFolderName,\n"
+        "                                         blnDISMCommit)\n"
+        + branch_start)
+    data = data[:worker_begin] + dismount_worker + data[worker_end:]
+
     data = replace_block(data, "    Private Sub BackgroundWorkerDisMount_RunWorkerCompleted",
                          "    Private Sub btnOpnDriverFolder_Click", '''    Private Sub BackgroundWorkerDisMount_RunWorkerCompleted(ByVal sender As Object, ByVal e As System.ComponentModel.RunWorkerCompletedEventArgs) Handles BackgroundWorkerDisMount.RunWorkerCompleted
-        Dim success = (e.Error Is Nothing AndAlso Not e.Cancelled AndAlso strDISMExitCode = "0")
-        If success Then
+        Dim dismounted = (e.Error Is Nothing AndAlso Not e.Cancelled AndAlso
+                          strDISMExitCode = "0")
+        Dim details As String = If(e.Error IsNot Nothing, e.Error.Message,
+                                   "DISM exit code: " & strDISMExitCode)
+        If dismounted Then
+            Try
+                dismounted = activeDismountTarget IsNot Nothing AndAlso
+                             WimMountSafety.VerifyNoLongerMounted(activeDismountTarget)
+                If Not dismounted Then
+                    details &= " | Image still registered as mounted or cannot be verified."
+                End If
+            Catch ex As Exception
+                RuntimeDiagnostics.RecordException("DISM dismount postflight", ex)
+                dismounted = False
+                details &= " | Mount registration check failed: " & ex.Message
+            End Try
+        End If
+        Dim journalSaved As Boolean = True
+        Try
+            If activeDismountJournal Is Nothing Then Throw New InvalidOperationException(
+                "No pending dismount journal entry exists.")
+            WimMountSafety.FinishDismount(activeDismountJournal, dismounted,
+                strDISMExitCode, If(dismounted, "", details))
+        Catch ex As Exception
+            RuntimeDiagnostics.RecordException("DISM dismount journal completion", ex)
+            journalSaved = False
+            details &= " | Local safety journal could not be updated: " & ex.Message
+        End Try
+        activeDismountTarget = Nothing
+        activeDismountJournal = Nothing
+        ' The UI must reflect the ACTUAL WIMGAPI state even when journaling
+        ' fails after a verified dismount. Never leave a false mounted flag.
+        If dismounted Then
             btnMount.Enabled = True
             btnDismount.Enabled = False
             WIMMounted = False
             strMountedImageLocation = ""
         End If
         frmProgress.Close()
-        Dim details = If(e.Error IsNot Nothing, e.Error.Message, "DISM exit code: " & strDISMExitCode)
-        ' Post the modal result AFTER the progress window is closed.
+        ' Post the result AFTER the progress window is closed.
         Me.BeginInvoke(New MethodInvoker(Sub()
-            ShowUnmountResult(success, details)
+            ShowUnmountResult(dismounted, journalSaved, details)
             If closeAfterUnmount Then
-                If success Then
-                    ' Keep the flag set while FormClosing handles the intentional exit.
+                If dismounted AndAlso journalSaved Then
                     Me.Close()
                 Else
                     closeAfterUnmount = False
