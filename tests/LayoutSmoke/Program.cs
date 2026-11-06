@@ -428,6 +428,11 @@ internal static class LayoutSmoke
                     optionBounds.Right <= viewportBounds.Right + 5,
                     "Compare Indexes mode must be horizontally visible at high font scaling");
         }
+        // Exercise the actual source checksum disclaimer as the visible
+        // comparison note. Ordinary synthetic path fixtures have different
+        // descriptions, so they cannot verify this UI regression otherwise.
+        comparison.Notes = "Source WIM SHA-256 verified before/after; timestamp " +
+            "preserved. Names only: file contents and per-file hashes not checked.";
         dialog.PreviewForTest(comparison);
         Application.DoEvents();
         var matrix = Find(dialog, "grid360IndexComparison") as DataGridView;
