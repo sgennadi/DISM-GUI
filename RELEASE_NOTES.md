@@ -1,52 +1,54 @@
-# DISM GUI 4.3.12 — Stable
+# DISM GUI 4.3.13 — Stable
 
-DISM GUI 4.3.12 is a standalone, self-contained Windows release for x86, x64 and ARM64.
-This is a successor to **4.3.11**, whose release assets remain available unchanged.
+Portable, self-contained Windows builds for **x64, x86 and ARM64**.
+This release focuses on the actual WinForms layout problems reported with
+DISM GUI 4.3.12. The previous stable release stays available unchanged.
 
-## Unified local diagnostics
+## Navigation and driver workflows
 
-- Automatic recording of real DISM failures, WIM 360 inspection/servicing errors,
-  and Driver Studio INF scan/comparison/selective import errors into the existing
-  embedded `universal-diagnostics/v1` local queue.
-- Automatic records contain **only coarse component category, exception type,
-  numeric code, generic summary, app version and anonymous fingerprint**.
-  No full exception messages, paths to images or drivers, machine/user identity,
-  source logs, credentials or private tokens are included in automatic events.
-- A matching error fingerprint is recorded only once per 24-hour window,
-  including across application restarts. The local queue is capped at 1,500
-  records without silently deleting historic reports. An unavailable legacy
-  journal no longer prevents independent universal queue capture.
-- The existing rotating local runtime log and manually reviewed report preview
-  remain available for compatible workflows.
-- All diagnostics use the canonical shared embedded .NET source in the
-  portable EXE. **No helper executable, DLL, GitHub token, or background uploader.**
+- **WIM 360** includes a nested **Mount** entry and **Driver Studio**
+  includes a nested **Driver tools** entry. These retain the original
+  Mount/Dismount, driver addition, removal and export DISM handlers.
+  The navigation-only grouping does not automatically mount, commit,
+  discard or install packages.
+- Other sections have been renumbered without gaps: **01 Packages,
+  02 Features, 03 Editions, 04 Unattend, 05 Apps, 06 Capture, 07 Apply**.
+- Driver Studio exposes **Scan INF** in the persistent workspace header,
+  so a user on a smaller laptop at 175% scaling can initiate the same
+  existing scan even when the detailed source controls are below the fold.
+  The source pane also has more height when its fields stack vertically.
 
-## Saved Diagnostics user interface
+## Display and high-DPI fixes
 
-- **Open GitHub draft...** still requires explicit confirmation, browser
-  sign-in, review and manual GitHub Issue submission.
-- **Mark submitted...** lets the operator enter a link to an Issue already
-  created in the DISM-GUI GitHub repository. The link is strictly validated
-  before updating the **local-only** delivery status and URL.
-- **Mark pending** reverses the local status and clears the associated link.
-  Neither operation contacts GitHub or asserts that the server verified delivery.
-- Responsive queue footer and row/header heights at simulated 125%, 150%, 175%
-  font scaling. Shortened button captions, balanced grid columns and compact UTC
-  dates improve readability. The full validated timestamp remains in JSON and
-  the row tooltip rather than being incorrectly redacted as an IPv6 address.
+- **Tools** gets a high-contrast dark-orange background, white lettering,
+  an exclamation mark and a gold border when a newer verified stable
+  release is available. It returns to the normal white style when the
+  startup check finds no newer release or cannot verify one.
+  The update still requires the user's explicit action.
+- In **WIM 360 Compare Indexes**, the brief source WIM SHA-256 verification
+  and timestamp note remains visible above the action buttons.
+  The full explanation of offline name/presence-only comparison is
+  preserved in the report and tooltip; verifying the WIM container
+  checksum is **not** per-file hash comparison.
+- The **Compare indexes**, **Verify SHA-256**, **Export CSV** and **Close**
+  actions remain visible with a readable results grid at simulated
+  font scaling of 125%, 150% and 175%.
+- The Mount workspace has more space around **Choose folder**, and
+  **Open mounted folder** has a compact **Open folder** caption with an
+  accessible description.
+- The redundant **Exit** button was removed from the **DISM Output**
+  toolbar. The standard Windows title-bar X still closes the application;
+  Expand, Copy log and Clear remain available.
 
-## Testing and safeguards
+## Build and compatibility
 
-- GitHub Actions compiles portable win-x86, win-x64 and win-arm64 EXEs and ZIPs.
-  x64 WinForms and real disposable read-only WIM tests verify comparison,
-  diagnostics, redaction, deduplication, local status changes and cleanup.
-- Smoke tests use isolated temporary diagnostics folders, never mixing fixture
-  errors with user data. Failure of either diagnostics store does not interrupt
-  Windows imaging or driver servicing.
-- **No automatic error report upload to GitHub.** Direct user-to-GitHub API
-  submission remains a separately deferred feature, requiring an authorized
-  design and explicit consent. Local Mark submitted is not an upload.
-- Real Windows workstation verification remains recommended for physical DPI,
-  protected file system conditions and production-specific WIM servicing.
+- Existing WIM 360 index inspection, driver comparison, DISM operations,
+  portable packaging, self-update and local UniversalDiagnostics remain.
+- GitHub Actions performs Windows x86/x64/ARM64 builds, read-only WIM tests,
+  diagnostics checks, plus simulated 125/150/175% WinForms layout tests.
+- Real operating-system servicing and physical DPI testing on a workstation
+  remain recommended before applying changes to production images.
+- No automatic GitHub diagnostic upload and no new external runtime process.
 
-Original application by Mike Celone (mikecel79/DISMGUI); attribution preserved.
+Based on DISMGUI by Mike Celone (mikecel79/DISMGUI); original attribution
+and licensing remain intact.

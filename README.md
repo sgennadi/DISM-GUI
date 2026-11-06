@@ -16,7 +16,7 @@ recursing through subfolders. It extracts the DriverVer date/version, INF
 name, manufacturer, class, selected hardware IDs and source-INF SHA-256.
 
 To check whether the *same version* is already present, first mount the
-chosen WIM index using **Mount & Inspect**. Then choose **Compare with
+chosen WIM index using **WIM 360 → Mount**. Then choose **Compare with
 mounted index** in Driver Studio. The tool verifies that the WIM file,
 index, and mount directory match and queries structured
 `Get-WindowsDriver -Path <mount-folder> -All` metadata. If the index is
@@ -35,7 +35,7 @@ never eligible. A changed source or inventory invalidates the plan.
 The **Stop after current** control finishes the active DISM command before
 ending the batch to avoid interrupting a write. Driver Studio does **not**
 mount, unmount, commit, discard or force unsigned packages automatically.
-After reviewing the outcome, use Mount & Inspect to explicitly commit or
+After reviewing the outcome, use **WIM 360 → Mount** to explicitly commit or
 discard the image. The legacy Drivers section's Add drivers button still
 imports an **entire folder**: its behavior is separate from the selective importer.
 
@@ -46,7 +46,7 @@ device ranking. An imported package may not be selected by PnP at boot.
 ## WIM 360 — Image Studio
 
 Select **WIM 360** at the top of the left navigation. Choose a `.wim` or
-`.esd` file, or select one in **Mount & Inspect** first. Click **Inspect** to
+`.esd` file, or select one in **WIM 360 → Mount** first. Click **Inspect** to
 read all image-index metadata through the Windows WIMGAPI in read-only mode.
 Select an index to view architecture, build, edition, languages and
 mount state. Right after **Inspect**, the new **Automatic index overview**
@@ -216,13 +216,19 @@ opens a draft addressed to **[sgennadi@hotmail.com](mailto:sgennadi@hotmail.com?
 including the installed version and architecture. No message is sent
 automatically.
 
-## Grouped workspaces and update indicator (4.3.13 development)
+## Grouped workspaces and update indicator (4.3.13)
 
 The original Mount and Drivers DISM commands remain available as nested
-**Mount & Servicing** under **WIM 360** and **Driver commands** under
+**Mount** under **WIM 360** and **Driver tools** under
 **Driver Studio**. The legacy tab indices and handlers remain unchanged,
 but the other numbered sections now run from **01 Packages** to
 **07 Apply** without empty 01/02 navigation positions.
+
+On smaller high-DPI screens, Driver Studio also exposes **Scan INF** in the
+fixed workspace header, invoking the existing scan operation without scrolling.
+Compare Indexes displays the complete SHA-256 disclaimer in its tooltip and
+a short readable note above the buttons. The duplicate DISM Output **Exit**
+button is hidden; the title-bar X remains the standard way to close.
 
 When a newer stable release is verified at startup, the **Tools** button
 turns deep orange with a high-contrast white exclamation mark. When the
@@ -259,7 +265,7 @@ does not mark the local event as submitted. No background upload occurs.
 There is **no required collector EXE, DLL, installer or GitHub token**.
 The original DISM diagnostics, support contact and manual Issue draft remain.
 See [embedded integration details](docs/UNIVERSAL-DIAGNOSTICS.md).
-Current stable version: **4.3.12**. Earlier releases remain available.
+Current stable version: **4.3.13**. Earlier releases remain available.
 
 ## Other dialogs: 175% horizontal-scroll fixes (4.3.10 test branch)
 
