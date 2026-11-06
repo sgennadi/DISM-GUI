@@ -1,12 +1,12 @@
-# UniversalDiagnostics embedded integration — DISM GUI 4.3.10
+# UniversalDiagnostics embedded integration — DISM GUI
 
 DISM GUI includes the canonical .NET source from
 [UniversalDiagnocticsModule](https://github.com/sgennadi/UniversalDiagnocticsModule/tree/main/embedded/dotnet)
 **inside the application EXE**. There is no independent diagnostics collector
 to install, no subprocess, and no network interaction during local capture.
-The DISM GUI version stays **4.3.10**. This integration is included in unified draft
-[PR #13](https://github.com/sgennadi/DISM-GUI/pull/13);
-it does not overwrite the already published 4.3.10 release.
+Stable DISM GUI **4.3.11** is unchanged. [PR #14](https://github.com/sgennadi/DISM-GUI/pull/14)
+develops local unified runtime diagnostics for a future **4.3.12**.
+The development branch does not replace the installed stable executable.
 
 ## Usage
 
@@ -22,6 +22,12 @@ it does not overwrite the already published 4.3.10 release.
    This copies a sanitized JSON report and opens an Issue draft in the browser.
    The operator must sign in and click **Submit** on GitHub. An opened draft
    does not change the local report's delivery status.
+7. After actual manual submission, choose **Mark submitted...** and paste
+   a published GitHub Issue URL for this DISM GUI repository. The program
+   validates its host, repository and number and changes only the local
+   status and saved URL. It does not verify the Issue online or send data.
+8. **Mark pending** reverses the local status and removes the saved URL.
+   A submitted report's GitHub draft button is disabled to avoid duplicates.
 
 The embedded core creates an atomic UTF-8 event:
 \`%LOCALAPPDATA%\UniversalDiagnostics\<project-hash>\<report-id>.json\`
@@ -31,7 +37,16 @@ The saved record follows \`universal-diagnostics/v1\`:
 No \`excerpt\`, DISM output, Windows username, machine identity, local file
 paths, environment variables or GitHub tokens are included.
 
-**Nothing is uploaded automatically**. The existing manual browser-based
+**Nothing is uploaded automatically**. In development 4.3.12, real DISM,
+WIM 360 and Driver Studio failures also enter this local queue as **coarse
+metadata only** (category, exception class, numeric HRESULT or exit code).
+Exception messages, image paths, computer identities and raw DISM output
+are never copied to automatically captured events. Duplicate signatures
+are limited to one local record every 24 hours across application restarts.
+The queue is bounded to 1500 records; the existing private rotating
+runtime journal is preserved independently.
+
+The existing manual browser-based
 GitHub Issue draft works independently. A saved queue item also offers a
 separate, manually reviewed browser Issue draft; it never sends in the background. The universal repository's optional
 standalone CLI/EXE can later inspect and submit these same queue records,
@@ -42,7 +57,9 @@ with explicit authorization/review, but it is NOT needed for normal app use.
 - Canonical source: \`UniversalDiagnocticsModule/embedded/dotnet/UniversalDiagnosticsEmbedded.vb\`.
 - Vendored identical source: \`DISM-GUI/tools/UniversalDiagnosticsEmbedded.vb\`.
 - App-specific, redacting UI adapter: \`DISM-GUI/tools/UniversalDiagnosticsBridge.vb\`.
-- Build preparation copies both files into the Windows Forms project.
+- The app-specific capture and delivery adapters are
+  `tools/UniversalDiagnosticsRuntime.vb` and `tools/UniversalDiagnosticsDelivery.vb`.
+- Build preparation copies the canonical core and both adapters into the EXE.
 - CI tests create temporary queue records, assert schema/fingerprint,
   verify redaction and that no additional EXE is needed.
 - For new embedded core versions, update the central file first and sync the
