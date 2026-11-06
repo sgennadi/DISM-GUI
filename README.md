@@ -43,7 +43,7 @@ Use disposable copies of WIM images for initial real-world tests. DriverVer
 equality does not prove identical binaries, package signatures or Windows
 device ranking. An imported package may not be selected by PnP at boot.
 
-### Driver Studio source package integrity audit (development candidate)
+### Driver Studio source package integrity audit (4.3.15)
 
 Driver Studio has a new **Audit selected** action in the package-details header.
 After comparing drivers with an already-mounted image, select up to 30
@@ -76,8 +76,9 @@ Unconfirmed or unavailable inventory checks are reported, not labeled as
 confirmed installs. The operator must choose Commit or Discard explicitly.
 The saved audit is a point-in-time check, not a lock on the source directory.
 
-This development candidate is **not** a new stable release until Windows
-CI and real-image safety tests are assessed. Stable **4.3.14** stays intact.
+Released as **4.3.15** after automated x86/x64/ARM64 checks. Stable **4.3.14**
+remains available unchanged. A signed OEM test package and writable OS image
+still require manual workstation validation.
 
 ## WIM 360 — Image Studio
 
@@ -324,7 +325,7 @@ does not mark the local event as submitted. No background upload occurs.
 There is **no required collector EXE, DLL, installer or GitHub token**.
 The original DISM diagnostics, support contact and manual Issue draft remain.
 See [embedded integration details](docs/UNIVERSAL-DIAGNOSTICS.md).
-Current stable version: **4.3.14**. Earlier releases remain available.
+Current stable version: **4.3.15**. Earlier releases remain available.
 
 ## Other dialogs: 175% horizontal-scroll fixes (4.3.10 test branch)
 
