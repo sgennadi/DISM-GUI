@@ -33,7 +33,13 @@ Public NotInheritable Class WimMountHealthForm
             .ColumnCount = 1, .RowCount = 5, .BackColor = Color.White
         }
         root.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        root.RowStyles.Add(New RowStyle(SizeType.Absolute, 53))
+        ' Fixed height clipped the subtitle at simulated 175% DPI.
+        ' Measure both font lines and reserve spacing between them.
+        Dim headingFont = ModernTheme.UiFont(12.3F, True)
+        Dim subtitleFont = ModernTheme.UiFont(9.1F)
+        Dim headingHeight = Math.Max(78,
+            headingFont.Height + subtitleFont.Height + 26)
+        root.RowStyles.Add(New RowStyle(SizeType.Absolute, headingHeight))
         root.RowStyles.Add(New RowStyle(SizeType.Absolute, 47))
         root.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         root.RowStyles.Add(New RowStyle(SizeType.Absolute, 53))
@@ -48,14 +54,15 @@ Public NotInheritable Class WimMountHealthForm
         header.RowStyles.Add(New RowStyle(SizeType.Percent, 45))
         Dim title = New Label With {
             .Text = "WIM 360  |  MOUNT HEALTH",
-            .Font = ModernTheme.UiFont(12.3F, True),
+            .Font = headingFont,
             .ForeColor = ModernTheme.TextInk,
             .TextAlign = ContentAlignment.MiddleLeft,
             .Dock = DockStyle.Fill
         }
         Dim subheading = New Label With {
-            .Text = "Registered mount status and local DISM operation journal - view only",
-            .Font = ModernTheme.UiFont(9.1F),
+            .Name = "lblMountHealthSubtitle",
+            .Text = "Registered mounts and recovery history - read-only",
+            .Font = subtitleFont,
             .ForeColor = ModernTheme.Muted,
             .TextAlign = ContentAlignment.MiddleLeft,
             .Dock = DockStyle.Fill
