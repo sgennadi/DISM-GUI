@@ -76,12 +76,14 @@ Public NotInheritable Class DriverStudioPackageAudit
                 Return e.Key.StartsWith("CatalogFile.NT" & arch,
                                         StringComparison.OrdinalIgnoreCase) AndAlso
                        (e.Key.Length = ("CatalogFile.NT" & arch).Length OrElse
-                        e.Key(("CatalogFile.NT" & arch).Length) = "."c))
+                        e.Key(("CatalogFile.NT" & arch).Length) = "."c)
+            End Function)
             If Not String.IsNullOrWhiteSpace(decorated.Key) Then choice = decorated.Value
         End If
         If String.IsNullOrWhiteSpace(choice) Then
             Dim generic = matches.FirstOrDefault(Function(e)
-                Return e.Key.Equals("CatalogFile", StringComparison.OrdinalIgnoreCase))
+                Return e.Key.Equals("CatalogFile", StringComparison.OrdinalIgnoreCase)
+            End Function)
             If Not String.IsNullOrWhiteSpace(generic.Key) Then choice = generic.Value
         End If
         ' Do not take an ARM64 catalog as a fallback for an AMD64 image.
