@@ -1707,6 +1707,14 @@ internal static class LayoutSmoke
                     source.CatalogFiles["CatalogFile"] == "contoso.cat",
                     "INF parser lost DriverVer, strings, CAT, architecture, HWIDs or hash");
 
+            var decorated = DriverStudioEngine.ReadInf(driver);
+            decorated.CatalogFiles.Clear();
+            decorated.CatalogFiles["CatalogFile.NTamd64"] = "contoso-x64.cat";
+            decorated.CatalogFiles["CatalogFile.NTarm64"] = "contoso-arm64.cat";
+            Require(DriverStudioPackageAudit.ChooseCatalog(decorated, "x64") == "contoso-x64.cat" &&
+                    DriverStudioPackageAudit.ChooseCatalog(decorated, "ARM64") == "contoso-arm64.cat" &&
+                    DriverStudioPackageAudit.ChooseCatalog(decorated, "x86") == "",
+                    "Decorated catalogs must match the actual WIM architecture");
             var initialAudit = DriverStudioPackageAudit.Audit(source, "x64", checkSignature: false);
             Require(initialAudit.FileCount == 3 &&
                     initialAudit.ManifestSha256.Length == 64 &&
@@ -2100,6 +2108,12 @@ internal static class LayoutSmoke
                     "Driver Studio preview must show existing driver version not pre-selected");
             Require(((Button)Find(studioPanel, "btnStudioCopyPlan")!).Enabled,
                     "Driver Studio preview should offer Copy comparison");
+            var integrityAudit = Find(studioPanel, "btnStudioAuditSelected") as Button;
+            Require(integrityAudit is not null && integrityAudit.Visible &&
+                    integrityAudit.Text == "Audit selected" &&
+                    integrityAudit.Enabled,
+                    "Driver Studio must expose a discoverable read-only package integrity audit");
+            VerifyReadableButton(integrityAudit!, "Driver Studio package audit high-DPI button");
             var installStudio = Find(studioPanel, "btnStudioInstallSelected") as Button;
             var stopStudio = Find(studioPanel, "btnStudioStopAfterCurrent") as Button;
             Require(installStudio is not null && stopStudio is not null &&
