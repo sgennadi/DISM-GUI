@@ -148,6 +148,37 @@ cross-container catalog mode. A real disposable-WIM Windows test is included
 in CI; physical Windows/Server versions and production WIMs still need
 manual validation before relying on reports for deployment decisions.
 
+### Cross-image mounted sizes and SHA-256 (4.3.17)
+
+In **WIM 360 → Compare 2 files**, choose two separate WIM/ESD sources,
+select an image index in each, and choose **Files + sizes (already mounted)**.
+Both indexes **must already be mounted** (preferably read-only) in separate
+folders using normal Mount tools. The comparison verifies the active WIMGAPI
+mount registrations, scans file paths, sizes, and empty directories, and
+marks paths present in only A, only B, or both. It includes genuine WIM/WOF-backed reparse files used by Windows
+DISM mounts, while skipping symbolic links and junctions. This also
+corrects the older same-WIM mounted comparison, which previously skipped
+such regular WIM-backed files. Incomplete/unreadable scans fail rather
+than displaying false missing-file results. Each mount is limited to 250,000 entries.
+
+For a selected file choose **SHA-256... → Verify selected file**, or
+**Verify filtered same-size files** to hash file content across A and B.
+Batch verification uses the active Type/Result/Search filters and refuses
+batches above **50 paths / 1 GiB total reads**, rather than truncating them.
+Bytes are read without writing or committing the images. Source paths,
+file sizes and reparse points are checked again immediately before hashing.
+No partial results are displayed when the operation fails or is canceled.
+A successful hash result replaces size labels only for the verified paths;
+all other rows remain a **size comparison, not proof of equal content**.
+
+The comparison window keeps its footer controls visible at high DPI and
+retains the A/B source filename and original WIM index in CSV exports.
+**Commit/Discard remains fully manual**; this feature does not mount,
+unmount, install, or modify images. Windows CI uses disposable mounted
+WIMs and synthetic same-length/different-bytes fixtures. For real
+deployment images, confirm mounted read-only image paths and result accuracy
+on a safe Windows test machine before relying on the report.
+
 ### Compare 2–8 indexes inside one WIM or ESD (test RC)
 
 After **Inspect**, choose **Compare indexes**. Two or three indexes are
@@ -171,7 +202,7 @@ selected by default; select any 2–8 using the checkbox list.
 - **Files + sizes (already mounted)** requires each selected index to be
   mounted in a **different folder** (prefer read-only mounts); refresh
   **Inspect** after mounting. This mode compares file paths, lengths and
-  empty-folder presence. Reparse points are skipped. File SHA-256 verification
+  empty-folder presence. Symbolic links/junctions are skipped; WIM/WOF-backed files are included. File SHA-256 verification
   is available for an individually selected path.
 - **Drivers / packages / features** requires a completed **Scan mounted
   index** for every selected index. If any scan is partial, comparison
@@ -211,7 +242,7 @@ modified, committed, or discarded by hashing. Verified rows replace file
 sizes with SHA-256 fingerprints, and other rows continue to show path and
 size differences. Batch results are applied only if all selected files
 were successfully checked. If files disappear, change size during reading,
-become reparse points or escape their expected mount folder, the whole
+become unsupported reparse links or escape their mount folder, the whole
 batch fails without displaying partial hashes. This protects against
 misleading claims that equal file sizes prove equal file contents.
 
@@ -362,7 +393,7 @@ does not mark the local event as submitted. No background upload occurs.
 There is **no required collector EXE, DLL, installer or GitHub token**.
 The original DISM diagnostics, support contact and manual Issue draft remain.
 See [embedded integration details](docs/UNIVERSAL-DIAGNOSTICS.md).
-Current stable version: **4.3.16**. Earlier releases remain available.
+Current stable version: **4.3.17**. Earlier releases remain available.
 
 ## Other dialogs: 175% horizontal-scroll fixes (4.3.10 test branch)
 

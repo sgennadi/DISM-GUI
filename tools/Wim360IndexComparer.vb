@@ -149,49 +149,12 @@ Public NotInheritable Class Wim360IndexComparer
                     "Index " & item.Index.ToString() & " is not mounted. " &
                     "Mount every selected index in a separate folder, then compare.")
             End If
-            Dim root = Path.GetFullPath(item.MountFolder)
-            Dim options As New EnumerationOptions With {
-                .RecurseSubdirectories = True,
-                .IgnoreInaccessible = False,
-                .AttributesToSkip = FileAttributes.ReparsePoint
-            }
-            Dim count As Integer = 0
-            For Each fullName In Directory.EnumerateFiles(root, "*", options)
-                token.ThrowIfCancellationRequested()
-                count += 1
-                If count > 250000 Then
-                    Throw New InvalidOperationException(
-                        "Index " & item.Index.ToString() &
-                        " exceeded the 250,000-file safety limit. No incomplete diff was shown.")
-                End If
-                Dim relative = Path.GetRelativePath(root, fullName).Replace("/"c, "\"c)
-                Dim bytes = New FileInfo(fullName).Length
-                records.Add(New Item With {
-                    .Index = item.Index, .Kind = "Files",
-                    .Key = relative,
-                    .Value = bytes.ToString(CultureInfo.InvariantCulture) & " bytes"
-                })
-            Next
-            ' Empty directories and directory-only differences matter too.
-            ' Use the same recursion and junction-skip policy as file listing.
-            For Each fullName In Directory.EnumerateDirectories(root, "*", options)
-                token.ThrowIfCancellationRequested()
-                count += 1
-                If count > 250000 Then
-                    Throw New InvalidOperationException(
-                        "Index " & item.Index.ToString() &
-                        " exceeded the 250,000-item safety limit. No incomplete diff was shown.")
-                End If
-                Dim relative = Path.GetRelativePath(root, fullName).Replace("/"c, "\"c)
-                records.Add(New Item With {
-                    .Index = item.Index, .Kind = "Folders",
-                    .Key = relative, .Value = "Present"
-                })
-            Next
+            records.AddRange(Wim360ReparseSafety.EnumerateMountTree(
+                item.MountFolder, item.Index, token))
         Next
         Dim result = CompareRecords(report.ImageFile, "Mounted file paths / sizes",
                                     chosen.Select(Function(x) x.Index), records)
-        result.Notes = "Read-only file and folder listing. Reparse points skipped. " &
+        result.Notes = "Read-only file and folder listing. WIM/WOF-backed files included; links skipped. " &
             "Matching file lengths are NOT proof of identical bytes; " &
             "SHA-256 verification is available for a selected file."
         Return result
@@ -208,7 +171,7 @@ Public NotInheritable Class Wim360IndexComparer
         Dim chosen = SelectedIndexes(report, indexes)
         Dim fresh = Wim360Reader.Inspect(report.ImageFile)
         Dim current = SelectedIndexes(fresh, chosen.Select(Function(x) x.Index))
-        Return VerifyFileHashesCore(report.ImageFile, current, original, token)
+        Return VerifyAtMountRoots(report.ImageFile, current, original, token)
     End Function
 
     ' Refuse silently truncated work. The operator must narrow the Type,
@@ -291,12 +254,12 @@ Public NotInheritable Class Wim360IndexComparer
                 progress.Report("SHA-256 " & (verified.Count + 1).ToString() &
                     "/" & candidates.Count.ToString() & ": " & item.Name)
             End If
-            verified.Add(VerifyFileHashesCore(report.ImageFile, current, item, token))
+            verified.Add(VerifyAtMountRoots(report.ImageFile, current, item, token))
         Next
         Return verified
     End Function
 
-    Private Shared Function VerifyFileHashesCore(imageFile As String,
+    Public Shared Function VerifyAtMountRoots(imageFile As String,
                           current As List(Of Wim360Reader.ImageInfo),
                           original As Row, token As CancellationToken) As Row
         If original Is Nothing OrElse
@@ -346,9 +309,9 @@ Public NotInheritable Class Wim360IndexComparer
                 End If
                 parent = Path.GetDirectoryName(parent)
             End While
-            If (File.GetAttributes(fullName) And FileAttributes.ReparsePoint) = FileAttributes.ReparsePoint Then
+            If Not Wim360ReparseSafety.IsReadableImageFile(fullName) Then
                 Throw New InvalidOperationException(
-                    "SHA-256 verification intentionally excludes reparse points.")
+                    "SHA-256 excludes symbolic links, junctions and unsupported reparse types.")
             End If
             Dim fileInfo As New FileInfo(fullName)
             Dim initialSize As Long = fileInfo.Length

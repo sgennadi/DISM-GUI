@@ -9,7 +9,8 @@ Imports System.Threading.Tasks
 Imports System.Windows.Forms
 
 ' Two different source files, exactly one selected index in each.
-' Metadata or offline paths only: no DISM mount, write, export-image, commit.
+' Metadata, offline paths or already-mounted lengths/hashes; no DISM mount,
+' image writes, export-image or commit.
 Public NotInheritable Class Wim360CrossImageForm
     Inherits Form
 
@@ -25,6 +26,10 @@ Public NotInheritable Class Wim360CrossImageForm
     Private ReadOnly searchBox As TextBox
     Private ReadOnly runButton As Button
     Private ReadOnly exportButton As Button
+    Private ReadOnly hashButton As Button
+    Private ReadOnly hashMenu As ContextMenuStrip
+    Private ReadOnly hashSingleMenuItem As ToolStripMenuItem
+    Private ReadOnly hashBatchMenuItem As ToolStripMenuItem
     Private ReadOnly statusLabel As Label
     Private ReadOnly hintLabel As Label
     Private ReadOnly table As DataGridView
@@ -142,13 +147,15 @@ Public NotInheritable Class Wim360CrossImageForm
         }
         modeBox.Items.AddRange(New Object() {
             "Index metadata (no mounting)",
-            "Files + folders (no mounting)"
+            "Files + folders (no mounting)",
+            "Files + sizes (already mounted)"
         })
         modeBox.SelectedIndex = 0
         options.Controls.Add(modeBox, 0, 0)
         options.SetColumnSpan(modeBox, 2)
-        Dim modeHint = MakeText("Paths are compared by presence only, not by bytes.",
+        Dim modeHint = MakeText("Offline paths | Mounted sizes + SHA-256",
                                 9.0F, False, ModernTheme.Muted)
+        modeHint.Name = "lbl360CrossModeHint"
         options.Controls.Add(modeHint, 2, 0)
         options.SetColumnSpan(modeHint, 2)
         typeBox = New ComboBox With {
@@ -213,6 +220,7 @@ Public NotInheritable Class Wim360CrossImageForm
         table.Columns.Add(MakeColumn("Result", 160))
         table.Columns.Add(MakeColumn("A: source", 185))
         table.Columns.Add(MakeColumn("B: source", 185))
+        AddHandler table.SelectionChanged, Sub(sender, e) UpdateHashButton()
         AddHandler table.CellValueNeeded, AddressOf GridValueNeeded
         AddHandler table.CellToolTipTextNeeded, AddressOf GridTooltipNeeded
         AddHandler table.ClientSizeChanged, Sub(sender, e) FitComparisonColumns()
@@ -239,13 +247,13 @@ Public NotInheritable Class Wim360CrossImageForm
         ' viewport scrolls at 125-175% DPI.
         Dim actions As New TableLayoutPanel With {
             .Name = "Wim360CrossStickyActions",
-            .Dock = DockStyle.Bottom, .ColumnCount = 3, .RowCount = 1,
+            .Dock = DockStyle.Bottom, .ColumnCount = 4, .RowCount = 1,
             .Height = Math.Max(61, Math.Min(76, CInt(Math.Ceiling(
                 57 * Math.Max(1.0F, Me.Font.Height / 16.0F))))),
             .Padding = New Padding(14, 3, 14, 3),
             .BackColor = Color.White
         }
-        For Each percentage In {44.0F, 32.0F, 24.0F}
+        For Each percentage In {34.0F, 19.0F, 29.0F, 18.0F}
             actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, percentage))
         Next
         actions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
@@ -256,6 +264,27 @@ Public NotInheritable Class Wim360CrossImageForm
         ModernTheme.StyleButton(runButton, "primary")
         AddHandler runButton.Click, AddressOf CompareClicked
         actions.Controls.Add(runButton, 0, 0)
+        hashButton = New Button With {
+            .Name = "btn360CrossHash", .Text = "SHA-256...",
+            .Dock = DockStyle.Fill, .Margin = New Padding(0, 5, 10, 5),
+            .Enabled = False, .AutoEllipsis = False
+        }
+        ModernTheme.StyleButton(hashButton, "secondary")
+        tips.SetToolTip(hashButton,
+            "Verify selected file or filtered same-size files in the two existing mounts.")
+        hashMenu = New ContextMenuStrip()
+        hashSingleMenuItem = New ToolStripMenuItem("Verify selected file")
+        hashBatchMenuItem = New ToolStripMenuItem("Verify filtered same-size files (max 50)")
+        hashMenu.Items.Add(hashSingleMenuItem)
+        hashMenu.Items.Add(hashBatchMenuItem)
+        AddHandler hashButton.Click, Sub(sender, e)
+            If hashButton.Enabled AndAlso Not busy Then
+                hashMenu.Show(hashButton, New Point(0, hashButton.Height))
+            End If
+        End Sub
+        AddHandler hashSingleMenuItem.Click, AddressOf HashSingleClicked
+        AddHandler hashBatchMenuItem.Click, AddressOf HashBatchClicked
+        actions.Controls.Add(hashButton, 1, 0)
         exportButton = New Button With {
             .Name = "btn360CrossExport", .Text = "Export filtered CSV",
             .Dock = DockStyle.Fill, .Margin = New Padding(0, 5, 10, 5),
@@ -263,7 +292,7 @@ Public NotInheritable Class Wim360CrossImageForm
         }
         ModernTheme.StyleButton(exportButton, "secondary")
         AddHandler exportButton.Click, AddressOf ExportClicked
-        actions.Controls.Add(exportButton, 1, 0)
+        actions.Controls.Add(exportButton, 2, 0)
         Dim closeButton As New Button With {
             .Name = "btn360CrossClose", .Text = "Close",
             .Dock = DockStyle.Fill, .Margin = New Padding(0, 5, 0, 5)
@@ -276,7 +305,7 @@ Public NotInheritable Class Wim360CrossImageForm
                 Close()
             End If
         End Sub
-        actions.Controls.Add(closeButton, 2, 0)
+        actions.Controls.Add(closeButton, 3, 0)
         Controls.Add(actions)
         AddHandler Me.FormClosing, Sub(sender, e)
             If busy Then
@@ -288,6 +317,7 @@ Public NotInheritable Class Wim360CrossImageForm
             delaySearch.Stop()
             delaySearch.Dispose()
             tips.Dispose()
+            hashMenu.Dispose()
         End Sub
         WindowGeometry.Install(Me, "Software\DISMGUI\Wim360CrossImage")
         If baseline IsNot Nothing AndAlso Not baseline.IsSplitSet Then
@@ -490,6 +520,7 @@ Public NotInheritable Class Wim360CrossImageForm
                 indexSelectors(1).SelectedItem IsNot Nothing
         End If
         exportButton.Enabled = Not busy AndAlso comparison IsNot Nothing
+        UpdateHashButton()
         modeBox.Enabled = Not busy AndAlso Not loading
         typeBox.Enabled = Not busy AndAlso Not loading
         stateBox.Enabled = Not busy AndAlso Not loading
@@ -508,7 +539,7 @@ Public NotInheritable Class Wim360CrossImageForm
         Dim bInfo = TryCast(indexSelectors(1).SelectedItem, Wim360Reader.ImageInfo)
         If aReport Is Nothing OrElse bReport Is Nothing OrElse
            aInfo Is Nothing OrElse bInfo Is Nothing Then Return
-        Dim pathsMode = modeBox.SelectedIndex = 1
+        Dim selectedMode = modeBox.SelectedIndex
         Dim source = New CancellationTokenSource()
         job = source
         busy = True
@@ -521,8 +552,19 @@ Public NotInheritable Class Wim360CrossImageForm
         End Sub)
         Try
             Dim compared = Await Task.Run(Function()
-                Return Wim360CrossImage.Compare(aReport, aInfo.Index, bReport, bInfo.Index,
-                                                 pathsMode, source.Token, progress)
+                Select Case selectedMode
+                    Case 0
+                        Return Wim360CrossImage.Compare(aReport, aInfo.Index,
+                            bReport, bInfo.Index, False, source.Token, progress)
+                    Case 1
+                        Return Wim360CrossImage.Compare(aReport, aInfo.Index,
+                            bReport, bInfo.Index, True, source.Token, progress)
+                    Case 2
+                        Return Wim360CrossMounted.Compare(aReport, aInfo.Index,
+                            bReport, bInfo.Index, source.Token, progress)
+                    Case Else
+                        Throw New InvalidOperationException("Unsupported comparison mode.")
+                End Select
             End Function)
             If IsDisposed OrElse source.IsCancellationRequested Then Return
             ShowComparison(compared)
@@ -542,6 +584,134 @@ Public NotInheritable Class Wim360CrossImageForm
             If Not IsDisposed Then UpdateControls()
         End Try
     End Sub
+
+    Private Sub UpdateHashButton()
+        If hashButton Is Nothing OrElse hashSingleMenuItem Is Nothing OrElse
+           hashBatchMenuItem Is Nothing Then Return
+        Dim available = Not busy AndAlso Not loading AndAlso comparison IsNot Nothing AndAlso
+            comparison.Mode = "Mounted file paths / sizes"
+        hashSingleMenuItem.Enabled = available AndAlso
+            table IsNot Nothing AndAlso table.SelectedRows.Count > 0 AndAlso
+            table.SelectedRows(0).Index >= 0 AndAlso
+            table.SelectedRows(0).Index < visibleRows.Count AndAlso
+            visibleRows(table.SelectedRows(0).Index).Kind = "Files"
+        hashBatchMenuItem.Enabled = available AndAlso visibleRows.Any(Function(x)
+            Return x.Kind = "Files" AndAlso x.State = "Present in all" AndAlso
+                x.PresentCount = 2 AndAlso x.At(1).EndsWith(" bytes", StringComparison.Ordinal)
+        End Function)
+        hashButton.Enabled = hashSingleMenuItem.Enabled OrElse hashBatchMenuItem.Enabled
+    End Sub
+
+    Private Async Sub HashSingleClicked(sender As Object, e As EventArgs)
+        Await VerifyHashesAsync(False)
+    End Sub
+
+    Private Async Sub HashBatchClicked(sender As Object, e As EventArgs)
+        Await VerifyHashesAsync(True)
+    End Sub
+
+    Private Async Function VerifyHashesAsync(batch As Boolean) As Task
+        If busy OrElse comparison Is Nothing OrElse
+           comparison.Mode <> "Mounted file paths / sizes" Then Return
+        Dim selectedRows As List(Of Wim360IndexComparer.Row)
+        Try
+            If batch Then
+                selectedRows = Wim360IndexComparer.PlanHashBatch(comparison, visibleRows)
+            Else
+                If table.SelectedRows.Count = 0 Then Return
+                Dim n = table.SelectedRows(0).Index
+                If n < 0 OrElse n >= visibleRows.Count OrElse
+                   visibleRows(n).Kind <> "Files" Then Return
+                selectedRows = New List(Of Wim360IndexComparer.Row) From {visibleRows(n)}
+            End If
+            If selectedRows.Count = 0 Then
+                MessageBox.Show(Me, "No eligible same-size files under current filters.",
+                                "WIM 360 SHA-256", MessageBoxButtons.OK, MessageBoxIcon.Information)
+                Return
+            End If
+        Catch ex As InvalidOperationException
+            MessageBox.Show(Me, ex.Message, "WIM 360 SHA-256",
+                            MessageBoxButtons.OK, MessageBoxIcon.Information)
+            Return
+        End Try
+        If batch AndAlso MessageBox.Show(Me,
+            "Verify SHA-256 for " & selectedRows.Count.ToString("N0") &
+            " filtered paths in both already-mounted WIM indexes?" &
+            Environment.NewLine & Environment.NewLine &
+            "Maximum: 50 paths and 1 GiB of total file reads. " &
+            "Cancel scan stops between read blocks. No partial results will be shown.",
+            "WIM 360 - Batch SHA-256", MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) <> DialogResult.Yes Then Return
+
+        Dim first = reports(0)
+        Dim second = reports(1)
+        Dim a = TryCast(indexSelectors(0).SelectedItem, Wim360Reader.ImageInfo)
+        Dim b = TryCast(indexSelectors(1).SelectedItem, Wim360Reader.ImageInfo)
+        If first Is Nothing OrElse second Is Nothing OrElse a Is Nothing OrElse b Is Nothing Then Return
+        Dim originalComparison = comparison
+        Dim stopSource As New CancellationTokenSource()
+        job = stopSource
+        busy = True
+        UpdateControls()
+        statusLabel.Text = "Verifying mounted file bytes (SHA-256)..."
+        Dim progress As IProgress(Of String) = New Progress(Of String)(Sub(message)
+            If Not IsDisposed AndAlso Not stopSource.IsCancellationRequested Then
+                statusLabel.Text = message
+            End If
+        End Sub)
+        Try
+            Dim verified = Await Task.Run(Function()
+                If batch Then
+                    Return Wim360CrossMounted.VerifyBatch(first, a.Index, second, b.Index,
+                        originalComparison, selectedRows, stopSource.Token, progress)
+                End If
+                Return New List(Of Wim360IndexComparer.Row) From {
+                    Wim360CrossMounted.VerifyOne(first, a.Index, second, b.Index,
+                                                 selectedRows(0), stopSource.Token)
+                }
+            End Function)
+            If IsDisposed OrElse stopSource.IsCancellationRequested Then Return
+            If Not Object.ReferenceEquals(comparison, originalComparison) Then
+                Throw New InvalidOperationException("Comparison changed during verification.")
+            End If
+            Dim replacement As New Dictionary(Of Integer, Wim360IndexComparer.Row)()
+            For Each entry In verified
+                Dim n = originalComparison.Rows.FindIndex(Function(x)
+                    Return x.Kind = entry.Kind AndAlso
+                        String.Equals(x.Name, entry.Name, StringComparison.OrdinalIgnoreCase)
+                End Function)
+                If n < 0 OrElse replacement.ContainsKey(n) Then
+                    Throw New InvalidOperationException(
+                        "Comparison changed during verification; compare images again.")
+                End If
+                replacement.Add(n, entry)
+            Next
+            Dim completed = originalComparison.Rows.ToList()
+            For Each entry In replacement
+                completed(entry.Key) = entry.Value
+            Next
+            originalComparison.Rows = completed
+            ApplyFilter()
+            statusLabel.Text = "SHA-256 verified " & verified.Count.ToString("N0") &
+                " paths; differences now reflect content bytes, not just lengths."
+            hintLabel.Text = "Only SHA-256 verified rows compare bytes. " &
+                "Other rows still compare file lengths / paths only."
+        Catch ex As OperationCanceledException
+            If Not IsDisposed Then statusLabel.Text = "SHA-256 canceled; no partial results applied."
+        Catch ex As Exception
+            ErrorDiagnostics.RememberFailure("WIM 360 cross-image SHA-256", ex)
+            If Not IsDisposed Then
+                statusLabel.Text = "SHA-256 failed; no partial results applied."
+                hintLabel.Text = ex.Message
+                tips.SetToolTip(hintLabel, ex.Message)
+            End If
+        Finally
+            If Object.ReferenceEquals(job, stopSource) Then job = Nothing
+            stopSource.Dispose()
+            busy = False
+            If Not IsDisposed Then UpdateControls()
+        End Try
+    End Function
 
     ' Exposed for synthetic read-only GUI regression tests.
     Public Sub PreviewForTest(compared As Wim360IndexComparer.Result)
@@ -566,9 +736,11 @@ Public NotInheritable Class Wim360CrossImageForm
         FitComparisonColumns()
         tips.SetToolTip(table, "A: " & reports(0)?.ImageFile & Environment.NewLine &
                            "B: " & reports(1)?.ImageFile)
-        hintLabel.Text = If(compared.Mode.Contains("offline paths"),
+        hintLabel.Text = If(compared.Mode = "Mounted file paths / sizes",
+            "Size comparison. Equal sizes do not prove equal bytes; use SHA-256...",
+            If(compared.Mode.Contains("offline paths"),
             "Path presence only; matching names do not establish identical bytes.",
-            "Index metadata only; no file content inspected.")
+            "Index metadata only; no file content inspected."))
         tips.SetToolTip(hintLabel, compared.Notes)
         ApplyFilter()
     End Sub
@@ -594,7 +766,8 @@ Public NotInheritable Class Wim360CrossImageForm
         statusLabel.Text = visibleRows.Count.ToString("N0") & "/" &
             comparison.Rows.Count.ToString("N0") & " rows  |  " &
             diffs.ToString("N0") & " differences  |  " & comparison.Mode
-        exportButton.Enabled = True
+        exportButton.Enabled = Not busy
+        UpdateHashButton()
     End Sub
 
     Private Sub FitComparisonColumns()

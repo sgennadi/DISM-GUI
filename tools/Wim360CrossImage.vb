@@ -61,7 +61,7 @@ Public NotInheritable Class Wim360CrossImage
         ImageAt(candidate, candidateIndex)
     End Sub
 
-    Private Shared Sub ValidateSnapshot(report As Wim360Reader.WimReport,
+    Friend Shared Sub ValidateSnapshot(report As Wim360Reader.WimReport,
                                         index As Integer,
                                         token As CancellationToken)
         token.ThrowIfCancellationRequested()

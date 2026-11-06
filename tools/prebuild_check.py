@@ -8,7 +8,7 @@ modules = (
     "ErrorDiagnostics.vb", "ErrorReportForm.vb", "RuntimeDiagnostics.vb", "UniversalDiagnosticsBridge.vb", "UniversalDiagnosticsEmbedded.vb", "UniversalDiagnosticsRuntime.vb", "UniversalDiagnosticsDelivery.vb", "UniversalDiagnosticsQueueForm.vb",
     "Wim360SplitSet.vb", "Wim360InspectOverview.vb", "IntegratedTestChecks.vb", "IntegratedTestCenterForm.vb",
     "Wim360Servicing.vb", "Wim360MetadataExport.vb",
-    "Wim360IndexComparer.vb", "Wim360OfflineList.vb", "Wim360CompareIndexesForm.vb", "Wim360CrossImage.vb", "Wim360CrossImageForm.vb",
+    "Wim360IndexComparer.vb", "Wim360OfflineList.vb", "Wim360CompareIndexesForm.vb", "Wim360CrossImage.vb", "Wim360CrossImageForm.vb", "Wim360CrossMounted.vb", "Wim360ReparseSafety.vb",
     "DriverStudioInstaller.vb",
 )
 prepared = (ROOT / "tools" / "apply_modern.py").read_text(encoding="utf-8")

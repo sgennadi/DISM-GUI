@@ -1,48 +1,58 @@
-# DISM GUI 4.3.16 — Stable
+# DISM GUI 4.3.17 — Stable
 
-Portable self-contained Windows builds for x86, x64 and ARM64
-(Visual Studio 2026 / .NET 10). Previous 4.3.15 remains available.
+Portable self-contained Visual Studio 2026 / .NET 10 builds for Windows
+x64, x86 and ARM64. The previous stable 4.3.16 remains available.
 
-## WIM 360 — compare two independent WIM/ESD files
+## WIM 360 — cross-image mounted files and SHA-256
 
-- New **Compare 2 files** action beside Compare indexes inside WIM 360.
-  Two separate WIM/ESD paths, Inspect actions and per-container index
-  selectors. Each column shows A/B, original file name and original
-  WIM image index, even for Index 1 versus Index 1.
-- **Index metadata (no mounting):** compare image name, build,
-  architecture, edition, languages, image size, product and install type.
-- **Files + folders (no mounting):** use the Windows DISM PowerShell
-  Get-WindowsImageContent catalog to compare which Unicode file/folder
-  paths are present or absent in A and B. Filters: Differences only,
-  Only in A/B, Different, Exists in both, Present in both, type and search.
-- **Safety:** check catalog snapshots, verify FULL source-file SHA-256
-  before and after each offline listing, and revalidate both sources
-  before presenting the result. On cancellation, changed files, partial
-  catalogs or failed checks, no partial comparison is displayed.
-- **CSV export:** preserve A/B image/index labels and protect names
-  against spreadsheet formula injection. The virtual data grid scales
-  to large catalogs with cancellable enumeration and progress reporting.
-- **High-DPI:** adaptive A/B column sizing, sticky Compare/Export/Close
-  toolbar at the bottom of the dialog, shorter stacked rows, version
-  in title, separate persisted window size/position.
+- **Compare 2 files** now offers a third mode:
+  **Files + sizes (already mounted)**, alongside the existing
+  read-only metadata and offline path-presence modes.
+- Select one index in each of two **different** WIM/ESD files.
+  Both indexes must already be mounted in separate directories.
+  Prefer DISM **read-only** mounts. The application never mounts,
+  commits, discards, unmounts or modifies either source image.
+- Lists files, byte lengths, paths and empty folders for both
+  mount roots. Classifies missing, unique, same-size, different-size
+  results with A/B source and original-index labels.
+- **SHA-256...** checks one selected file or bounded filtered batch.
+  Maximum **50 paths / 1 GiB total reads** across both mounted images,
+  with explicit confirmation and cancellation.
+  Source paths, file sizes, reparse types and timestamps are checked
+  before or after reading; verified rows are applied **atomically**
+  only after the whole operation succeeds. Other rows remain a
+  size/path comparison, not an assertion of equal content.
 
-## Scope and limits
+## Important WIMMount reparse fix
 
-- **Path presence is NOT file-content equality.** Two paths can point to
-  different bytes or lengths. This feature intentionally makes no
-  assertion about per-file hashes or file sizes without mounting.
-- This mode never mounts, applies, commits, converts or discards an image.
-  Split SWM is not supported for direct cross-container path enumeration.
-- Some DISM API versions may touch the source's last-modified timestamp.
-  WIM 360 restores it only after confirming the entire WIM/ESD SHA-256
-  is unchanged. On failed/canceled operations, timestamp restoration
-  cannot be guaranteed even though the application itself does not
-  issue any image-writing command.
-- CI uses two separately captured, disposable, **real DISM-created**
-  WIM files, validates missing/common Unicode paths, source SHA-256
-  and timestamps, and checks synthetic matrices, filters, CSV and
-  WinForms layouts at 125%, 150%, 175%. A production image still
-  requires operator validation before deployment decisions.
+Real Windows DISM-mounted WIM files are regular content backed by
+Microsoft **IO_REPARSE_TAG_WIM** (or **IO_REPARSE_TAG_WOF**).
+Earlier generic reparse filtering skipped these real files, leaving
+only directories in some mounted comparisons. The new shared
+read-only walker recognizes these two safe content-backing types
+while refusing other reparse files and all reparse directories
+(including symlinks and junctions). This fix also applies to
+**Compare indexes** within a single mounted WIM/ESD.
 
-Existing WIM 360 same-container comparison, Driver Studio 4.3.15
-integrity audit, diagnostics and update paths remain unchanged.
+## Interface, safeguards and validation
+
+- Cross-image Compare / SHA-256 / Export / Close stay in the
+  bottom toolbar at simulated 125%, 150% and 175% font scaling.
+  Adaptive A/B grid sizing and compact mode text avoid truncation.
+  Window geometry is saved independently from the main DISM GUI.
+- A scan refuses more than **250,000 entries per mount** and
+  rejects inaccessible paths rather than silently showing a
+  partial comparison. Unknown/untrusted reparse types are skipped.
+- Windows CI creates and mounts two real, independent test WIMs
+  using DISM **/ReadOnly**, validates differences and SHA-256
+  for same-size, different-byte files, and dismounts with **/Discard**.
+  Both image SHA-256 sums and original timestamps are verified.
+- Synthetic unit tests also cover symlinks (where supported),
+  traversal rejection, changed file sizes, canceled hash operations,
+  same-WIM backward compatibility and protected CSV output.
+- These tests cannot prove behavior for every real Microsoft Windows
+  install.wim, machine-specific driver, or production storage setup.
+  Validate representative test images before production use.
+
+All other WIM 360, Driver Studio 4.3.15, diagnostics and update
+workflows remain unchanged. No automatic diagnostic upload added.
