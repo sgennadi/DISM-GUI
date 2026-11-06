@@ -524,6 +524,17 @@ internal static class LayoutSmoke
                     $"visible={clipped.Height}x{clipped.Width}, " +
                     $"required={footerButton.Height}x{footerButton.Width}");
         }
+        // A footer can technically be visible while its caption is clipped.
+        // Protect the compact SHA-256 menu label at simulated 175% DPI.
+        var hashAction = Find(dialog, "btn360IndexCompareHash") as Button;
+        Require(hashAction is not null && hashAction.Text == "SHA-256...",
+                "SHA-256 menu must have a concise, discoverable caption");
+        var hashCaption = TextRenderer.MeasureText(hashAction!.Text, hashAction.Font,
+            new Size(2000, 80), TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
+        Require(hashCaption.Width + hashAction.Padding.Horizontal + 8 <=
+                hashAction.ClientSize.Width,
+                "SHA-256 menu caption is clipped horizontally at high DPI");
+
         var thirdIndexRect = matrix.GetColumnDisplayRectangle(5, false);
         Require(thirdIndexRect.Width > 80 &&
                 thirdIndexRect.Right <= matrix.ClientSize.Width,
