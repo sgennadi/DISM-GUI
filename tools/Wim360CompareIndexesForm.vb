@@ -104,12 +104,12 @@ Public NotInheritable Class Wim360CompareIndexesForm
         Next
         ' Allow the source-WIM verification note to wrap to multiple lines.
         Dim statusHeight As Integer = If(stackedLayout,
-            CInt(Math.Ceiling(98 + 24 * (uiScale - 1))),
+            CInt(Math.Ceiling(91 + 12 * (uiScale - 1))),
             CInt(Math.Ceiling(104 * uiScale)))
         Dim actionsHeight As Integer = If(stackedLayout,
             CInt(Math.Ceiling(51 + 15 * (uiScale - 1))),
             CInt(Math.Ceiling(68 * uiScale)))
-        Dim minimumGridHeight As Integer = If(stackedLayout, 147,
+        Dim minimumGridHeight As Integer = If(stackedLayout, 140,
                                              CInt(Math.Ceiling(235 * uiScale)))
         root.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         root.RowStyles.Add(New RowStyle(SizeType.Absolute, statusHeight))

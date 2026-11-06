@@ -433,6 +433,12 @@ internal static class LayoutSmoke
         var matrix = Find(dialog, "grid360IndexComparison") as DataGridView;
         var state = Find(dialog, "cmb360IndexCompareState") as ComboBox;
         var action = Find(dialog, "btn360RunIndexCompare") as Button;
+        var verificationNote = Find(dialog, "lbl360IndexCompareHint") as Label;
+        Require(verificationNote is not null &&
+                !verificationNote.AutoEllipsis &&
+                verificationNote.Text.Contains("SHA-256 verified") &&
+                verificationNote.Text.Contains("not checked"),
+            "WIM source verification note must be informative without truncation");
         Require(matrix is not null && matrix.VirtualMode &&
                 matrix.Columns.Count == 6 && matrix.RowCount == 5 &&
                 action is not null && action.Enabled, "Three-index comparison UI not initialized");
@@ -447,6 +453,11 @@ internal static class LayoutSmoke
             $"WIM 360 comparison grid hidden below the fold: " +
             $"visible={visibleMatrix.Height}px, " +
             $"fontScale={Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_FONT_SCALE")}");
+        var hintBounds = verificationNote!.RectangleToScreen(verificationNote.ClientRectangle);
+        var hintViewport = Rectangle.Intersect(hintBounds,
+            matrixViewport.RectangleToScreen(matrixViewport.ClientRectangle));
+        Require(hintViewport.Height >= verificationNote.Height - 4,
+            "WIM verification note must stay visible above footer at high DPI");
         foreach (var name in new[] { "btn360RunIndexCompare",
                                      "btn360IndexCompareHash",
                                      "btn360IndexCompareCsv",
