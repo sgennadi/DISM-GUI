@@ -244,6 +244,95 @@ internal static class LayoutSmoke
         "<VERSION><MAJOR>10</MAJOR><MINOR>0</MINOR><BUILD>26100</BUILD></VERSION>" +
         "</WINDOWS></IMAGE></WIM>";
 
+    private static Wim360IndexComparer.Result VerifyCrossMountedSynthetic(
+        Wim360Reader.WimReport baseline, Wim360Reader.WimReport candidate)
+    {
+        var scratch = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+            "DISMGUI-CrossMount-" + Guid.NewGuid().ToString("N"));
+        var firstDir = System.IO.Path.Combine(scratch, "A");
+        var secondDir = System.IO.Path.Combine(scratch, "B");
+        try
+        {
+            System.IO.Directory.CreateDirectory(System.IO.Path.Combine(firstDir, "Windows"));
+            System.IO.Directory.CreateDirectory(System.IO.Path.Combine(secondDir, "Windows"));
+            System.IO.Directory.CreateDirectory(System.IO.Path.Combine(firstDir, "EmptyA"));
+            System.IO.Directory.CreateDirectory(System.IO.Path.Combine(secondDir, "EmptyB"));
+            var equalSizeA = System.IO.Path.Combine(firstDir, "Windows", "same-size.dll");
+            var equalSizeB = System.IO.Path.Combine(secondDir, "Windows", "same-size.dll");
+            System.IO.File.WriteAllText(equalSizeA, "ABCD");
+            System.IO.File.WriteAllText(equalSizeB, "WXYZ");
+            System.IO.File.WriteAllText(System.IO.Path.Combine(firstDir, "Windows", "resized.dll"), "1");
+            System.IO.File.WriteAllText(System.IO.Path.Combine(secondDir, "Windows", "resized.dll"), "Longer");
+            System.IO.File.WriteAllText(System.IO.Path.Combine(firstDir, "Windows", "only-a.txt"), "A");
+            System.IO.File.WriteAllText(System.IO.Path.Combine(secondDir, "Windows", "only-b.txt"), "B");
+            var a = Wim360CrossMounted.ListMountedTree(firstDir, 1,
+                System.Threading.CancellationToken.None);
+            var b = Wim360CrossMounted.ListMountedTree(secondDir, 2,
+                System.Threading.CancellationToken.None);
+            var compared = Wim360CrossMounted.CompareMountedCatalogs(
+                baseline, 1, candidate, 1, a, b);
+            Require(compared.Mode == "Mounted file paths / sizes" &&
+                    compared.ColumnLabels[1].StartsWith("A:") &&
+                    compared.ColumnLabels[2].StartsWith("B:") &&
+                    compared.Rows.Single(x => x.Name.EndsWith("same-size.dll")).State == "Present in all" &&
+                    compared.Rows.Single(x => x.Name.EndsWith("resized.dll")).State == "Different" &&
+                    compared.Rows.Single(x => x.Name.EndsWith("only-a.txt")).State == "Only in Index 1" &&
+                    compared.Rows.Single(x => x.Name.EndsWith("only-b.txt")).State == "Only in Index 2" &&
+                    compared.Rows.Single(x => x.Name == "EmptyA").State == "Only in Index 1",
+                    "Cross-WIM mounted file sizes, paths or empty folders were not compared correctly");
+            var candidateFiles = Wim360IndexComparer.PlanHashBatch(compared, compared.Rows);
+            Require(candidateFiles.Count == 1 &&
+                    candidateFiles[0].Name.EndsWith("same-size.dll"),
+                    "Only equal-length files present in BOTH mounted images qualify for batch SHA-256");
+            var mounts = new System.Collections.Generic.List<Wim360Reader.ImageInfo> {
+                new() { Index = 1, MountFolder = firstDir, MountStatus = "Mounted (read-only)" },
+                new() { Index = 2, MountFolder = secondDir, MountStatus = "Mounted (read-only)" }
+            };
+            var checkedRow = Wim360IndexComparer.VerifyAtMountRoots(
+                compared.ImageFile, mounts, candidateFiles[0],
+                System.Threading.CancellationToken.None);
+            Require(checkedRow.State == "Different" &&
+                    checkedRow.At(1).Length == 64 &&
+                    checkedRow.At(2).Length == 64 &&
+                    checkedRow.At(1) != checkedRow.At(2),
+                    "Cross-image SHA-256 must detect different bytes even when file sizes match");
+            var canceledSource = new System.Threading.CancellationTokenSource();
+            canceledSource.Cancel();
+            bool canceled = false;
+            try {
+                Wim360IndexComparer.VerifyAtMountRoots(compared.ImageFile, mounts,
+                    candidateFiles[0], canceledSource.Token);
+            } catch (OperationCanceledException) { canceled = true; }
+            Require(canceled, "Mounted SHA-256 verification ignores cancellation");
+            var traversal = new Wim360IndexComparer.Row {
+                Kind = "Files", Name = @"..\secret.txt", State = "Present in all",
+                Values = new System.Collections.Generic.Dictionary<int, string> {
+                    [1] = "4 bytes", [2] = "4 bytes"
+                }
+            };
+            bool traversalRejected = false;
+            try { Wim360IndexComparer.VerifyAtMountRoots(compared.ImageFile, mounts,
+                       traversal, System.Threading.CancellationToken.None); }
+            catch (InvalidOperationException) { traversalRejected = true; }
+            Require(traversalRejected, "Mounted SHA-256 allowed an unsafe parent-directory path");
+            System.IO.File.AppendAllText(equalSizeB, "tampered");
+            bool staleRejected = false;
+            try { Wim360IndexComparer.VerifyAtMountRoots(compared.ImageFile, mounts,
+                       candidateFiles[0], System.Threading.CancellationToken.None); }
+            catch (InvalidOperationException) { staleRejected = true; }
+            Require(staleRejected,
+                    "Mounted file changing size since the comparison must fail closed");
+            Console.WriteLine("PASS cross-mounted file sizes, empty folders, " +
+                "equal-size/different-bytes SHA-256, stale source and cancellation checks");
+            return compared;
+        }
+        finally
+        {
+            try { System.IO.Directory.Delete(scratch, recursive: true); }
+            catch { /* Temporary scratch cleanup only. */ }
+        }
+    }
+
     private static void VerifyCrossImageComparison(Form owner)
     {
         // Two independent files with the SAME original image index number.
@@ -307,6 +396,7 @@ internal static class LayoutSmoke
             } catch (OperationCanceledException) { rejected = true; }
             Require(rejected, "Cross-image cancellation must not produce a partial result");
         }
+        var mountedPreview = VerifyCrossMountedSynthetic(baseline, candidate);
         using var viewer = new Wim360CrossImageForm(baseline, 1);
         viewer.Show(owner);
         Application.DoEvents();
@@ -364,6 +454,23 @@ internal static class LayoutSmoke
         Require(grid.RowCount == 2,
                 "Cross-image Only in B filter must show paths missing from A only");
         state.SelectedItem = "All results";
+        Application.DoEvents();
+        viewer.PreviewForTest(mountedPreview);
+        Application.DoEvents();
+        var hashAction = Find(viewer, "btn360CrossHash") as Button;
+        var mode = Find(viewer, "cmb360CrossMode") as ComboBox;
+        Require(mode is not null && mode.Items.Contains("Files + sizes (already mounted)") &&
+                hashAction is not null && hashAction.Text == "SHA-256...",
+                "Cross-image window must offer mounted file-length mode and SHA-256 action");
+        var sameSizeRow = mountedPreview.Rows.FindIndex(x => x.Name.EndsWith("same-size.dll"));
+        Require(sameSizeRow >= 0, "Cross-image preview is missing a same-length file");
+        grid.ClearSelection();
+        grid.Rows[sameSizeRow].Selected = true;
+        Application.DoEvents();
+        Require(hashAction.Enabled, "SHA-256 must enable only for mounted file comparisons");
+        VerifyReadableButton(hashAction, "WIM 360 cross-image high-DPI SHA-256");
+        Snapshot(viewer, "DISM-GUI-WIM360-Cross-Mounted");
+        viewer.PreviewForTest(paths);
         Application.DoEvents();
         Snapshot(viewer, "DISM-GUI-WIM360-Cross-Image");
         viewer.Close();
