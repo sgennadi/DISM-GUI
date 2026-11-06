@@ -575,19 +575,19 @@ Public NotInheritable Class Wim360CrossImageForm
             comparison.Rows, Convert.ToString(typeBox.SelectedItem),
             filter, searchBox.Text, 2)
         table.RowCount = visibleRows.Count
-        Dim diffs = visible.Where(Function(x)
+        Dim diffs = visibleRows.Where(Function(x)
             Return x.State = "Different" OrElse
                 x.State.StartsWith("Only in Index ", StringComparison.Ordinal) OrElse
                 x.State = "Ambiguous duplicates"
         End Function).Count()
-        statusLabel.Text = visible.Count.ToString("N0") & "/" &
+        statusLabel.Text = visibleRows.Count.ToString("N0") & "/" &
             comparison.Rows.Count.ToString("N0") & " rows  |  " &
             diffs.ToString("N0") & " differences  |  " & comparison.Mode
         exportButton.Enabled = True
     End Sub
 
     Private Sub GridValueNeeded(sender As Object, e As DataGridViewCellValueEventArgs)
-        If e.RowIndex < 0 OrElse e.RowIndex >= visible.Count Then Return
+        If e.RowIndex < 0 OrElse e.RowIndex >= visibleRows.Count Then Return
         Dim row = visibleRows(e.RowIndex)
         Select Case e.ColumnIndex
             Case 0 : e.Value = row.Kind
@@ -607,8 +607,8 @@ Public NotInheritable Class Wim360CrossImageForm
 
     Private Sub GridTooltipNeeded(sender As Object,
                                   e As DataGridViewCellToolTipTextNeededEventArgs)
-        If e.RowIndex < 0 OrElse e.RowIndex >= visible.Count Then Return
-        Dim row = visible(e.RowIndex)
+        If e.RowIndex < 0 OrElse e.RowIndex >= visibleRows.Count Then Return
+        Dim row = visibleRows(e.RowIndex)
         Select Case e.ColumnIndex
             Case 1 : e.ToolTipText = row.Name
             Case 2 : e.ToolTipText = row.State & " " & row.Notes
@@ -631,7 +631,7 @@ Public NotInheritable Class Wim360CrossImageForm
                 Using writer As New StreamWriter(picker.FileName, False, New UTF8Encoding(True))
                     Wim360IndexComparer.WriteCsv(writer, comparison, visibleRows)
                 End Using
-                statusLabel.Text = "Saved " & visible.Count.ToString("N0") &
+                statusLabel.Text = "Saved " & visibleRows.Count.ToString("N0") &
                     " filtered rows. Neither source image was modified."
             Catch ex As Exception
                 ErrorDiagnostics.RememberFailure("WIM 360 cross-image CSV", ex)
