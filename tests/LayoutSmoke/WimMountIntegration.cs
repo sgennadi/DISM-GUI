@@ -248,6 +248,7 @@ internal static class WimMountIntegration
             Directory.CreateDirectory(Path.Combine(src, "Documents", "Shared"));
             Directory.CreateDirectory(Path.Combine(src, "Documents", "מסמכים"));
             File.WriteAllText(Path.Combine(src, "Windows", "System32", "common.txt"), "same");
+            File.WriteAllText(Path.Combine(src, "Windows", "System32", "same-size.dll"), "AAAA");
             File.WriteAllText(Path.Combine(src, "Windows", "System32", "Тест-драйвер.txt"), "unicode");
             File.WriteAllText(Path.Combine(src, "Documents", "מסמכים", "שלום.txt"), "utf8");
             if (index != 2)
@@ -314,6 +315,7 @@ internal static class WimMountIntegration
         var otherWim = Path.Combine(root, "different-install.wim");
         Directory.CreateDirectory(Path.Combine(otherRoot, "Windows", "System32"));
         File.WriteAllText(Path.Combine(otherRoot, "Windows", "System32", "common.txt"), "different bytes");
+        File.WriteAllText(Path.Combine(otherRoot, "Windows", "System32", "same-size.dll"), "BBBB");
         File.WriteAllText(Path.Combine(otherRoot, "Windows", "System32", "new-in-b.txt"), "only in B");
         CheckDism(new[] {
             "/English", "/Capture-Image", "/ImageFile:" + otherWim,
@@ -345,6 +347,100 @@ internal static class WimMountIntegration
             crossMetadata.Rows.Count != 10)
             throw new InvalidOperationException(
                 "Real-WIM cross-container metadata did not compare independent indexes.");
+        // Both independent image containers are mounted READ ONLY in separate
+        // temporary directories. They are always dismounted with /Discard.
+        var mountA = Path.Combine(root, "cross-ro-mount-a");
+        var mountB = Path.Combine(root, "cross-ro-mount-b");
+        Directory.CreateDirectory(mountA);
+        Directory.CreateDirectory(mountB);
+        bool mountedA = false, mountedB = false;
+        Exception? mountTestError = null;
+        var cleanupProblems = new System.Collections.Generic.List<Exception>();
+        try
+        {
+            CheckDism(new[] {
+                "/English", "/Mount-Image", "/ImageFile:" + wim,
+                "/Index:1", "/MountDir:" + mountA, "/ReadOnly"
+            }, 180000);
+            mountedA = true;
+            CheckDism(new[] {
+                "/English", "/Mount-Image", "/ImageFile:" + otherWim,
+                "/Index:1", "/MountDir:" + mountB, "/ReadOnly"
+            }, 180000);
+            mountedB = true;
+            var mountedReportA = Wim360Reader.Inspect(wim);
+            var mountedReportB = Wim360Reader.Inspect(otherWim);
+            if (mountedReportA.Images[0].MountStatus != "Mounted (read-only)" ||
+                mountedReportB.Images[0].MountStatus != "Mounted (read-only)")
+                throw new InvalidOperationException(
+                    "Both test WIMs must be separately registered as read-only mounts.");
+            var sizeComparison = Wim360CrossMounted.Compare(mountedReportA, 1,
+                mountedReportB, 1, CancellationToken.None);
+            var sameSize = sizeComparison.Rows.Single(x =>
+                x.Kind == "Files" &&
+                x.Name.EndsWith("same-size.dll", StringComparison.OrdinalIgnoreCase));
+            var differentLength = sizeComparison.Rows.Single(x =>
+                x.Kind == "Files" &&
+                x.Name.EndsWith("common.txt", StringComparison.OrdinalIgnoreCase));
+            if (sameSize.State != "Present in all" ||
+                differentLength.State != "Different" ||
+                sizeComparison.Rows.Single(x =>
+                    x.Name.EndsWith("new-in-b.txt", StringComparison.OrdinalIgnoreCase))
+                    .State != "Only in Index 2")
+                throw new InvalidOperationException(
+                    "Cross-mounted file presence or byte-length comparison is incorrect.");
+            var verified = Wim360CrossMounted.VerifyOne(mountedReportA, 1,
+                mountedReportB, 1, sameSize, CancellationToken.None);
+            if (verified.State != "Different" ||
+                verified.At(1).Length != 64 ||
+                verified.At(2).Length != 64)
+                throw new InvalidOperationException(
+                    "Equal-size, different-content files were not detected by cross-mount SHA-256.");
+            var batch = Wim360CrossMounted.VerifyBatch(
+                mountedReportA, 1, mountedReportB, 1, sizeComparison,
+                new[] { sameSize }, CancellationToken.None);
+            if (batch.Count != 1 ||
+                batch[0].At(1) != verified.At(1) ||
+                batch[0].At(2) != verified.At(2))
+                throw new InvalidOperationException(
+                    "Bounded cross-mounted batch SHA-256 differs from single-file verification.");
+            Console.WriteLine("PASS read-only simultaneous mounts of two different WIMs, " +
+                "file lengths and SHA-256 identical-length/different-byte detection.");
+        }
+        catch (Exception ex)
+        {
+            mountTestError = ex;
+        }
+        finally
+        {
+            if (mountedB)
+            {
+                try { CheckDism(new[] {
+                    "/English", "/Unmount-Image", "/MountDir:" + mountB, "/Discard"
+                }, 180000); }
+                catch (Exception ex) { cleanupProblems.Add(ex); }
+            }
+            if (mountedA)
+            {
+                try { CheckDism(new[] {
+                    "/English", "/Unmount-Image", "/MountDir:" + mountA, "/Discard"
+                }, 180000); }
+                catch (Exception ex) { cleanupProblems.Add(ex); }
+            }
+        }
+        if (cleanupProblems.Count > 0)
+        {
+            if (mountTestError != null) cleanupProblems.Insert(0, mountTestError);
+            throw new AggregateException(
+                "Cross-WIM read-only test mounts did not cleanly dismount.", cleanupProblems);
+        }
+        if (mountTestError != null)
+            ExceptionDispatchInfo.Capture(mountTestError).Throw();
+        if (digestA != Digest(wim) || digestB != Digest(otherWim) ||
+            stampA != File.GetLastWriteTimeUtc(wim) ||
+            stampB != File.GetLastWriteTimeUtc(otherWim))
+            throw new InvalidOperationException(
+                "Mount, compare or discard changed an original WIM source.");
         Console.WriteLine("PASS two independent DISM-created WIMs, Index 1 versus Index 1, " +
                           "offline metadata/Unicode-safe path differences, verified source SHA-256 and mtime.");
         Console.WriteLine("PASS real 3-index Unicode-safe DISM offline file/folder presence, " +
