@@ -376,9 +376,24 @@ internal static class WimMountIntegration
                     "Both test WIMs must be separately registered as read-only mounts.");
             var sizeComparison = Wim360CrossMounted.Compare(mountedReportA, 1,
                 mountedReportB, 1, CancellationToken.None);
-            var sameSize = sizeComparison.Rows.Single(x =>
+            var sameSize = sizeComparison.Rows.FirstOrDefault(x =>
                 x.Kind == "Files" &&
                 x.Name.EndsWith("same-size.dll", StringComparison.OrdinalIgnoreCase));
+            if (sameSize == null)
+            {
+                var aFile = Path.Combine(mountA, "Windows", "System32", "same-size.dll");
+                var bFile = Path.Combine(mountB, "Windows", "System32", "same-size.dll");
+                string AttributeInfo(string path) => File.Exists(path)
+                    ? File.GetAttributes(path).ToString() : "(missing)";
+                throw new InvalidOperationException(
+                    "Equal-length real WIM fixture file not listed. " +
+                    "A.exists=" + File.Exists(aFile) + " (" + AttributeInfo(aFile) + "), " +
+                    "B.exists=" + File.Exists(bFile) + " (" + AttributeInfo(bFile) + "); " +
+                    "A.mount=" + mountedReportA.Images[0].MountFolder + ", " +
+                    "B.mount=" + mountedReportB.Images[0].MountFolder + "; " +
+                    "sample rows=" + string.Join("; ", sizeComparison.Rows.Take(35)
+                        .Select(x => x.Kind + ":" + x.Name + "=" + x.State)));
+            }
             var differentLength = sizeComparison.Rows.Single(x =>
                 x.Kind == "Files" &&
                 x.Name.EndsWith("common.txt", StringComparison.OrdinalIgnoreCase));
