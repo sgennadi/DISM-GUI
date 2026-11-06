@@ -1088,6 +1088,10 @@ internal static class LayoutSmoke
         window.Show(owner);
         Application.DoEvents();
         VerifyScrollableDialog(window, "WIM 360 inventory");
+        var inventoryViewport = Find(window, "Wim360InventoryLayoutViewport") as Panel;
+        Require(inventoryViewport is not null &&
+                !inventoryViewport.HorizontalScroll.Visible,
+            "Inventory window must not scroll horizontally outside the results grid");
         var grid = Find(window, "grid360Catalog") as DataGridView;
         var type = Find(window, "cmb360CatalogType") as ComboBox;
         var state = Find(window, "cmb360CatalogState") as ComboBox;
@@ -1100,6 +1104,11 @@ internal static class LayoutSmoke
                 search is not null && csv is not null && json is not null &&
                 clear is not null && close is not null,
                 "WIM 360 catalog search, grid and export buttons must be present");
+        var inventoryRight = inventoryViewport!.RectangleToScreen(
+            inventoryViewport.ClientRectangle).Right;
+        Require(clear!.RectangleToScreen(clear.ClientRectangle).Right <= inventoryRight + 3 &&
+                close!.RectangleToScreen(close.ClientRectangle).Right <= inventoryRight + 3,
+            "Inventory filters and Close must fit horizontally at high DPI");
         Require(grid!.VirtualMode && grid.RowCount == 7,
                 "Catalog must show all inventory rows via virtual, read-only grid");
         NoOverlap(type!, state!, "WIM catalog type and state filters");
@@ -1252,6 +1261,10 @@ internal static class LayoutSmoke
         window.Show(owner);
         Application.DoEvents();
         VerifyScrollableDialog(window, "WIM 360 snapshot comparison");
+        var snapshotViewport = Find(window, "Wim360CompareLayoutViewport") as Panel;
+        Require(snapshotViewport is not null &&
+                !snapshotViewport.HorizontalScroll.Visible,
+            "Snapshot comparison must not scroll horizontally outside the results grid");
         var baselineField = Find(window, "txt360Baseline") as TextBox;
         var currentField = Find(window, "txt360Current") as TextBox;
         var runButton = Find(window, "btn360CompareRun") as Button;
@@ -1267,6 +1280,11 @@ internal static class LayoutSmoke
                 type is not null && search is not null && csv is not null &&
                 json is not null && close is not null,
                 "WIM 360 snapshot comparison form must expose files, filters and exports");
+        var snapshotRight = snapshotViewport!.RectangleToScreen(
+            snapshotViewport.ClientRectangle).Right;
+        Require(runButton!.RectangleToScreen(runButton.ClientRectangle).Right <= snapshotRight + 3 &&
+                close!.RectangleToScreen(close.ClientRectangle).Right <= snapshotRight + 3,
+            "Snapshot Compare and Close must fit horizontally at high DPI");
         Require(!csv!.Enabled && !json!.Enabled &&
                 grid!.VirtualMode && grid.RowCount == 0,
                 "Snapshot compare must not export before a comparison");
@@ -1323,6 +1341,9 @@ internal static class LayoutSmoke
         window.Show(owner);
         Application.DoEvents();
         VerifyScrollableDialog(window, "Integrated Test Center");
+        var testViewport = Find(window, "TestCenterLayoutViewport") as Panel;
+        Require(testViewport is not null && !testViewport.HorizontalScroll.Visible,
+            "Integrated Test Center must fit the viewport without horizontal scrolling");
         var grid = Find(window, "gridTestCenterResults") as DataGridView;
         var browse = Find(window, "btnTestCenterBrowse") as Button;
         var image = Find(window, "txtTestCenterImage") as TextBox;
@@ -1336,6 +1357,11 @@ internal static class LayoutSmoke
                 optional is not null && run is not null && copy is not null &&
                 save is not null && support is not null && cancel is not null,
                 "Integrated Test Center must have all checking/reporting controls");
+        var testRight = testViewport!.RectangleToScreen(
+            testViewport.ClientRectangle).Right;
+        Require(run!.RectangleToScreen(run.ClientRectangle).Right <= testRight + 3 &&
+                cancel!.RectangleToScreen(cancel.ClientRectangle).Right <= testRight + 3,
+            "Integrated Test Center Run and Close must be visible at high DPI");
         Require(!optional!.Checked && run!.Enabled &&
                 !copy!.Enabled && !save!.Enabled && !support!.Enabled,
                 "Mounted audit must be opt-in and reports disabled until checks complete");

@@ -245,7 +245,11 @@ Public NotInheritable Class Wim360InventoryForm
         AddHandler searchBox.TextChanged, Sub(sender, e) ApplyFilter()
 
         typeFilter.SelectedIndex = 0
-        ModernTheme.MakeDialogScrollable(Me, root, 930, 670)
+        ' The inventory grid scrolls its own columns. Do not make the
+        ' entire dialog wider than the viewport at 125%-175% font scaling.
+        Dim fontScale As Single = Math.Max(1.0F, Me.Font.Height / 17.0F)
+        ModernTheme.MakeDialogScrollable(Me, root,
+            CInt(Math.Ceiling(780.0F / fontScale)), 670)
         WindowGeometry.Install(Me, "Software\DISMGUI\Wim360Inventory")
     End Sub
 

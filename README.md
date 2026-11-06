@@ -232,6 +232,16 @@ The original DISM diagnostics, support contact and manual Issue draft remain.
 See [embedded integration details](docs/UNIVERSAL-DIAGNOSTICS.md).
 DISM GUI continues to report version **4.3.10**.
 
+## Other dialogs: 175% horizontal-scroll fixes (4.3.10 test branch)
+
+Integrated Test Center, WIM 360 Detailed Inventory and WIM 360 Snapshot
+Comparison now fit their actual viewport width at simulated 125%, 150% and
+175% font scaling. The test center uses four proportionally sized action
+buttons. Long row contents retain their own DataGridView horizontal scroll,
+while the surrounding forms use vertical scrolling for tall content. CI
+asserts that primary and Close actions remain reachable without scrolling
+the entire dialog horizontally.
+
 ## About window high-DPI labels (4.3.10 test branch)
 
 The About dialog uses short, readable **Updates**, **Email** and

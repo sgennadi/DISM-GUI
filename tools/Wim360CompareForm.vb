@@ -225,7 +225,11 @@ Public NotInheritable Class Wim360CompareForm
         typeFilter.SelectedIndex = 0
         AddHandler baselinePath.TextChanged, AddressOf SourcesChanged
         AddHandler currentPath.TextChanged, AddressOf SourcesChanged
-        ModernTheme.MakeDialogScrollable(Me, root, 980, 680)
+        ' A narrow viewport must still show all filters and compare controls;
+        ' only the data grid may scroll horizontally for detailed rows.
+        Dim fontScale As Single = Math.Max(1.0F, Me.Font.Height / 17.0F)
+        ModernTheme.MakeDialogScrollable(Me, root,
+            CInt(Math.Ceiling(780.0F / fontScale)), 680)
         WindowGeometry.Install(Me, "Software\DISMGUI\Wim360Compare")
     End Sub
 
