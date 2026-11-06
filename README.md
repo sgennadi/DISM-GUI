@@ -148,6 +148,35 @@ cross-container catalog mode. A real disposable-WIM Windows test is included
 in CI; physical Windows/Server versions and production WIMs still need
 manual validation before relying on reports for deployment decisions.
 
+### Cross-image mounted sizes and SHA-256 (4.3.17 candidate)
+
+In **WIM 360 → Compare 2 files**, choose two separate WIM/ESD sources,
+select an image index in each, and choose **Files + sizes (already mounted)**.
+Both indexes **must already be mounted** (preferably read-only) in separate
+folders using normal Mount tools. The comparison verifies the active WIMGAPI
+mount registrations, scans file paths, sizes, and empty directories, and
+marks paths present in only A, only B, or both. It skips symbolic links
+and junctions; incomplete/unreadable scans fail rather than displaying
+false missing-file results. Each mount is limited to 250,000 entries.
+
+For a selected file choose **SHA-256... → Verify selected file**, or
+**Verify filtered same-size files** to hash file content across A and B.
+Batch verification uses the active Type/Result/Search filters and refuses
+batches above **50 paths / 1 GiB total reads**, rather than truncating them.
+Bytes are read without writing or committing the images. Source paths,
+file sizes and reparse points are checked again immediately before hashing.
+No partial results are displayed when the operation fails or is canceled.
+A successful hash result replaces size labels only for the verified paths;
+all other rows remain a **size comparison, not proof of equal content**.
+
+The comparison window keeps its footer controls visible at high DPI and
+retains the A/B source filename and original WIM index in CSV exports.
+**Commit/Discard remains fully manual**; this feature does not mount,
+unmount, install, or modify images. Windows CI uses disposable mounted
+WIMs and synthetic same-length/different-bytes fixtures. For real
+deployment images, confirm mounted read-only image paths and result accuracy
+on a safe Windows test machine before relying on the report.
+
 ### Compare 2–8 indexes inside one WIM or ESD (test RC)
 
 After **Inspect**, choose **Compare indexes**. Two or three indexes are
