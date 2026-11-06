@@ -111,7 +111,7 @@ CSV text is protected against spreadsheet formula injection. The JSON format
 has `ExportKind: Wim360IndexMetadata` and is **not** an inventory snapshot
 for **Compare JSON snapshots**; those require an actual mounted-index audit.
 
-### Compare TWO different WIM/ESD containers (4.3.16 candidate)
+### Compare TWO different WIM/ESD containers (4.3.16)
 
 In **WIM 360 → Compare 2 files**, select two independent WIM or ESD
 files, run **Inspect** for A and B, then choose one image index inside
@@ -362,7 +362,7 @@ does not mark the local event as submitted. No background upload occurs.
 There is **no required collector EXE, DLL, installer or GitHub token**.
 The original DISM diagnostics, support contact and manual Issue draft remain.
 See [embedded integration details](docs/UNIVERSAL-DIAGNOSTICS.md).
-Current stable version: **4.3.15**. Earlier releases remain available.
+Current stable version: **4.3.16**. Earlier releases remain available.
 
 ## Other dialogs: 175% horizontal-scroll fixes (4.3.10 test branch)
 
