@@ -236,7 +236,8 @@ DISM GUI continues to report version **4.3.10**.
 
 Integrated Test Center, WIM 360 Detailed Inventory and WIM 360 Snapshot
 Comparison now fit their actual viewport width at simulated 125%, 150% and
-175% font scaling. The test center uses four proportionally sized action
+175% font scaling. Inventory and Snapshot filters use proportional columns
+so the search field stays wide enough to type and read search terms. The test center uses four proportionally sized action
 buttons. Long row contents retain their own DataGridView horizontal scroll,
 while the surrounding forms use vertical scrolling for tall content. CI
 asserts that primary and Close actions remain reachable without scrolling

@@ -96,10 +96,12 @@ Public NotInheritable Class Wim360InventoryForm
             .Dock = DockStyle.Fill, .Margin = New Padding(0, 1, 0, 9)
         }
         filterBar.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        filterBar.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 152))
-        filterBar.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 181))
-        filterBar.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        filterBar.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 133))
+        ' Allocate meaningful space for free-text search even at 175%
+        ' font scaling. Absolute type/state/button widths formerly left
+        ' a nearly invisible search field after ScaleDialogTables().
+        For Each share As Single In {22.0F, 23.0F, 35.0F, 20.0F}
+            filterBar.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, share))
+        Next
         root.Controls.Add(filterBar, 0, 1)
 
         typeFilter = New ComboBox With {

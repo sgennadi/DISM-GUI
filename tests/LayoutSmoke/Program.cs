@@ -1109,6 +1109,8 @@ internal static class LayoutSmoke
         Require(clear!.RectangleToScreen(clear.ClientRectangle).Right <= inventoryRight + 3 &&
                 close!.RectangleToScreen(close.ClientRectangle).Right <= inventoryRight + 3,
             "Inventory filters and Close must fit horizontally at high DPI");
+        Require(search!.ClientSize.Width >= 170 && clear.ClientSize.Width >= 140,
+            "Inventory search and Clear filters must remain usable at 175%");
         Require(grid!.VirtualMode && grid.RowCount == 7,
                 "Catalog must show all inventory rows via virtual, read-only grid");
         NoOverlap(type!, state!, "WIM catalog type and state filters");
@@ -1285,6 +1287,8 @@ internal static class LayoutSmoke
         Require(runButton!.RectangleToScreen(runButton.ClientRectangle).Right <= snapshotRight + 3 &&
                 close!.RectangleToScreen(close.ClientRectangle).Right <= snapshotRight + 3,
             "Snapshot Compare and Close must fit horizontally at high DPI");
+        Require(search!.ClientSize.Width >= 170 && runButton.ClientSize.Width >= 145,
+            "Snapshot free-text search and Compare JSON must remain usable at 175%");
         Require(!csv!.Enabled && !json!.Enabled &&
                 grid!.VirtualMode && grid.RowCount == 0,
                 "Snapshot compare must not export before a comparison");

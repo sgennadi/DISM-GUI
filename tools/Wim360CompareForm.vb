@@ -91,10 +91,11 @@ Public NotInheritable Class Wim360CompareForm
             .Margin = New Padding(0, 3, 0, 8)
         }
         filterBar.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        filterBar.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 155))
-        filterBar.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 174))
-        filterBar.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        filterBar.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 153))
+        ' Percentage widths keep search usable and the Compare action
+        ' visible when font sizes increase. No forced horizontal scrolling.
+        For Each share As Single In {22.0F, 22.0F, 33.0F, 23.0F}
+            filterBar.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, share))
+        Next
         root.Controls.Add(filterBar, 0, 3)
         changeFilter = New ComboBox With {
             .Name = "cmb360CompareChange", .Dock = DockStyle.Fill,
