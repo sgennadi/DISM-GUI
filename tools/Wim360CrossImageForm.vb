@@ -16,6 +16,7 @@ Public NotInheritable Class Wim360CrossImageForm
     Private ReadOnly paths(1) As TextBox
     Private ReadOnly indexSelectors(1) As ComboBox
     Private ReadOnly loadButtons(1) As Button
+    Private ReadOnly browseButtons(1) As Button
     Private ReadOnly reports(1) As Wim360Reader.WimReport
     Private ReadOnly generation(1) As Integer
     Private ReadOnly modeBox As ComboBox
@@ -30,7 +31,7 @@ Public NotInheritable Class Wim360CrossImageForm
     Private ReadOnly delaySearch As System.Windows.Forms.Timer
     Private ReadOnly tips As ToolTip
     Private comparison As Wim360IndexComparer.Result
-    Private visible As New List(Of Wim360IndexComparer.Row)()
+    Private visibleRows As New List(Of Wim360IndexComparer.Row)()
     Private job As CancellationTokenSource
     Private busy As Boolean
     Private loading As Boolean
@@ -356,14 +357,14 @@ Public NotInheritable Class Wim360CrossImageForm
         ModernTheme.StyleButton(loadButtons(side), "secondary")
         row.Controls.Add(loadButtons(side), If(stacked, 1, 2),
                          If(stacked, 2, 1))
-        Dim browse As New Button With {
+        browseButtons(side) = New Button With {
             .Name = If(side = 0, "btn360CrossBrowseBaseline", "btn360CrossBrowseCandidate"),
             .Text = "Browse...", .Dock = DockStyle.Fill,
             .Margin = New Padding(0, 2, 0, 3)
         }
-        ModernTheme.StyleButton(browse, "browse")
-        row.Controls.Add(browse, If(stacked, 2, 3), If(stacked, 2, 1))
-        AddHandler browse.Click, Sub(sender, e) BrowseSource(side)
+        ModernTheme.StyleButton(browseButtons(side), "browse")
+        row.Controls.Add(browseButtons(side), If(stacked, 2, 3), If(stacked, 2, 1))
+        AddHandler browseButtons(side).Click, Sub(sender, e) BrowseSource(side)
         AddHandler loadButtons(side).Click, Sub(sender, e) LoadSource(side)
         AddHandler paths(side).TextChanged, Sub(sender, e)
             generation(side) += 1
@@ -454,7 +455,7 @@ Public NotInheritable Class Wim360CrossImageForm
     Private Sub InvalidateResult()
         If table Is Nothing Then Return
         comparison = Nothing
-        visible.Clear()
+        visibleRows.Clear()
         table.RowCount = 0
         exportButton.Enabled = False
         If Not busy Then UpdateControls()
@@ -465,6 +466,7 @@ Public NotInheritable Class Wim360CrossImageForm
         For i = 0 To 1
             paths(i).ReadOnly = busy OrElse loading
             loadButtons(i).Enabled = Not busy AndAlso Not loading
+            browseButtons(i).Enabled = Not busy AndAlso Not loading
             indexSelectors(i).Enabled = Not busy AndAlso Not loading
         Next
         If busy Then
@@ -569,10 +571,10 @@ Public NotInheritable Class Wim360CrossImageForm
             Case "Exists in both" : filter = "Exists in all"
             Case "Present in both" : filter = "Present in all"
         End Select
-        visible = Wim360IndexComparer.Filter(
+        visibleRows = Wim360IndexComparer.Filter(
             comparison.Rows, Convert.ToString(typeBox.SelectedItem),
             filter, searchBox.Text, 2)
-        table.RowCount = visible.Count
+        table.RowCount = visibleRows.Count
         Dim diffs = visible.Where(Function(x)
             Return x.State = "Different" OrElse
                 x.State.StartsWith("Only in Index ", StringComparison.Ordinal) OrElse
@@ -586,7 +588,7 @@ Public NotInheritable Class Wim360CrossImageForm
 
     Private Sub GridValueNeeded(sender As Object, e As DataGridViewCellValueEventArgs)
         If e.RowIndex < 0 OrElse e.RowIndex >= visible.Count Then Return
-        Dim row = visible(e.RowIndex)
+        Dim row = visibleRows(e.RowIndex)
         Select Case e.ColumnIndex
             Case 0 : e.Value = row.Kind
             Case 1 : e.Value = row.Name
@@ -627,7 +629,7 @@ Public NotInheritable Class Wim360CrossImageForm
             If picker.ShowDialog(Me) <> DialogResult.OK Then Return
             Try
                 Using writer As New StreamWriter(picker.FileName, False, New UTF8Encoding(True))
-                    Wim360IndexComparer.WriteCsv(writer, comparison, visible)
+                    Wim360IndexComparer.WriteCsv(writer, comparison, visibleRows)
                 End Using
                 statusLabel.Text = "Saved " & visible.Count.ToString("N0") &
                     " filtered rows. Neither source image was modified."
