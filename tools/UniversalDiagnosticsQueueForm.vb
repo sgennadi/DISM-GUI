@@ -23,6 +23,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         Public Property Summary As String = ""
         Public Property Fingerprint As String = ""
         Public Property DeliveryStatus As String = ""
+        Public Property DeliveryUrl As String = ""
         Public Property FilePath As String = ""
     End Class
 
@@ -38,6 +39,8 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
     Private ReadOnly copyButton As Button
     Private ReadOnly deleteButton As Button
     Private ReadOnly draftButton As Button
+    Private ReadOnly submittedButton As Button
+    Private ReadOnly pendingButton As Button
 
     Public Sub New()
         Me.Name = "UniversalDiagnosticsQueueForm"
@@ -160,10 +163,10 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         footer.Controls.Add(footnote, 0, 0)
 
         Dim buttons As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 3, .RowCount = 2
+            .Dock = DockStyle.Fill, .ColumnCount = 4, .RowCount = 2
         }
-        For i As Integer = 1 To 3
-            buttons.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F / 3.0F))
+        For i As Integer = 1 To 4
+            buttons.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 25.0F))
         Next
         buttons.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
         buttons.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
@@ -219,7 +222,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
                 footnote.Text = "Cannot open queue folder (" & ex.GetType().Name & ")."
             End Try
         End Sub
-        buttons.Controls.Add(openFolder, 0, 1)
+        buttons.Controls.Add(openFolder, 3, 0)
 
         draftButton = New Button With {
             .Name = "btnUniversalQueueGitHubDraft",
@@ -229,7 +232,27 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         }
         ModernTheme.StyleButton(draftButton, "secondary")
         AddHandler draftButton.Click, AddressOf OpenReviewedDraft
-        buttons.Controls.Add(draftButton, 1, 1)
+        buttons.Controls.Add(draftButton, 0, 1)
+
+        submittedButton = New Button With {
+            .Name = "btnUniversalQueueSubmitted",
+            .Text = "Mark submitted...",
+            .Dock = DockStyle.Fill, .Enabled = False,
+            .Margin = New Padding(3, 2, 7, 2)
+        }
+        ModernTheme.StyleButton(submittedButton, "secondary")
+        AddHandler submittedButton.Click, AddressOf MarkSubmitted
+        buttons.Controls.Add(submittedButton, 1, 1)
+
+        pendingButton = New Button With {
+            .Name = "btnUniversalQueuePending",
+            .Text = "Mark pending",
+            .Dock = DockStyle.Fill, .Enabled = False,
+            .Margin = New Padding(3, 2, 7, 2)
+        }
+        ModernTheme.StyleButton(pendingButton, "neutral")
+        AddHandler pendingButton.Click, AddressOf MarkPending
+        buttons.Controls.Add(pendingButton, 2, 1)
 
         Dim close As New Button With {
             .Name = "btnUniversalQueueClose", .Text = "Close",
@@ -238,7 +261,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         ModernTheme.StyleButton(close, "neutral")
         AddHandler close.Click, Sub(sender, e) Me.Close()
         Me.CancelButton = close
-        buttons.Controls.Add(close, 2, 1)
+        buttons.Controls.Add(close, 3, 1)
 
         WindowGeometry.Install(Me, "Software\DISMGUI\UniversalQueue")
         AddHandler Me.Shown, Sub(sender, e) RefreshRecords()
@@ -298,6 +321,14 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
                    Field(eventJson, "project", 100) <> Project Then Return Nothing
                 Dim state = Field(delivery, "status", 20).ToLowerInvariant()
                 If state <> "pending" AndAlso state <> "submitted" Then Return Nothing
+                Dim savedIssue = ""
+                Dim urlField As JsonElement
+                If state = "submitted" AndAlso
+                   delivery.TryGetProperty("url", urlField) AndAlso
+                   urlField.ValueKind = JsonValueKind.String Then
+                    savedIssue = UniversalDiagnosticsDelivery.SafeIssueUrl(
+                        urlField.GetString())
+                End If
                 Return New SavedEntry With {
                     .Id = fileId.ToString("D"),
                     .WhenUtc = Field(eventJson, "timestamp_utc", 32),
@@ -309,6 +340,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
                     .Summary = Field(eventJson, "summary", 450),
                     .Fingerprint = Field(eventJson, "fingerprint", 64),
                     .DeliveryStatus = state,
+                    .DeliveryUrl = savedIssue,
                     .FilePath = path
                 }
             End Using
@@ -337,7 +369,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         Dim record As New Dictionary(Of String, Object) From {
             {"event", eventValue},
             {"delivery", New Dictionary(Of String, String) From {
-                {"status", item.DeliveryStatus}, {"url", ""}
+                {"status", item.DeliveryStatus}, {"url", item.DeliveryUrl}
             }}
         }
         Return JsonSerializer.Serialize(record,
@@ -356,7 +388,12 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         copyButton.Enabled = available
         exportButton.Enabled = available
         deleteButton.Enabled = available
-        draftButton.Enabled = available
+        draftButton.Enabled = available AndAlso
+            item.DeliveryStatus = "pending"
+        submittedButton.Enabled = available AndAlso
+            item.DeliveryStatus = "pending"
+        pendingButton.Enabled = available AndAlso
+            item.DeliveryStatus = "submitted"
     End Sub
 
     Public Sub RefreshRecords()
@@ -438,6 +475,109 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
             footnote.Text = "Draft opened. Submit in GitHub manually; local status unchanged."
         Catch ex As Exception
             footnote.Text = "Could not open GitHub draft (" & ex.GetType().Name & ")."
+        End Try
+    End Sub
+
+    Private Function AskSubmittedIssueUrl() As String
+        Using form As New Form With {
+            .Text = "Confirm manual GitHub Issue submission",
+            .StartPosition = FormStartPosition.CenterParent,
+            .FormBorderStyle = FormBorderStyle.FixedDialog,
+            .MinimizeBox = False, .MaximizeBox = False,
+            .ShowInTaskbar = False,
+            .Size = New Size(730, 240),
+            .Font = ModernTheme.UiFont(9.5F)
+        }
+            Dim layout As New TableLayoutPanel With {
+                .Dock = DockStyle.Fill,
+                .ColumnCount = 1, .RowCount = 3,
+                .Padding = New Padding(16, 10, 16, 12)
+            }
+            layout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+            layout.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 35))
+            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 51))
+            form.Controls.Add(layout)
+
+            Dim explanation As New Label With {
+                .Dock = DockStyle.Fill,
+                .TextAlign = ContentAlignment.MiddleLeft,
+                .Text = "Only after YOU have submitted a GitHub Issue, paste its link." &
+                    Environment.NewLine &
+                    "This records the link LOCALLY. It never submits, checks or changes GitHub.",
+                .AutoEllipsis = False
+            }
+            layout.Controls.Add(explanation, 0, 0)
+            Dim issueBox As New TextBox With {
+                .Name = "txtUniversalSubmittedUrl",
+                .Dock = DockStyle.Fill,
+                .PlaceholderText = "https://github.com/sgennadi/DISM-GUI/issues/123",
+                .Margin = New Padding(0, 4, 0, 4)
+            }
+            layout.Controls.Add(issueBox, 0, 1)
+            Dim actions As New FlowLayoutPanel With {
+                .Dock = DockStyle.Fill, .FlowDirection = FlowDirection.RightToLeft
+            }
+            Dim accept As New Button With {
+                .Text = "Record locally", .DialogResult = DialogResult.OK,
+                .Size = New Size(165, 34)
+            }
+            Dim cancel As New Button With {
+                .Text = "Cancel", .DialogResult = DialogResult.Cancel,
+                .Size = New Size(110, 34)
+            }
+            actions.Controls.Add(accept)
+            actions.Controls.Add(cancel)
+            layout.Controls.Add(actions, 0, 2)
+            form.AcceptButton = accept
+            form.CancelButton = cancel
+            If form.ShowDialog(Me) <> DialogResult.OK Then Return Nothing
+            Return issueBox.Text.Trim()
+        End Using
+    End Function
+
+    Private Sub MarkSubmitted(sender As Object, e As EventArgs)
+        Dim item = Selected()
+        If item Is Nothing OrElse item.DeliveryStatus <> "pending" Then Return
+        Dim entered = AskSubmittedIssueUrl()
+        If entered Is Nothing Then Return
+        Try
+            Dim issueUrl = UniversalDiagnosticsDelivery.NormalizeIssueUrl(entered)
+            If MessageBox.Show(Me,
+                "Confirm you already SUBMITTED this Issue on GitHub?" &
+                Environment.NewLine & issueUrl & Environment.NewLine &
+                "Only its LOCAL status will become Submitted.",
+                "Confirm existing GitHub Issue",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) <> DialogResult.Yes Then Return
+            UniversalDiagnosticsDelivery.SetStatus(item.Id, "submitted", issueUrl)
+            RefreshRecords()
+            footnote.Text = "Manually marked Submitted. No network request was made."
+        Catch ex As Exception When TypeOf ex Is ArgumentException OrElse
+                                   TypeOf ex Is IOException OrElse
+                                   TypeOf ex Is UnauthorizedAccessException OrElse
+                                   TypeOf ex Is InvalidDataException
+            MessageBox.Show(Me, ex.Message, "Cannot mark report submitted",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning)
+        End Try
+    End Sub
+
+    Private Sub MarkPending(sender As Object, e As EventArgs)
+        Dim item = Selected()
+        If item Is Nothing OrElse item.DeliveryStatus <> "submitted" Then Return
+        If MessageBox.Show(Me,
+            "Reset this LOCAL report to Pending and remove its saved Issue link?" &
+            Environment.NewLine & "Any existing Issue on GitHub will be unaffected.",
+            "Reset local delivery state",
+            MessageBoxButtons.YesNo, MessageBoxIcon.Question) <> DialogResult.Yes Then Return
+        Try
+            UniversalDiagnosticsDelivery.SetStatus(item.Id, "pending")
+            RefreshRecords()
+            footnote.Text = "Locally marked Pending. No GitHub Issue was changed."
+        Catch ex As Exception When TypeOf ex Is IOException OrElse
+                                   TypeOf ex Is UnauthorizedAccessException OrElse
+                                   TypeOf ex Is InvalidDataException
+            MessageBox.Show(Me, ex.Message, "Cannot reset report",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning)
         End Try
     End Sub
 
