@@ -336,13 +336,13 @@ Public NotInheritable Class Wim360IndexComparer
             While Not String.Equals(parent, basePath, StringComparison.OrdinalIgnoreCase)
                 If String.IsNullOrEmpty(parent) OrElse
                    Not parent.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase) OrElse
-                   (File.GetAttributes(parent) And FileAttributes.ReparsePoint) <> 0 Then
+                   (File.GetAttributes(parent) And FileAttributes.ReparsePoint) = FileAttributes.ReparsePoint Then
                     Throw New InvalidOperationException(
                         "SHA-256 verification excludes reparse points and paths outside the mount.")
                 End If
                 parent = Path.GetDirectoryName(parent)
             End While
-            If (File.GetAttributes(fullName) And FileAttributes.ReparsePoint) <> 0 Then
+            If (File.GetAttributes(fullName) And FileAttributes.ReparsePoint) = FileAttributes.ReparsePoint Then
                 Throw New InvalidOperationException(
                     "SHA-256 verification intentionally excludes reparse points.")
             End If
