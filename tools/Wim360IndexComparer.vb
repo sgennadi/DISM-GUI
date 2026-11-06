@@ -39,6 +39,9 @@ Public NotInheritable Class Wim360IndexComparer
         Public Property ImageFile As String = ""
         Public Property Mode As String = ""
         Public Property Indexes As New List(Of Integer)()
+        ' Optional descriptive labels for cross-container comparisons.
+        ' Classic same-WIM comparisons continue to show Index N.
+        Public Property ColumnLabels As New Dictionary(Of Integer, String)()
         Public Property Rows As New List(Of Row)()
         Public Property Notes As String = ""
     End Class
@@ -522,12 +525,21 @@ Public NotInheritable Class Wim360IndexComparer
         Return quote & raw.Replace(quote, quote & quote) & quote
     End Function
 
+    Public Shared Function ColumnLabel(result As Result, index As Integer) As String
+        If result Is Nothing Then Throw New ArgumentNullException(NameOf(result))
+        Dim label As String = Nothing
+        If result.ColumnLabels IsNot Nothing AndAlso
+           result.ColumnLabels.TryGetValue(index, label) AndAlso
+           Not String.IsNullOrWhiteSpace(label) Then Return label
+        Return "Index " & index.ToString(CultureInfo.InvariantCulture)
+    End Function
+
     Public Shared Sub WriteCsv(writer As TextWriter, result As Result,
                                visibleRows As IEnumerable(Of Row))
         If writer Is Nothing Then Throw New ArgumentNullException(NameOf(writer))
         If result Is Nothing Then Throw New ArgumentNullException(NameOf(result))
         Dim columns = {"Kind", "Item", "Result", "Notes"}.
-                      Concat(result.Indexes.Select(Function(x) "Index " & x.ToString())).ToList()
+                      Concat(result.Indexes.Select(Function(x) ColumnLabel(result, x))).ToList()
         writer.WriteLine(String.Join(",", columns.Select(Function(x) CsvCell(x))))
         For Each item In visibleRows
             Dim cells = New String() {item.Kind, item.Name, item.State, item.Notes}.
