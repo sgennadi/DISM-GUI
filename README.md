@@ -290,6 +290,44 @@ suppressed when the related inventory returned a warning. Duplicate identities
 are reported as ambiguous, rather than silently treated as a change. Always
 export with cleared Type/State/Search filters to get a complete comparison.
 
+### Mount safety, Commit/Discard verification and recovery journal (development candidate)
+
+**WIM 360 → Mount health** is a read-only view of the current WIMGAPI
+mount registration and the recent **local** Commit/Discard operation journal.
+It remains accessible even when no WIM file is selected, so interrupted
+operations can be reviewed. The health window can refresh and copy the
+report, but cannot automatically clean, remount, commit or discard an image.
+
+Before invoking legacy **Dismount WIM**, DISM GUI now validates the fresh
+WIM/ESD source, numeric index, exact registered mount folder and
+mount state. **Commit** requires a registered `Mounted (R/W)` index;
+**Discard** requires an active valid R/W or read-only mount. Unknown
+registration, changed selection, unsafe folder or missing source blocks
+the operation without starting DISM.
+
+After a user chooses Commit or Discard, a **Pending** operation record is
+written atomically to a local JSON journal BEFORE DISM starts. Failure to
+save this record prevents execution. After DISM exits, the WIMGAPI
+registration is queried again. A success message requires DISM exit 0,
+a confirmed dismount and a successfully updated journal. Failed or
+interrupted operations remain **Review required** (or **Pending** if the
+app/process stopped before completion). The history contains the action,
+time, WIM path/index, mounted folder and exit status, not full DISM
+console output. Files remain on the local computer; nothing is uploaded.
+
+**Important:** Commit can change the underlying WIM before a power loss
+or process termination. No application can guarantee atomic rollback.
+The Mount health view therefore **never** retries Commit, runs automatic
+DISM cleanup or discards images after an uncertain interruption.
+Inspect registrations and logs and decide on recovery manually. Do
+not delete a mount folder until DISM confirms it was dismounted.
+
+This feature does not change the regular Mount/Apply/Driver Studio
+commands. Automated tests use synthetic registration and local journal
+fixtures, plus disposable Windows DISM images where available.
+Physical Windows 11/Server servicing should still be tested with
+non-production copies before deployment.
+
 ### Real WIM mount integration test (4.3.6)
 
 The Windows x64 CI runner creates a disposable WIM using `dism.exe
