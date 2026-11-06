@@ -346,6 +346,14 @@ internal static class LayoutSmoke
                     Rectangle.Intersect(dialogViewport, bounds).Width >= action.Width - 5,
                     "Cross-image sticky footer button is clipped outside the dialog: " + action.Text);
         }
+        var sourceViewport = Find(viewer, "Wim360CrossViewport") as Panel;
+        Require(sourceViewport is not null, "Cross-image viewport is missing");
+        var gridViewportArea = Rectangle.Intersect(
+            grid.RectangleToScreen(grid.ClientRectangle),
+            sourceViewport!.RectangleToScreen(sourceViewport.ClientRectangle));
+        Require(gridViewportArea.Height >= 118,
+            "Cross-image sticky footer hides the comparison grid at simulated high DPI: " +
+            gridViewportArea.Height + "px visible");
         var lastSourceColumn = grid.GetColumnDisplayRectangle(4, false);
         Require(lastSourceColumn.Width >= 150 &&
                 lastSourceColumn.Right <= grid.ClientSize.Width,
