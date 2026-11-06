@@ -658,8 +658,11 @@ internal static class LayoutSmoke
             "DISMGUI-Local-Diagnostics-" + Guid.NewGuid().ToString("N"));
         var oldTest = Environment.GetEnvironmentVariable("DISMGUI_TEST_DIAGNOSTICS");
         var oldPath = Environment.GetEnvironmentVariable("DISMGUI_TEST_LOG_DIRECTORY");
+        var oldUdx = Environment.GetEnvironmentVariable("UDX_STATE_DIR");
         Environment.SetEnvironmentVariable("DISMGUI_TEST_DIAGNOSTICS", "1");
         Environment.SetEnvironmentVariable("DISMGUI_TEST_LOG_DIRECTORY", temp);
+        Environment.SetEnvironmentVariable("UDX_STATE_DIR",
+            System.IO.Path.Combine(temp, "universal"));
         try
         {
             Require(RuntimeDiagnostics.ReadRecent().Contains("no recorded runtime errors"),
@@ -675,12 +678,48 @@ internal static class LayoutSmoke
                     history.Contains("code=87") &&
                     !history.Contains("DO_NOT_KEEP_THIS_SECRET"),
                     "Persistent local diagnostics should be redacted, bounded and store failed DISM exits.");
+            var queueFolder = UniversalDiagnosticsEmbedded.QueueDirectory(
+                "sgennadi/DISM-GUI");
+            var queueFiles = System.IO.Directory.GetFiles(queueFolder, "*.json");
+            Require(queueFiles.Length == 2,
+                "DISM and WIM errors must enter the shared local queue once each");
+            var queueContent = string.Join("\n",
+                queueFiles.Select(System.IO.File.ReadAllText));
+            Require(queueContent.Contains("\"universal-diagnostics/v1\"") &&
+                    queueContent.Contains("\"WIM 360\"") &&
+                    queueContent.Contains("\"DISM\"") &&
+                    queueContent.Contains("\"DismExit\"") &&
+                    !queueContent.Contains("DO_NOT_KEEP_THIS_SECRET") &&
+                    !queueContent.Contains("Password=") &&
+                    !queueContent.Contains("events.log"),
+                "Automatic queue must contain only coarse anonymized diagnostics");
+            RuntimeDiagnostics.RecordDismExit("DISM command", "87");
+            Require(System.IO.Directory.GetFiles(queueFolder, "*.json").Length == 2,
+                "Identical errors in 24 hours must be deduplicated in the shared queue");
+            // An event written in another process is detected by its canonical
+            // fingerprint even before this process has cached the signature.
+            var external = UniversalDiagnosticsEmbedded.Capture(
+                """{"project":"sgennadi/DISM-GUI","component":"DISM","error_type":"DismExit","code":"42","summary":"External fingerprint fixture"}""");
+            Require(!UniversalDiagnosticsRuntime.RecordFailure(
+                        "DISM test", "DISM exit", 42) &&
+                    System.IO.Directory.GetFiles(queueFolder, "*.json").Length == 3,
+                "Persistent queue signatures must prevent duplicates across launches");
+            Require(UniversalDiagnosticsRuntime.RecordFailure(
+                        "C:\\Users\\private-person\\secret.wim", "SafeError", 777),
+                "An unrelated generic failure must still be captured");
+            var privateRecord = System.IO.Directory.GetFiles(queueFolder, "*.json")
+                .Select(System.IO.File.ReadAllText)
+                .Single(x => x.Contains("\"code\": \"777\""));
+            Require(privateRecord.Contains("\"component\": \"Application\"") &&
+                    !privateRecord.Contains("private-person") &&
+                    !privateRecord.Contains("secret.wim"),
+                "Unknown failure area must never leak a user-controlled path");
             var raw = System.IO.File.ReadAllText(
                 System.IO.Path.Combine(temp, "events.log"));
             Require(raw.Contains("sig=") &&
                     !raw.Contains("DO_NOT_KEEP_THIS_SECRET") &&
-                    raw.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length == 2,
-                "Local journal must use coarse signatures and exclude successful DISM exits.");
+                    raw.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length == 3,
+                "Local journal preserves repeated local failures; the universal queue deduplicates them.");
             var withoutHistory = ErrorDiagnostics.BuildReport(
                 "Failure", "Test", false, "", "System", 96);
             Require(!withoutHistory.Contains("DISM command") &&
@@ -701,6 +740,7 @@ internal static class LayoutSmoke
         {
             Environment.SetEnvironmentVariable("DISMGUI_TEST_DIAGNOSTICS", oldTest);
             Environment.SetEnvironmentVariable("DISMGUI_TEST_LOG_DIRECTORY", oldPath);
+            Environment.SetEnvironmentVariable("UDX_STATE_DIR", oldUdx);
             try { System.IO.Directory.Delete(temp, recursive: true); }
             catch { /* Disposable test artifacts are not production files. */ }
         }
