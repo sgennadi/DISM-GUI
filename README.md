@@ -232,6 +232,13 @@ The original DISM diagnostics, support contact and manual Issue draft remain.
 See [embedded integration details](docs/UNIVERSAL-DIAGNOSTICS.md).
 DISM GUI continues to report version **4.3.10**.
 
+## About window high-DPI labels (4.3.10 test branch)
+
+The About dialog uses short, readable **Updates**, **Email** and
+**Report error** buttons. The report action still opens the same
+reviewed diagnostics/GitHub workflow, and the support email link remains
+visible. LayoutSmoke measures text widths at simulated font scales.
+
 ## Update Center high-DPI layout (4.3.10 test branch)
 
 The **Updates** dialog keeps its installed/latest version columns and the

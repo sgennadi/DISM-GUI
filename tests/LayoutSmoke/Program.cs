@@ -1928,16 +1928,27 @@ internal static class LayoutSmoke
                 var supportEmailLink = Find(about, "lnkSupportEmail") as LinkLabel;
                 var supportEmailButton = Find(about, "btnEmailSupport") as Button;
                 var reportIssueButton = Find(about, "btnReportProblem") as Button;
-                Require(reportIssueButton is not null &&
-                        reportIssueButton.Text == "Report error to GitHub",
-                        "About must provide a direct diagnostics and GitHub Issue workflow");
+                var updatesButton = Find(about, "btnAboutUpdates") as Button;
+                Require(reportIssueButton is not null && updatesButton is not null &&
+                        reportIssueButton.Text == "Report error" &&
+                        updatesButton.Text == "Updates",
+                        "About must provide readable Updates and error-report actions");
                 Require(supportEmailLink is not null && supportEmailButton is not null,
                         "About Support email link and button must exist");
                 Require(supportEmailLink!.Text.Contains("sgennadi@hotmail.com") &&
-                        supportEmailButton!.Text == "Email Support",
+                        supportEmailButton!.Text == "Email",
                         "About must display the intended support email address");
                 Require(supportEmailButton.Height >= 28 && supportEmailButton.Width >= 120,
                         "Email Support button is too small or clipped");
+                foreach (var aboutAction in new[] { updatesButton!, supportEmailButton,
+                                                     reportIssueButton! })
+                {
+                    var needed = TextRenderer.MeasureText(aboutAction.Text,
+                        aboutAction.Font, new Size(1600, 120),
+                        TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width;
+                    Require(needed + 12 <= aboutAction.ClientSize.Width,
+                        $"About action '{aboutAction.Text}' is horizontally clipped at high DPI");
+                }
                 var mailto = SupportContact.BuildSupportMailto();
                 var decoded = Uri.UnescapeDataString(mailto);
                 Require(mailto.StartsWith("mailto:sgennadi@hotmail.com?subject=",
