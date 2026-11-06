@@ -235,8 +235,10 @@ DISM GUI continues to report version **4.3.10**.
 ## Error diagnostics and GitHub issue workflow (4.3.7)
 
 Use **Tools > Report error to GitHub** or **About > Report error to GitHub**.
-DISM GUI prepares a local diagnostic preview with app version, .NET/Windows
-environment, architecture and DPI. Recent DISM output is **off by default**,
+DISM GUI prepares a **multiline**, readable local diagnostic preview with
+app version, .NET/Windows environment, architecture and DPI. Windows CRLF
+line endings are normalized so the headings, log excerpts and checklist
+do not collapse into one long line in the WinForms preview. Recent DISM output is **off by default**,
 and including the last 60 lines requires an explicit checkbox. The preview
 redacts recognizable credentials, recovery passwords, identities, addresses,
 URLs and local/network paths. You must still inspect it yourself, check the

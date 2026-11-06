@@ -843,11 +843,14 @@ internal static class LayoutSmoke
         Require(report.Contains("DISM GUI: ") &&
                 report.Contains("Display DPI: 144") &&
                 report.Contains("DISM output: not included") &&
+                report.Contains("## Summary\r\n[Bug]") &&
+                report.Contains("\r\n\r\n## Diagnostic context (sanitized)\r\n") &&
                 !report.Contains("DO_NOT_UPLOAD_123"),
                 "Default diagnostic report must exclude logs and show version/DPI");
         var withLog = ErrorDiagnostics.BuildReport(
             "WIM 360 returned an error", "Scan failed", true, raw, "WIM 360", 144);
         Require(withLog.Contains("DISM output (last 60 lines") &&
+                withLog.Contains("\r\n## Checklist\r\n") &&
                 !withLog.Contains("214516-214516") &&
                 !withLog.Contains("tech@example.com"),
                 "Opt-in log report must redact before preview");
@@ -883,6 +886,19 @@ internal static class LayoutSmoke
                 "Error report UI is missing required preview, consent or export controls");
         Require(preview!.WordWrap && preview.ScrollBars == ScrollBars.Vertical,
                 "Diagnostics preview must wrap long report lines without requiring horizontal scrolling");
+        // Windows' native multiline TextBox displays LF-only strings as a
+        // single visual line. Test actual native line positions, not just
+        // report text containing separator characters.
+        var contextIndex = preview.Text.IndexOf(
+            "## Diagnostic context (sanitized)", StringComparison.Ordinal);
+        var checklistIndex = preview.Text.IndexOf(
+            "## Checklist", StringComparison.Ordinal);
+        Require(preview.Lines.Length >= 12 &&
+                contextIndex > 0 && checklistIndex > contextIndex &&
+                preview.GetLineFromCharIndex(contextIndex) >= 5 &&
+                preview.GetLineFromCharIndex(checklistIndex) >
+                    preview.GetLineFromCharIndex(contextIndex),
+                "Diagnostics preview headings must occupy separate visible lines in WinForms");
         Require(!include!.Checked && !history!.Checked &&
                 !reviewed!.Checked && !draft!.Enabled && !queue!.Enabled,
                 "Diagnostic logs must opt-in and GitHub action must require review");
