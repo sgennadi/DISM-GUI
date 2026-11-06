@@ -215,7 +215,7 @@ Public NotInheritable Class DriverStudioPanel
             metrics.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, CSng(100.0 / 3.0)))
         Next
         rootLayout.Controls.Add(metrics, 0, 5)
-        totalMetric = AddMetric(metrics, 0, "SOURCE PACKAGES")
+        totalMetric = AddMetric(metrics, 0, If(stackSource, "SOURCES", "SOURCE PACKAGES"))
         newMetric = AddMetric(metrics, 1, "NEW / NEWER")
         sameMetric = AddMetric(metrics, 2, "SAME VERSION")
 
