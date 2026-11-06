@@ -245,7 +245,9 @@ Use **Tools > Report error to GitHub** or **About > Report error to GitHub**.
 DISM GUI prepares a **multiline**, readable local diagnostic preview with
 app version, .NET/Windows environment, architecture and DPI. Windows CRLF
 line endings are normalized so the headings, log excerpts and checklist
-do not collapse into one long line in the WinForms preview. Recent DISM output is **off by default**,
+do not collapse into one long line in the WinForms preview. The diagnostics
+window uses a responsive width at simulated 125%, 150% and 175% font
+scaling, with vertical rather than horizontal scrolling. Recent DISM output is **off by default**,
 and including the last 60 lines requires an explicit checkbox. The preview
 redacts recognizable credentials, recovery passwords, identities, addresses,
 URLs and local/network paths. You must still inspect it yourself, check the

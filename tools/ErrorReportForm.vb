@@ -254,7 +254,12 @@ Public NotInheritable Class ErrorReportForm
             reviewed.Checked = False
         End Sub
         GeneratePreview()
-        ModernTheme.MakeDialogScrollable(Me, layout, 970, 710)
+        ' Keep the diagnostics canvas within the client width at 125-175%
+        ' simulated font scaling. ScaleDialogTables still grows row heights
+        ' for readable controls, and vertical scrolling remains available.
+        Dim fontScale As Single = Math.Max(1.0F, Me.Font.Height / 17.0F)
+        ModernTheme.MakeDialogScrollable(Me, layout,
+            CInt(Math.Ceiling(780.0F / fontScale)), 710)
         WindowGeometry.Install(Me, "Software\DISMGUI\ErrorReport")
     End Sub
 

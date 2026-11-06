@@ -886,6 +886,17 @@ internal static class LayoutSmoke
                 "Error report UI is missing required preview, consent or export controls");
         Require(preview!.WordWrap && preview.ScrollBars == ScrollBars.Vertical,
                 "Diagnostics preview must wrap long report lines without requiring horizontal scrolling");
+        var supportViewport = Find(dialog, "SupportReportLayoutViewport") as Panel;
+        var refreshPreview = Find(dialog, "btnSupportGenerate") as Button;
+        Require(supportViewport is not null && refreshPreview is not null &&
+                !supportViewport.HorizontalScroll.Visible,
+                "Diagnostics form must not require horizontal scrolling at high DPI");
+        var viewportRight = supportViewport!.RectangleToScreen(
+            supportViewport.ClientRectangle).Right;
+        Require(refreshPreview!.RectangleToScreen(
+                    refreshPreview.ClientRectangle).Right <= viewportRight + 3 &&
+                preview.RectangleToScreen(preview.ClientRectangle).Right <= viewportRight + 3,
+            "Diagnostics preview and Refresh controls must stay inside the viewport");
         // Windows' native multiline TextBox displays LF-only strings as a
         // single visual line. Test actual native line positions, not just
         // report text containing separator characters.
