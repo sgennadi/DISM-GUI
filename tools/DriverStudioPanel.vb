@@ -28,6 +28,7 @@ Public NotInheritable Class DriverStudioPanel
     Private ReadOnly transferButton As Button
     Private ReadOnly installButton As Button
     Private ReadOnly stopButton As Button
+    Private ReadOnly auditButton As Button
     Private ReadOnly targetLabel As Label
     Private ReadOnly statusLabel As Label
     Private ReadOnly totalMetric As Label
@@ -45,6 +46,9 @@ Public NotInheritable Class DriverStudioPanel
     Private comparedIndex As Integer
     Private comparedSource As String = ""
     Private comparedRecurse As Boolean
+    Private comparedArchitecture As String = ""
+    Private ReadOnly packageAudits As New Dictionary(Of String,
+        DriverStudioPackageAudit.AuditResult)(StringComparer.OrdinalIgnoreCase)
     Private ReadOnly importHistory As New List(Of String)()
     Private lastTarget As String = "Not checked"
 
@@ -282,15 +286,27 @@ Public NotInheritable Class DriverStudioPanel
         rootLayout.Controls.Add(grid, 0, 4)
 
         Dim detailsLayout As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .RowCount = 2, .ColumnCount = 1,
+            .Dock = DockStyle.Fill, .RowCount = 2, .ColumnCount = 2,
             .Margin = Padding.Empty, .BackColor = Color.White
         }
         detailsLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        detailsLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 28))
+        detailsLayout.ColumnStyles.Add(New ColumnStyle(
+            SizeType.Absolute, CInt(Math.Ceiling(166 * layoutScale))))
+        detailsLayout.RowStyles.Add(New RowStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(46 * layoutScale))))
         detailsLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         rootLayout.Controls.Add(detailsLayout, 0, 6)
         detailsLayout.Controls.Add(WriteLabel("DRIVER PACKAGE  |  DETAILS",
                                               9.2F, True, ModernTheme.Blue), 0, 0)
+        auditButton = New Button With {
+            .Name = "btnStudioAuditSelected", .Text = "Audit selected",
+            .Dock = DockStyle.Fill, .Margin = New Padding(2, 3, 3, 4),
+            .Enabled = False
+        }
+        ModernTheme.StyleButton(auditButton, "secondary")
+        auditButton.AutoEllipsis = False
+        AddHandler auditButton.Click, AddressOf AuditClicked
+        detailsLayout.Controls.Add(auditButton, 1, 0)
         detailBox = New TextBox With {
             .Name = "txtStudioDetails", .Multiline = True, .ReadOnly = True,
             .ScrollBars = ScrollBars.Vertical, .Dock = DockStyle.Fill,
@@ -301,6 +317,7 @@ Public NotInheritable Class DriverStudioPanel
             .Margin = New Padding(0, 0, 0, 6)
         }
         detailsLayout.Controls.Add(detailBox, 0, 1)
+        detailsLayout.SetColumnSpan(detailBox, 2)
 
         Dim footer As New TableLayoutPanel With {
             .Dock = DockStyle.Fill, .ColumnCount = 3, .RowCount = 1,
@@ -438,6 +455,8 @@ Public NotInheritable Class DriverStudioPanel
 
     Private Sub InvalidateComparison()
         comparisonVerified = False
+        packageAudits.Clear()
+        comparedArchitecture = ""
         importHistory.Clear()
         installButton.Enabled = False
         decisions.Clear()
@@ -455,6 +474,7 @@ Public NotInheritable Class DriverStudioPanel
         isWorking = busy
         scanButton.Enabled = Not busy
         compareButton.Enabled = Not busy
+        auditButton.Enabled = Not busy AndAlso decisions.Count > 0
         recursive.Enabled = Not busy
         sourceBox.ReadOnly = busy
         grid.ReadOnly = busy
@@ -510,7 +530,16 @@ Public NotInheritable Class DriverStudioPanel
             Dim installed = Await DriverStudioInventory.ReadMountedAsync(
                 imagePath, index, mount, CancellationToken.None)
             If IsDisposed Then Return
-            Dim results = DriverStudioEngine.CompareCandidates(sourceItems, installed, True)
+            Dim architecture = Await Task.Run(Function()
+                Dim report = Wim360Reader.Inspect(imagePath)
+                Dim selected = report.Images.FirstOrDefault(Function(x) x.Index = index)
+                If selected Is Nothing Then Throw New InvalidOperationException(
+                    "Selected image index is missing from inspected WIM.")
+                Return selected.Architecture
+            End Function)
+            Dim results = DriverStudioEngine.CompareCandidates(
+                sourceItems, installed, True, architecture)
+            comparedArchitecture = architecture
             comparedWim = imagePath
             comparedIndex = index
             comparedMount = mount
@@ -544,6 +573,7 @@ Public NotInheritable Class DriverStudioPanel
                               comparisonTarget As String,
                               Optional verified As Boolean = False)
         comparisonVerified = verified
+        packageAudits.Clear()
         lastTarget = comparisonTarget
         decisions = results
         grid.SuspendLayout()
@@ -575,6 +605,7 @@ Public NotInheritable Class DriverStudioPanel
             "Preview ready. Choose an INF to see the comparison explanation.")
         copyButton.Enabled = results.Count > 0
         transferButton.Enabled = results.Count > 0
+        auditButton.Enabled = results.Count > 0
         UpdateInstallReady()
         If results.Count > 0 Then
             grid.ClearSelection()
@@ -602,8 +633,66 @@ Public NotInheritable Class DriverStudioPanel
                 d.Existing.InfName & " / " & d.Existing.Version & " / " & d.Existing.DriverDate) &
             Environment.NewLine &
             "Source INF SHA-256: " & src.Sha256 & Environment.NewLine &
+            "INF architecture hints: " & If(src.Architectures.Count = 0, "generic / unknown",
+                String.Join(", ", src.Architectures)) & Environment.NewLine &
+            "Catalog declarations: " & If(src.CatalogFiles.Count = 0, "none",
+                String.Join(", ", src.CatalogFiles.Values.Distinct())) & Environment.NewLine &
             "Hardware IDs from INF: " & If(src.HardwareIds.Count = 0, "not parsed",
-                String.Join(", ", src.HardwareIds.Take(8)))
+                String.Join(", ", src.HardwareIds.Take(8))) &
+            If(packageAudits.ContainsKey(src.FilePath),
+                Environment.NewLine & Environment.NewLine &
+                packageAudits(src.FilePath).Summary, "")
+    End Sub
+
+    ' On-demand (not every Scan INF) because a folder can contain many GiB
+    ' of payloads. All marked New/Newer packages are audited as a group;
+    ' otherwise the highlighted INF can be inspected individually.
+    Private Async Sub AuditClicked(sender As Object, e As EventArgs)
+        If isWorking OrElse decisions.Count = 0 Then Return
+        Dim selected = decisions.Where(Function(d) d.Selected).
+            Select(Function(d) d.Candidate).ToList()
+        If selected.Count = 0 AndAlso grid.SelectedRows.Count > 0 Then
+            Dim rowIndex = grid.SelectedRows(0).Index
+            If rowIndex >= 0 AndAlso rowIndex < decisions.Count Then
+                selected.Add(decisions(rowIndex).Candidate)
+            End If
+        End If
+        If selected.Count = 0 Then Return
+        If selected.Count > 30 Then
+            MessageBox.Show(Me.FindForm(),
+                "Audit up to 30 INF packages at a time. Narrow your selected plan.",
+                "Driver Studio - Package audit", MessageBoxButtons.OK,
+                MessageBoxIcon.Information)
+            Return
+        End If
+        Dim targetArchitecture = If(comparisonVerified, comparedArchitecture, "")
+        WorkState(True)
+        Dim verifiedCount As Integer = 0
+        Try
+            For Each package In selected
+                statusLabel.Text = "Auditing " & (verifiedCount + 1).ToString() &
+                    "/" & selected.Count.ToString() & ": " & package.InfName
+                Dim report = Await Task.Run(Function()
+                    Return DriverStudioPackageAudit.Audit(
+                        package, targetArchitecture, True)
+                End Function)
+                If IsDisposed Then Return
+                packageAudits(package.FilePath) = report
+                If report.CanInstall Then verifiedCount += 1
+                detailBox.Text = report.Summary
+            Next
+            statusLabel.Text = "Package audit: " & verifiedCount.ToString() & "/" &
+                selected.Count.ToString() & " trusted. " &
+                "Unverified CAT files cannot be installed by Driver Studio."
+            ShowSelected()
+        Catch ex As Exception
+            RuntimeDiagnostics.RecordException("Driver Studio package audit", ex)
+            statusLabel.Text = "Package audit stopped: " & ex.Message
+            detailBox.Text = "No DISM writes were performed." &
+                             Environment.NewLine & ex.Message
+        Finally
+            If Not IsDisposed Then WorkState(False)
+        End Try
     End Sub
 
     ' Explicit controlled write path. The preview is never an authorization to
@@ -621,6 +710,19 @@ Public NotInheritable Class DriverStudioPanel
             MessageBox.Show(Me.FindForm(),
                 "Only New / Newer entries may be installed. Deselect other statuses.",
                 "Driver Studio - Review selection", MessageBoxButtons.OK,
+                MessageBoxIcon.Warning)
+            Return
+        End If
+        If selected.Any(Function(d)
+               Return Not packageAudits.ContainsKey(d.Candidate.FilePath) OrElse
+                   Not packageAudits(d.Candidate.FilePath).CanInstall
+           End Function) Then
+            MessageBox.Show(Me.FindForm(),
+                "Audit selected INF first. A complete source-package SHA-256 " &
+                "manifest and a valid CAT Authenticode signature are required." &
+                Environment.NewLine &
+                "Select New/Newer packages and click Audit selected.",
+                "Driver Studio - Safety preflight", MessageBoxButtons.OK,
                 MessageBoxIcon.Warning)
             Return
         End If
@@ -673,6 +775,7 @@ Public NotInheritable Class DriverStudioPanel
         importHistory.Clear()
         Dim succeeded As Integer = 0
         Dim completed As Integer = 0
+        Dim appliedPackages As New List(Of DriverStudioEngine.DriverPackage)()
         Try
             statusLabel.Text = "Preflight: verifying read/write mount and fresh driver inventory..."
             Dim mountRoot = Await Task.Run(Function()
@@ -698,9 +801,13 @@ Public NotInheritable Class DriverStudioPanel
                 statusLabel.Text = "Installing " & (completed + 1).ToString() & "/" &
                     plan.Count.ToString() & ": " & package.InfName &
                     " (do not close DISM GUI)"
-                Dim outcome = Await DriverStudioInstaller.AddOneAsync(mountRoot, package)
+                Dim outcome = Await DriverStudioInstaller.AddOneAsync(
+                    mountRoot, package, packageAudits(package.FilePath), comparedArchitecture)
                 completed += 1
-                If outcome.Succeeded Then succeeded += 1
+                If outcome.Succeeded Then
+                    succeeded += 1
+                    appliedPackages.Add(package)
+                End If
                 importHistory.Add(package.InfName & " | " &
                     If(outcome.Succeeded, "Installed", "FAILED") &
                     " | DISM exit: " & outcome.ExitCode.ToString() &
@@ -728,10 +835,41 @@ Public NotInheritable Class DriverStudioPanel
                     Exit For
                 End If
             Next
-            statusLabel.Text = "Selective import finished: " &
-                succeeded.ToString() & "/" & completed.ToString() &
-                " successful, " & (selected.Count - completed).ToString() &
-                " not attempted. Commit/Discard was NOT performed. Compare again."
+            statusLabel.Text = "DISM finished: " & succeeded.ToString() &
+                "/" & completed.ToString() & " successful. Checking mounted inventory..."
+            If appliedPackages.Count > 0 Then
+                Try
+                    Dim afterInventory = Await DriverStudioInventory.ReadMountedAsync(
+                        comparedWim, comparedIndex, comparedMount, CancellationToken.None)
+                    Dim confirmed = appliedPackages.Count(Function(p)
+                        Return DriverStudioInstaller.IsPresentInInventory(p, afterInventory)
+                    End Function)
+                    importHistory.Add("Postflight: " & confirmed.ToString() &
+                        "/" & appliedPackages.Count.ToString() &
+                        " successful DISM packages found in mounted driver inventory.")
+                    If confirmed <> appliedPackages.Count Then
+                        importHistory.Add(
+                            "WARNING: DISM reported success but one or more packages " &
+                            "were not confirmed. Run Scan mounted index and review DISM logs.")
+                    End If
+                    statusLabel.Text = "DISM: " & succeeded.ToString() & "/" &
+                        completed.ToString() & " successful | Inventory: " &
+                        confirmed.ToString() & "/" & appliedPackages.Count.ToString() &
+                        " confirmed staged | Commit/Discard NOT performed."
+                Catch auditError As Exception
+                    RuntimeDiagnostics.RecordException("Driver Studio postflight", auditError)
+                    importHistory.Add("Postflight unavailable: " & auditError.Message)
+                    statusLabel.Text = "DISM: " & succeeded.ToString() & "/" &
+                        completed.ToString() &
+                        " successful; inventory verification unavailable. " &
+                        "Commit/Discard NOT performed."
+                End Try
+            Else
+                statusLabel.Text = "DISM: " & succeeded.ToString() & "/" &
+                    completed.ToString() & " successful, " &
+                    (selected.Count - completed).ToString() &
+                    " not attempted. Commit/Discard NOT performed."
+            End If
         Catch ex As Exception
             RuntimeDiagnostics.RecordException("Driver Studio install", ex)
             importHistory.Add("STOPPED | " & ex.Message)
