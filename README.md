@@ -155,9 +155,11 @@ select an image index in each, and choose **Files + sizes (already mounted)**.
 Both indexes **must already be mounted** (preferably read-only) in separate
 folders using normal Mount tools. The comparison verifies the active WIMGAPI
 mount registrations, scans file paths, sizes, and empty directories, and
-marks paths present in only A, only B, or both. It skips symbolic links
-and junctions; incomplete/unreadable scans fail rather than displaying
-false missing-file results. Each mount is limited to 250,000 entries.
+marks paths present in only A, only B, or both. It includes genuine WIM/WOF-backed reparse files used by Windows
+DISM mounts, while skipping symbolic links and junctions. This also
+corrects the older same-WIM mounted comparison, which previously skipped
+such regular WIM-backed files. Incomplete/unreadable scans fail rather
+than displaying false missing-file results. Each mount is limited to 250,000 entries.
 
 For a selected file choose **SHA-256... → Verify selected file**, or
 **Verify filtered same-size files** to hash file content across A and B.
