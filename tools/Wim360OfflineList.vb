@@ -203,9 +203,9 @@ Public NotInheritable Class Wim360OfflineList
                 "Choose an index that exists in this WIM/ESD file.")
         End If
         token.ThrowIfCancellationRequested()
-        Dim path = Path.GetFullPath(report.ImageFile)
-        Dim source = New FileInfo(path)
-        If Not source.Exists Then Throw New FileNotFoundException("Image missing.", path)
+        Dim imagePath = Path.GetFullPath(report.ImageFile)
+        Dim source = New FileInfo(imagePath)
+        If Not source.Exists Then Throw New FileNotFoundException("Image missing.", imagePath)
         If source.Length <> report.FileSizeBytes OrElse
            source.LastWriteTimeUtc <> report.ModifiedUtc Then
             Throw New InvalidOperationException(
@@ -213,7 +213,7 @@ Public NotInheritable Class Wim360OfflineList
         End If
         ' Do not mix a catalog from an updated image with a stale index
         ' selection from the WIM 360 dashboard.
-        Dim verified = Wim360Reader.Inspect(path)
+        Dim verified = Wim360Reader.Inspect(imagePath)
         If verified.IsSplitSet OrElse verified.ImageCount <> report.ImageCount OrElse
            Not verified.Images.Any(Function(x)
                 Return x.Index = index AndAlso
@@ -232,11 +232,11 @@ Public NotInheritable Class Wim360OfflineList
         End If
         Dim priorTime = source.LastWriteTimeUtc
         Dim priorLength = source.Length
-        Dim digestBefore = ImageDigest(path, token, progress, "Baseline SHA-256")
+        Dim digestBefore = ImageDigest(imagePath, token, progress, "Baseline SHA-256")
         token.ThrowIfCancellationRequested()
-        Dim items = ListIndex(path, index, token, progress)
+        Dim items = ListIndex(imagePath, index, token, progress)
         token.ThrowIfCancellationRequested()
-        Dim digestAfter = ImageDigest(path, token, progress, "Final SHA-256")
+        Dim digestAfter = ImageDigest(imagePath, token, progress, "Final SHA-256")
         source.Refresh()
         If source.Length <> priorLength OrElse
            Not CryptographicOperations.FixedTimeEquals(digestBefore, digestAfter) Then
@@ -245,7 +245,7 @@ Public NotInheritable Class Wim360OfflineList
         End If
         If source.LastWriteTimeUtc <> priorTime Then
             Try
-                File.SetLastWriteTimeUtc(path, priorTime)
+                File.SetLastWriteTimeUtc(imagePath, priorTime)
                 source.Refresh()
                 If source.LastWriteTimeUtc <> priorTime Then
                     Throw New IOException("WIM source timestamp could not be restored.")
