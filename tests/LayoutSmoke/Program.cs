@@ -840,12 +840,21 @@ internal static class LayoutSmoke
                         submittedButton is not null && pendingButton is not null &&
                         queueGrid.Rows.Count == 2,
                     "The saved diagnostics queue must load the two test events");
+                var queueHeaderFont = queueGrid!.ColumnHeadersDefaultCellStyle.Font
+                    ?? queueGrid.Font;
+                var headerHeight = TextRenderer.MeasureText("Date (UTC)",
+                    queueHeaderFont, new Size(1600, 120),
+                    TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Height;
+                Require(queueGrid.ColumnHeadersHeight >= headerHeight + 4 &&
+                        queueGrid.RowTemplate.Height >= headerHeight + 2,
+                    "Saved diagnostics grid header/data text must not clip vertically");
                 foreach (var action in new[] { draftButton!, submittedButton!, pendingButton! })
                 {
-                    var requiredWidth = TextRenderer.MeasureText(action.Text,
+                    var buttonMeasure = TextRenderer.MeasureText(action.Text,
                         action.Font, new Size(1600, 120),
-                        TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width;
-                    Require(action.ClientSize.Width >= requiredWidth + 9,
+                        TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
+                    Require(action.ClientSize.Width >= buttonMeasure.Width + 9 &&
+                            action.ClientSize.Height >= buttonMeasure.Height + 6,
                         $"Saved diagnostics action '{action.Text}' is clipped");
                 }
                 NoOverlap(draftButton!, submittedButton!, "Draft and Submitted actions");
@@ -860,6 +869,17 @@ internal static class LayoutSmoke
                         !queuePreview.Text.Contains("PRIVATE_TEST_SECRET") &&
                         !queuePreview.Text.Contains("private.txt"),
                     "Saved GitHub draft must use sanitized, explicitly selected data");
+                using (var previewDoc = System.Text.Json.JsonDocument.Parse(queuePreview.Text))
+                {
+                    var timestamp = previewDoc.RootElement.GetProperty("event")
+                        .GetProperty("timestamp_utc").GetString();
+                    Require(DateTime.TryParseExact(timestamp,
+                            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+                            System.Globalization.CultureInfo.InvariantCulture,
+                            System.Globalization.DateTimeStyles.AssumeUniversal, out _) &&
+                            !timestamp!.Contains("[IPv6]"),
+                        "Validated UTC timestamps must not be mistaken for IPv6 addresses");
+                }
                 var queueDraft = Uri.UnescapeDataString(ErrorDiagnostics.BuildGitHubIssueUrl(
                     "DISM GUI saved diagnostic", queuePreview.Text));
                 Require(queueDraft.Contains("universal-diagnostics/v1") &&
