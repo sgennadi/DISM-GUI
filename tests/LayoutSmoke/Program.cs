@@ -840,6 +840,17 @@ internal static class LayoutSmoke
                         submittedButton is not null && pendingButton is not null &&
                         queueGrid.Rows.Count == 2,
                     "The saved diagnostics queue must load the two test events");
+                foreach (var action in new[] { draftButton!, submittedButton!, pendingButton! })
+                {
+                    var requiredWidth = TextRenderer.MeasureText(action.Text,
+                        action.Font, new Size(1600, 120),
+                        TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width;
+                    Require(action.ClientSize.Width >= requiredWidth + 9,
+                        $"Saved diagnostics action '{action.Text}' is clipped");
+                }
+                NoOverlap(draftButton!, submittedButton!, "Draft and Submitted actions");
+                NoOverlap(submittedButton, pendingButton!, "Submitted and Pending actions");
+                Snapshot(saved, "DISM-GUI-Universal-Diagnostics-Queue");
                 queueGrid!.ClearSelection();
                 queueGrid.Rows[0].Selected = true;
                 Application.DoEvents();
