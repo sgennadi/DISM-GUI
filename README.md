@@ -124,7 +124,7 @@ directories and switch to **Files + sizes (already mounted)**.
 ### Bounded batch SHA-256 for mounted indexes (next candidate)
 
 In **WIM 360 → Compare indexes**, select **Files + sizes (already mounted)**
-then click **SHA-256 options**. Choose **Verify selected file** for one
+then click **SHA-256...**. Choose **Verify selected file** for one
 highlighted file, or **Verify filtered same-size files** for files present in
 all selected indexes with equal reported sizes. The latter uses the active
 Type / Result / Search filters. Narrow the filters to **at most 50 matching
