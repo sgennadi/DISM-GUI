@@ -322,7 +322,8 @@ Public NotInheritable Class Wim360IndexComparer
                     " is no longer mounted. Refresh the comparison.")
             End If
             Dim basePath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(image.MountFolder))
-            Dim rootPrefix = basePath & Path.DirectorySeparatorChar
+            Dim rootPrefix = If(Path.EndsInDirectorySeparator(basePath),
+                                basePath, basePath & Path.DirectorySeparatorChar)
             Dim fullName = Path.GetFullPath(Path.Combine(basePath, original.Name))
             If Not fullName.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase) OrElse
                Not File.Exists(fullName) Then
