@@ -296,7 +296,7 @@ Public NotInheritable Class Wim360IndexComparer
         Return verified
     End Function
 
-    Friend Shared Function VerifyAtMountRoots(imageFile As String,
+    Public Shared Function VerifyAtMountRoots(imageFile As String,
                           current As List(Of Wim360Reader.ImageInfo),
                           original As Row, token As CancellationToken) As Row
         If original Is Nothing OrElse
