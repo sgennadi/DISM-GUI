@@ -208,7 +208,7 @@ Public NotInheritable Class Wim360IndexComparer
         Dim chosen = SelectedIndexes(report, indexes)
         Dim fresh = Wim360Reader.Inspect(report.ImageFile)
         Dim current = SelectedIndexes(fresh, chosen.Select(Function(x) x.Index))
-        Return VerifyFileHashesCore(report.ImageFile, current, original, token)
+        Return VerifyAtMountRoots(report.ImageFile, current, original, token)
     End Function
 
     ' Refuse silently truncated work. The operator must narrow the Type,
@@ -291,12 +291,12 @@ Public NotInheritable Class Wim360IndexComparer
                 progress.Report("SHA-256 " & (verified.Count + 1).ToString() &
                     "/" & candidates.Count.ToString() & ": " & item.Name)
             End If
-            verified.Add(VerifyFileHashesCore(report.ImageFile, current, item, token))
+            verified.Add(VerifyAtMountRoots(report.ImageFile, current, item, token))
         Next
         Return verified
     End Function
 
-    Private Shared Function VerifyFileHashesCore(imageFile As String,
+    Private Shared Function VerifyAtMountRoots(imageFile As String,
                           current As List(Of Wim360Reader.ImageInfo),
                           original As Row, token As CancellationToken) As Row
         If original Is Nothing OrElse
