@@ -148,7 +148,7 @@ cross-container catalog mode. A real disposable-WIM Windows test is included
 in CI; physical Windows/Server versions and production WIMs still need
 manual validation before relying on reports for deployment decisions.
 
-### Cross-image mounted sizes and SHA-256 (4.3.17 candidate)
+### Cross-image mounted sizes and SHA-256 (4.3.17)
 
 In **WIM 360 → Compare 2 files**, choose two separate WIM/ESD sources,
 select an image index in each, and choose **Files + sizes (already mounted)**.
@@ -202,7 +202,7 @@ selected by default; select any 2–8 using the checkbox list.
 - **Files + sizes (already mounted)** requires each selected index to be
   mounted in a **different folder** (prefer read-only mounts); refresh
   **Inspect** after mounting. This mode compares file paths, lengths and
-  empty-folder presence. Reparse points are skipped. File SHA-256 verification
+  empty-folder presence. Symbolic links/junctions are skipped; WIM/WOF-backed files are included. File SHA-256 verification
   is available for an individually selected path.
 - **Drivers / packages / features** requires a completed **Scan mounted
   index** for every selected index. If any scan is partial, comparison
@@ -242,7 +242,7 @@ modified, committed, or discarded by hashing. Verified rows replace file
 sizes with SHA-256 fingerprints, and other rows continue to show path and
 size differences. Batch results are applied only if all selected files
 were successfully checked. If files disappear, change size during reading,
-become reparse points or escape their expected mount folder, the whole
+become unsupported reparse links or escape their mount folder, the whole
 batch fails without displaying partial hashes. This protects against
 misleading claims that equal file sizes prove equal file contents.
 
@@ -393,7 +393,7 @@ does not mark the local event as submitted. No background upload occurs.
 There is **no required collector EXE, DLL, installer or GitHub token**.
 The original DISM diagnostics, support contact and manual Issue draft remain.
 See [embedded integration details](docs/UNIVERSAL-DIAGNOSTICS.md).
-Current stable version: **4.3.16**. Earlier releases remain available.
+Current stable version: **4.3.17**. Earlier releases remain available.
 
 ## Other dialogs: 175% horizontal-scroll fixes (4.3.10 test branch)
 

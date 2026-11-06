@@ -153,8 +153,9 @@ Public NotInheritable Class Wim360CrossImageForm
         modeBox.SelectedIndex = 0
         options.Controls.Add(modeBox, 0, 0)
         options.SetColumnSpan(modeBox, 2)
-        Dim modeHint = MakeText("Metadata, offline paths, or mounted file sizes / SHA-256.",
+        Dim modeHint = MakeText("Offline paths | Mounted sizes + SHA-256",
                                 9.0F, False, ModernTheme.Muted)
+        modeHint.Name = "lbl360CrossModeHint"
         options.Controls.Add(modeHint, 2, 0)
         options.SetColumnSpan(modeHint, 2)
         typeBox = New ComboBox With {

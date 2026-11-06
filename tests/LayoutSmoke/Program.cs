@@ -265,8 +265,24 @@ internal static class LayoutSmoke
             System.IO.File.WriteAllText(System.IO.Path.Combine(secondDir, "Windows", "resized.dll"), "Longer");
             System.IO.File.WriteAllText(System.IO.Path.Combine(firstDir, "Windows", "only-a.txt"), "A");
             System.IO.File.WriteAllText(System.IO.Path.Combine(secondDir, "Windows", "only-b.txt"), "B");
+            // Ordinary symlinks must be refused even though real WIM/WOF
+            // reparse-backed files are accepted for read-only comparison.
+            var linkPath = System.IO.Path.Combine(firstDir, "Windows", "symbolic-link.txt");
+            try {
+                System.IO.File.CreateSymbolicLink(linkPath, equalSizeA);
+                Require(!Wim360ReparseSafety.IsReadableImageFile(linkPath),
+                    "Cross-image scan followed a symbolic link as a WIM-backed file");
+            }
+            catch (UnauthorizedAccessException) {
+                Console.WriteLine("SKIP file-symlink security fixture (permission unavailable)");
+            }
+            catch (System.IO.IOException) {
+                Console.WriteLine("SKIP file-symlink security fixture (platform unavailable)");
+            }
             var a = Wim360CrossMounted.ListMountedTree(firstDir, 1,
                 System.Threading.CancellationToken.None);
+            Require(!a.Any(x => x.Name.EndsWith("symbolic-link.txt")),
+                "Mounted file catalog must exclude symbolic links");
             var b = Wim360CrossMounted.ListMountedTree(secondDir, 2,
                 System.Threading.CancellationToken.None);
             var compared = Wim360CrossMounted.CompareMountedCatalogs(
@@ -401,6 +417,13 @@ internal static class LayoutSmoke
         viewer.Show(owner);
         Application.DoEvents();
         VerifyScrollableDialog(viewer, "WIM 360 cross-image comparison");
+        var modeHint = Find(viewer, "lbl360CrossModeHint") as Label;
+        Require(modeHint is not null, "Cross-image mode explanation label missing");
+        var hintExtent = TextRenderer.MeasureText(modeHint!.Text,
+            modeHint.Font, new Size(2000, 100),
+            TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
+        Require(hintExtent.Width + 4 <= modeHint.ClientSize.Width,
+            "Cross-image mode description is clipped at high DPI");
         Require(Find(viewer, "txt360CrossBaseline") is TextBox &&
                 Find(viewer, "txt360CrossCandidate") is TextBox &&
                 Find(viewer, "cmb360CrossBaselineIndex") is ComboBox &&
