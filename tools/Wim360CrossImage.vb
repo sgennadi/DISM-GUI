@@ -65,16 +65,16 @@ Public NotInheritable Class Wim360CrossImage
                                         index As Integer,
                                         token As CancellationToken)
         token.ThrowIfCancellationRequested()
-        Dim path = Path.GetFullPath(report.ImageFile)
-        Dim info = New FileInfo(path)
-        If Not info.Exists Then Throw New FileNotFoundException("Image file missing.", path)
+        Dim imagePath = Path.GetFullPath(report.ImageFile)
+        Dim info = New FileInfo(imagePath)
+        If Not info.Exists Then Throw New FileNotFoundException("Image file missing.", imagePath)
         If info.Length <> report.FileSizeBytes OrElse
            info.LastWriteTimeUtc <> report.ModifiedUtc Then
             Throw New InvalidOperationException(
-                Path.GetFileName(path) & " changed after Inspect. " &
+                Path.GetFileName(imagePath) & " changed after Inspect. " &
                 "Inspect both sources again before comparing.")
         End If
-        Dim fresh = Wim360Reader.Inspect(path)
+        Dim fresh = Wim360Reader.Inspect(imagePath)
         If fresh.ImageCount <> report.ImageCount OrElse
            fresh.IsSplitSet <> report.IsSplitSet OrElse
            Not fresh.Images.Any(Function(x)
@@ -83,13 +83,13 @@ Public NotInheritable Class Wim360CrossImage
                                   StringComparison.Ordinal)
            End Function) Then
             Throw New InvalidOperationException(
-                Path.GetFileName(path) & " index metadata changed. Inspect again.")
+                Path.GetFileName(imagePath) & " index metadata changed. Inspect again.")
         End If
         info.Refresh()
         If info.Length <> report.FileSizeBytes OrElse
            info.LastWriteTimeUtc <> report.ModifiedUtc Then
             Throw New InvalidOperationException(
-                Path.GetFileName(path) & " changed during catalog verification.")
+                Path.GetFileName(imagePath) & " changed during catalog verification.")
         End If
     End Sub
 
