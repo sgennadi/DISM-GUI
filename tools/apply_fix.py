@@ -258,6 +258,26 @@ def main():
     End Sub
 
     Private Sub BackgroundWorkerDisMount_RunWorkerCompleted''', "unmount streams")
+    # Validate once on the foreground UI thread and once immediately
+    # before DISM.Start() in the background worker. External mount changes
+    # between the confirmation and actual process launch must fail closed.
+    worker_begin = data.find("    Private Sub BackgroundWorkerDisMount_DoWork")
+    worker_end = data.find("    Private Sub BackgroundWorkerDisMount_RunWorkerCompleted",
+                           worker_begin + 1)
+    if worker_begin < 0 or worker_end < 0:
+        raise RuntimeError("Cannot locate DISM dismount worker for final safety guard")
+    dismount_worker = data[worker_begin:worker_end]
+    process_start = "        DISM.Start()\n"
+    if dismount_worker.count(process_start) != 1:
+        raise RuntimeError(
+            "Expected exactly one DISM process launch in dismount worker")
+    dismount_worker = dismount_worker.replace(process_start,
+        "        ' Immediately revalidate the mount, index and access mode.\n"
+        "        WimMountSafety.ValidateDismount(strWIM, strIndex, strFolderName,\n"
+        "                                         blnDISMCommit)\n"
+        + process_start)
+    data = data[:worker_begin] + dismount_worker + data[worker_end:]
+
     data = replace_block(data, "    Private Sub BackgroundWorkerDisMount_RunWorkerCompleted",
                          "    Private Sub btnOpnDriverFolder_Click", '''    Private Sub BackgroundWorkerDisMount_RunWorkerCompleted(ByVal sender As Object, ByVal e As System.ComponentModel.RunWorkerCompletedEventArgs) Handles BackgroundWorkerDisMount.RunWorkerCompleted
         Dim success = (e.Error Is Nothing AndAlso Not e.Cancelled AndAlso strDISMExitCode = "0")
