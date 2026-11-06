@@ -141,8 +141,8 @@ become reparse points or escape their expected mount folder, the whole
 batch fails without displaying partial hashes. This protects against
 misleading claims that equal file sizes prove equal file contents.
 
-**Important:** the candidate batch feature is on a development branch;
-the published stable 4.3.13 remains unchanged until CI and release QA pass.
+**Release 4.3.14:** these read-only hash options are part of the tested
+portable app. Version 4.3.13 remains available unchanged as a fallback.
 
 For an index that is **already mounted**, select it and click **Scan mounted
 index**. WIM 360 validates the exact image file, index and mount directory,
@@ -288,7 +288,7 @@ does not mark the local event as submitted. No background upload occurs.
 There is **no required collector EXE, DLL, installer or GitHub token**.
 The original DISM diagnostics, support contact and manual Issue draft remain.
 See [embedded integration details](docs/UNIVERSAL-DIAGNOSTICS.md).
-Current stable version: **4.3.13**. Earlier releases remain available.
+Current stable version: **4.3.14**. Earlier releases remain available.
 
 ## Other dialogs: 175% horizontal-scroll fixes (4.3.10 test branch)
 

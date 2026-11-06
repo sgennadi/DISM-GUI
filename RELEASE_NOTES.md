@@ -1,54 +1,46 @@
-# DISM GUI 4.3.13 — Stable
+# DISM GUI 4.3.14 — Stable
 
-Portable, self-contained Windows builds for **x64, x86 and ARM64**.
-This release focuses on the actual WinForms layout problems reported with
-DISM GUI 4.3.12. The previous stable release stays available unchanged.
+Portable, self-contained Windows builds for **x64, x86 and ARM64**,
+built with Visual Studio 2026 / .NET 10. Release 4.3.13 remains available.
 
-## Navigation and driver workflows
+## WIM 360 — bounded batch SHA-256 comparison
 
-- **WIM 360** includes a nested **Mount** entry and **Driver Studio**
-  includes a nested **Driver tools** entry. These retain the original
-  Mount/Dismount, driver addition, removal and export DISM handlers.
-  The navigation-only grouping does not automatically mount, commit,
-  discard or install packages.
-- Other sections have been renumbered without gaps: **01 Packages,
-  02 Features, 03 Editions, 04 Unattend, 05 Apps, 06 Capture, 07 Apply**.
-- Driver Studio exposes **Scan INF** in the persistent workspace header,
-  so a user on a smaller laptop at 175% scaling can initiate the same
-  existing scan even when the detailed source controls are below the fold.
-  The source pane also has more height when its fields stack vertically.
+- In **WIM 360 → Compare indexes → Files + sizes (already mounted)**,
+  click **SHA-256...** to choose either **Verify selected file** or
+  **Verify filtered same-size files**. This does not add an extra cramped
+  footer button, including at simulated 175% font scaling.
+- Batch verification reads files present in all **2–8 selected indexes**
+  with identical reported sizes under the current Type / Result / Search
+  filters. This detects content differences that simple size comparison
+  cannot detect.
+- **50 paths / 1 GiB total read budget**, including all selected indexes.
+  If the active filters exceed either limit, the app asks the operator to
+  narrow them; it never truncates silently.
+- The operator explicitly confirms before batch hashing. Status shows
+  per-file progress. **Cancel scan** requests cancellation, including while
+  reading a large file. Completed hash rows are applied atomically only
+  after the whole batch succeeds; cancellation, inaccessible paths or a
+  changed file do not display partial results.
+- Fresh mount registration checks, path traversal protection, reparse-point
+  checks and file length / last-write-time validation reduce stale or
+  misleading results. The image is **not** mounted, changed, committed or
+  discarded by hashing. Existing single-file SHA-256 remains available.
 
-## Display and high-DPI fixes
+## Interface / tests
 
-- **Tools** gets a high-contrast dark-orange background, white lettering,
-  an exclamation mark and a gold border when a newer verified stable
-  release is available. It returns to the normal white style when the
-  startup check finds no newer release or cannot verify one.
-  The update still requires the user's explicit action.
-- In **WIM 360 Compare Indexes**, the brief source WIM SHA-256 verification
-  and timestamp note remains visible above the action buttons.
-  The full explanation of offline name/presence-only comparison is
-  preserved in the report and tooltip; verifying the WIM container
-  checksum is **not** per-file hash comparison.
-- The **Compare indexes**, **Verify SHA-256**, **Export CSV** and **Close**
-  actions remain visible with a readable results grid at simulated
-  font scaling of 125%, 150% and 175%.
-- The Mount workspace has more space around **Choose folder**, and
-  **Open mounted folder** has a compact **Open folder** caption with an
-  accessible description.
-- The redundant **Exit** button was removed from the **DISM Output**
-  toolbar. The standard Windows title-bar X still closes the application;
-  Expand, Copy log and Clear remain available.
+- Short **SHA-256...** footer caption avoids 175% high-DPI truncation; an
+  explicit regression test checks horizontal readability.
+- Added synthetic tests for equal-size selection, missing/different-size
+  exclusions, 50-file limit and 1 GiB total-read budget.
+- Windows CI tests all x86/x64/ARM64 packages; x64 runs read-only WIM mount
+  integration and 125%, 150%, 175% simulated WinForms layout tests.
+- A real multi-index Windows image with several mounted indexes should still
+  be tested manually on a disposable copy before production servicing.
 
-## Build and compatibility
+**Accuracy note:** the offline WIM source SHA-256 check protects the source
+container, but it is not a per-file comparison. Batch SHA-256 is only offered
+for already-mounted file trees. No background GitHub diagnostics upload,
+external required runtime, or automatic DISM write action was introduced.
 
-- Existing WIM 360 index inspection, driver comparison, DISM operations,
-  portable packaging, self-update and local UniversalDiagnostics remain.
-- GitHub Actions performs Windows x86/x64/ARM64 builds, read-only WIM tests,
-  diagnostics checks, plus simulated 125/150/175% WinForms layout tests.
-- Real operating-system servicing and physical DPI testing on a workstation
-  remain recommended before applying changes to production images.
-- No automatic GitHub diagnostic upload and no new external runtime process.
-
-Based on DISMGUI by Mike Celone (mikecel79/DISMGUI); original attribution
-and licensing remain intact.
+Original DISMGUI by Mike Celone (mikecel79/DISMGUI); original attribution
+and existing distribution notices are retained.
