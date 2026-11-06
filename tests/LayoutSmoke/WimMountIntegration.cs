@@ -374,6 +374,12 @@ internal static class WimMountIntegration
                 mountedReportB.Images[0].MountStatus != "Mounted (read-only)")
                 throw new InvalidOperationException(
                     "Both test WIMs must be separately registered as read-only mounts.");
+            var aBackedFile = Path.Combine(mountA, "Windows", "System32", "same-size.dll");
+            var bBackedFile = Path.Combine(mountB, "Windows", "System32", "same-size.dll");
+            if (!Wim360ReparseSafety.IsReadableImageFile(aBackedFile) ||
+                !Wim360ReparseSafety.IsReadableImageFile(bBackedFile))
+                throw new InvalidOperationException(
+                    "Genuine WIM-backed reparse files were rejected as unsafe links.");
             var sizeComparison = Wim360CrossMounted.Compare(mountedReportA, 1,
                 mountedReportB, 1, CancellationToken.None);
             var sameSize = sizeComparison.Rows.FirstOrDefault(x =>
