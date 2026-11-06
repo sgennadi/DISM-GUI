@@ -31,7 +31,7 @@ for name in ("ModernTheme.vb", "ResponsiveSectionLayout.vb", "ResponsiveForms.vb
              "IntegratedTestChecks.vb", "IntegratedTestCenterForm.vb", "Wim360Servicing.vb",
              "Wim360Catalog.vb", "Wim360MetadataExport.vb", "Wim360IndexComparer.vb", "Wim360OfflineList.vb",
              "Wim360CompareIndexesForm.vb", "Wim360CrossImage.vb", "Wim360CrossImageForm.vb", "Wim360CrossMounted.vb", "Wim360ReparseSafety.vb", "Wim360InventoryForm.vb",
-             "Wim360SnapshotDiff.vb", "Wim360CompareForm.vb", "DriverStudioEngine.vb",
+             "Wim360SnapshotDiff.vb", "Wim360CompareForm.vb", "WimMountSafety.vb", "WimMountHealthForm.vb", "DriverStudioEngine.vb",
              "DriverStudioInventory.vb", "DriverStudioPanel.vb",
              "DriverStudioInstaller.vb", "DriverStudioPackageAudit.vb"):
     shutil.copyfile(tools / name, project / name)
