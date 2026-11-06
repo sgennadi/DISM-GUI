@@ -1010,6 +1010,19 @@ internal static class LayoutSmoke
                     reportBox.Multiline && reportBox.ScrollBars == ScrollBars.Both &&
                     refresh is not null && copy is not null && close is not null,
                     "WIM 360 Mount Health GUI must be read-only and contain refresh/copy/close");
+            var subtitle = Find(dialog, "lblMountHealthSubtitle") as Label;
+            var imageInput = Find(dialog, "txtMountHealthSource") as TextBox;
+            Require(subtitle is not null && imageInput is not null &&
+                    subtitle.Text.Contains("read-only"),
+                    "Mount Health must expose a clear read-only subtitle");
+            var subtitleMeasure = TextRenderer.MeasureText(subtitle!.Text, subtitle.Font,
+                new Size(2500, 120), TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
+            var subtitleBounds = subtitle.RectangleToScreen(subtitle.ClientRectangle);
+            var sourceBounds = imageInput!.RectangleToScreen(imageInput.ClientRectangle);
+            Require(subtitle.ClientSize.Height >= subtitle.Font.Height + 2 &&
+                    subtitleMeasure.Width + 4 <= subtitle.ClientSize.Width &&
+                    subtitleBounds.Bottom + 3 <= sourceBounds.Top,
+                    "Mount Health subtitle is clipped or overlaps the path field at high DPI");
             VerifyReadableButton(refresh!, "WIM Mount Health refresh");
             VerifyReadableButton(copy!, "WIM Mount Health copy");
             VerifyReadableButton(close!, "WIM Mount Health close");
