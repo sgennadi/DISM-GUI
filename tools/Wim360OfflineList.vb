@@ -317,10 +317,12 @@ Public NotInheritable Class Wim360OfflineList
             End Try
         End If
 
+        ' Keep the complete qualification in reports and tooltip. The
+        ' Compare Indexes status strip displays a short, readable version.
         result.Notes = "Source WIM SHA-256 verified before and after offline " &
-            "comparison. Source file timestamp preserved. " &
-            "Presence/absence only; no per-file sizes or hashes. " &
-            "Files with identical names may have different contents."
+            "comparison. Timestamp preserved. File/folder paths only; " &
+            "no per-file sizes or hashes were compared. " &
+            "Identical filenames may have different content."
         Return result
     End Function
 End Class

@@ -428,11 +428,23 @@ internal static class LayoutSmoke
                     optionBounds.Right <= viewportBounds.Right + 5,
                     "Compare Indexes mode must be horizontally visible at high font scaling");
         }
+        // Exercise the actual source checksum disclaimer as the visible
+        // comparison note. Ordinary synthetic path fixtures have different
+        // descriptions, so they cannot verify this UI regression otherwise.
+        comparison.Notes = "Source WIM SHA-256 verified before/after; timestamp " +
+            "preserved. Names only: file contents and per-file hashes not checked.";
         dialog.PreviewForTest(comparison);
         Application.DoEvents();
         var matrix = Find(dialog, "grid360IndexComparison") as DataGridView;
         var state = Find(dialog, "cmb360IndexCompareState") as ComboBox;
         var action = Find(dialog, "btn360RunIndexCompare") as Button;
+        var verificationNote = Find(dialog, "lbl360IndexCompareHint") as Label;
+        Require(verificationNote is not null &&
+                !verificationNote.AutoEllipsis &&
+                verificationNote.Text.Contains("SHA-256 verified") &&
+                verificationNote.Text.Contains("Paths only") &&
+                verificationNote.Text.EndsWith("file contents."),
+            "Source WIM note must be short enough to show essential verification");
         Require(matrix is not null && matrix.VirtualMode &&
                 matrix.Columns.Count == 6 && matrix.RowCount == 5 &&
                 action is not null && action.Enabled, "Three-index comparison UI not initialized");
@@ -447,6 +459,11 @@ internal static class LayoutSmoke
             $"WIM 360 comparison grid hidden below the fold: " +
             $"visible={visibleMatrix.Height}px, " +
             $"fontScale={Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_FONT_SCALE")}");
+        var hintBounds = verificationNote!.RectangleToScreen(verificationNote.ClientRectangle);
+        var hintViewport = Rectangle.Intersect(hintBounds,
+            matrixViewport.RectangleToScreen(matrixViewport.ClientRectangle));
+        Require(hintViewport.Height >= verificationNote.Height - 4,
+            "WIM verification note must stay visible above footer at high DPI");
         foreach (var name in new[] { "btn360RunIndexCompare",
                                      "btn360IndexCompareHash",
                                      "btn360IndexCompareCsv",
@@ -1794,6 +1811,45 @@ internal static class LayoutSmoke
             var wimNav = Find(form, "navWim360") as Button;
             Require(wimNav is not null && wimNav.Text.Contains("WIM 360"),
                     "WIM 360 entry must be visible in top navigation");
+            var mountSubnav = Find(form, "navWimMount") as Button;
+            var driverSubnav = Find(form, "navDriverCommands") as Button;
+            var studioScanQuick = Find(form, "btnStudioScanQuick") as Button;
+            var packagesNav = Find(form, "nav2") as Button;
+            var featuresNav = Find(form, "nav3") as Button;
+            var applyNav = Find(form, "nav8") as Button;
+            Require(mountSubnav is not null && driverSubnav is not null &&
+                    studioScanQuick is not null &&
+                    mountSubnav.Text.Trim() == "Mount" &&
+                    driverSubnav.Text.Trim() == "Driver tools" &&
+                    packagesNav?.Text.TrimStart().StartsWith("01  Packages") == true &&
+                    featuresNav?.Text.TrimStart().StartsWith("02  Features") == true &&
+                    applyNav?.Text.TrimStart().StartsWith("07  Apply") == true &&
+                    Find(form, "nav0") is null && Find(form, "nav1") is null,
+                "Mount and Drivers must be grouped under WIM 360/Driver Studio; 01 must be Packages");
+            mountSubnav!.PerformClick();
+            Application.DoEvents();
+            Require(tabs.SelectedIndex == 0, "WIM 360 Mount subnav must preserve original mount commands");
+            driverSubnav!.PerformClick();
+            Application.DoEvents();
+            Require(tabs.SelectedIndex == 1, "Driver Studio commands subnav must preserve original DISM commands");
+            packagesNav!.PerformClick();
+            Application.DoEvents();
+            Require(tabs.SelectedIndex == 2, "Renumbered Packages must still navigate to original TabPage 2");
+            tabs.SelectedIndex = 10;
+            Application.DoEvents();
+            Require(studioScanQuick!.Visible && studioScanQuick.Enabled &&
+                    studioScanQuick.Text == "Scan INF" &&
+                    studioScanQuick.Height >= 26,
+                "Driver Studio must expose its Scan INF action in the always-visible workspace header");
+            var quickBounds = studioScanQuick.RectangleToScreen(studioScanQuick.ClientRectangle);
+            var formBounds = form.RectangleToScreen(form.ClientRectangle);
+            Require(quickBounds.Top >= formBounds.Top &&
+                    quickBounds.Bottom <= formBounds.Bottom,
+                "Driver Studio quick Scan INF must remain onscreen at high DPI");
+            tabs.SelectedIndex = 9;
+            Application.DoEvents();
+            Require(!studioScanQuick.Visible,
+                "Driver Studio Scan INF must not cover the WIM 360 header");
             var dashboard = Find(tabs.TabPages[9], "Wim360Dashboard") as Wim360Dashboard;
             Require(dashboard is not null &&
                     Find(dashboard, "Wim360Layout") is TableLayoutPanel &&
@@ -1969,6 +2025,20 @@ internal static class LayoutSmoke
             var tools = Find(form, "btnToolsMenu") as Button;
             Require(tools is not null && tools.Visible && tools.Width >= 100,
                 "Tools must be a readable button, not a menu-strip caption");
+            ModernTheme.ApplyToolsUpdateVisual(tools!, "4.3.99");
+            Application.DoEvents();
+            Require(tools!.ForeColor == Color.White &&
+                    tools.BackColor == Color.FromArgb(166, 58, 4) &&
+                    tools.FlatAppearance.BorderSize == 2 &&
+                    tools.Text.Contains('!') &&
+                    tools.AccessibleDescription.Contains("4.3.99"),
+                "Tools must have a high-contrast orange warning when an update is verified");
+            Snapshot(form, "DISM-GUI-Tools-Update-Available");
+            ModernTheme.ApplyToolsUpdateVisual(tools);
+            Require(tools.BackColor == Color.White &&
+                    tools.ForeColor != Color.White &&
+                    !tools.Text.Contains('!'),
+                "Tools must return to its normal appearance when no update is available");
             Require(tools!.ContextMenuStrip is not null &&
                     tools.ContextMenuStrip.Items.Cast<ToolStripItem>()
                          .Any(item => item.Text == "About"),
@@ -1989,8 +2059,10 @@ internal static class LayoutSmoke
             var exitApp = Find(form, "btnExit") as Button;
             var logText = Find(form, "txtOutput") as TextBox;
             Require(splitter is not null && copyLog is not null && clearLog is not null &&
-                    expandLog is not null && exitApp is not null && logText is not null,
+                    expandLog is not null && logText is not null,
                     "Resizable DISM console and toolbar are missing");
+            Require(exitApp is null || !exitApp.Visible,
+                "The main title-bar X makes a duplicate DISM Output Exit unnecessary");
             Require(splitter!.Orientation == Orientation.Horizontal &&
                     splitter.FixedPanel == FixedPanel.Panel2 &&
                     splitter.Panel2MinSize >= 130,
@@ -2023,14 +2095,12 @@ internal static class LayoutSmoke
                 NoOverlap(mountAction, dismountAction, "Mount / Dismount");
                 NoOverlap(dismountAction, info, "Dismount / Image info");
                 NoOverlap(index, browseWim, "Numeric image index / Choose WIM");
-                foreach (var button in new[] { expandLog!, copyLog!, clearLog!, exitApp! }.OfType<Button>())
+                foreach (var button in new[] { expandLog!, copyLog!, clearLog! }.OfType<Button>())
                     VerifyReadableButton(button, "DISM output");
                 NoOverlap(copyLog!, clearLog!, "Copy log / Clear");
-                NoOverlap(clearLog!, exitApp!, "Clear / Exit");
                 NoOverlap(expandLog!, copyLog!, "Expand / Copy log");
                 NoOverlap(copyLog!, logText!, "Copy log / DISM output text");
                 NoOverlap(clearLog!, logText!, "Clear / DISM output text");
-                NoOverlap(exitApp!, logText!, "Exit / DISM output text");
                 Require(logText!.Height >= 45 && copyLog!.Height >= 24,
                     $"Output textbox or toolbar clipped at {effective}");
                 Require(splitter!.Panel2.Height >= splitter.Panel2MinSize,

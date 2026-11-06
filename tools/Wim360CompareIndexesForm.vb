@@ -102,13 +102,14 @@ Public NotInheritable Class Wim360CompareIndexesForm
         For Each h As Integer In headerRows
             root.RowStyles.Add(New RowStyle(SizeType.Absolute, h))
         Next
+        ' Allow the source-WIM verification note to wrap to multiple lines.
         Dim statusHeight As Integer = If(stackedLayout,
-            CInt(Math.Ceiling(52 + 17 * (uiScale - 1))),
-            CInt(Math.Ceiling(80 * uiScale)))
+            CInt(Math.Ceiling(91 + 12 * (uiScale - 1))),
+            CInt(Math.Ceiling(104 * uiScale)))
         Dim actionsHeight As Integer = If(stackedLayout,
             CInt(Math.Ceiling(51 + 15 * (uiScale - 1))),
             CInt(Math.Ceiling(68 * uiScale)))
-        Dim minimumGridHeight As Integer = If(stackedLayout, 147,
+        Dim minimumGridHeight As Integer = If(stackedLayout, 140,
                                              CInt(Math.Ceiling(235 * uiScale)))
         root.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         root.RowStyles.Add(New RowStyle(SizeType.Absolute, statusHeight))
@@ -327,7 +328,9 @@ Public NotInheritable Class Wim360CompareIndexesForm
         hintLabel = MakeLabel("No image files will be modified.", 9, False)
         hintLabel.Name = "lbl360IndexCompareHint"
         hintLabel.ForeColor = ModernTheme.Muted
-        hintLabel.AutoEllipsis = True
+        hintLabel.AutoEllipsis = False
+        hintLabel.TextAlign = ContentAlignment.TopLeft
+        hintLabel.Padding = New Padding(0, 3, 0, 2)
         statusPanel.Controls.Add(hintLabel, 0, 1)
         root.Controls.Add(statusPanel, 0, 4)
 
@@ -650,10 +653,16 @@ Public NotInheritable Class Wim360CompareIndexesForm
         exportButton.Enabled = True
         ApplyFilter()
         UpdateHashButton()
-        hintLabel.Text = If(String.IsNullOrWhiteSpace(result.Notes),
+        Dim fullNote = If(String.IsNullOrWhiteSpace(result.Notes),
             "Read-only. Missing means an item is absent from a complete comparison.",
             result.Notes)
-        detailsTip.SetToolTip(hintLabel, hintLabel.Text)
+        ' Show the essential assurance without a clipped, multi-line strip;
+        ' preserve the detailed caveats as a hover tooltip and in reports.
+        hintLabel.Text = If(fullNote.StartsWith("Source WIM SHA-256 verified",
+                                               StringComparison.OrdinalIgnoreCase),
+            "Source WIM SHA-256 verified before/after; timestamp kept. " &
+            "Paths only, not file contents.", fullNote)
+        detailsTip.SetToolTip(hintLabel, fullNote)
     End Sub
 
     ' Keep all three compared indexes on screen at ordinary dialog widths.

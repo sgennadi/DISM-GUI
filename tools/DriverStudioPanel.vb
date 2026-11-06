@@ -83,7 +83,8 @@ Public NotInheritable Class DriverStudioPanel
         ' Scale rows to the real UI font instead of clipping content at high DPI.
         Dim layoutScale As Single = Math.Max(1.0F, Me.Font.Height / 16.0F)
         Dim stackSource As Boolean = layoutScale > 1.15F
-        For Each h As Integer In {60, 64, 52, 42, 235, 72, 155, 74, 80}
+        ' Reserve TWO full rows for the source and Scan INF at higher DPI.
+        For Each h As Integer In {60, If(stackSource, 116, 64), 52, 42, 235, 72, 155, 74, 80}
             rootLayout.RowStyles.Add(New RowStyle(SizeType.Absolute,
                 CInt(Math.Ceiling(h * layoutScale))))
         Next
@@ -118,6 +119,7 @@ Public NotInheritable Class DriverStudioPanel
                                         9.1F, False, ModernTheme.Muted), 0, 1)
 
         Dim sourceRow As New TableLayoutPanel With {
+            .Name = "DriverStudioSourceRow",
             .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 0, 6),
             .ColumnCount = If(stackSource, 2, 3),
             .RowCount = If(stackSource, 2, 1), .BackColor = Color.White
@@ -168,7 +170,7 @@ Public NotInheritable Class DriverStudioPanel
 
         scanButton = New Button With {
             .Name = "btnStudioScan", .Text = "Scan INF",
-            .Dock = DockStyle.Fill, .Margin = New Padding(2, 6, 0, 7)
+            .Dock = DockStyle.Fill, .Margin = New Padding(2, 6, 8, 7)
         }
         ModernTheme.StyleButton(scanButton, "primary")
         scanButton.AutoEllipsis = False
