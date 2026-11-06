@@ -824,8 +824,11 @@ internal static class LayoutSmoke
                 var draftButton = Find(saved, "btnUniversalQueueGitHubDraft") as Button;
                 var queuePreview = Find(saved, "txtUniversalQueuePreview") as TextBox;
                 var statusFilter = Find(saved, "cmbUniversalQueueStatus") as ComboBox;
+                var submittedButton = Find(saved, "btnUniversalQueueSubmitted") as Button;
+                var pendingButton = Find(saved, "btnUniversalQueuePending") as Button;
                 Require(queueGrid is not null && draftButton is not null &&
                         queuePreview is not null && statusFilter is not null &&
+                        submittedButton is not null && pendingButton is not null &&
                         queueGrid.Rows.Count == 2,
                     "The saved diagnostics queue must load the two test events");
                 queueGrid!.ClearSelection();
@@ -846,6 +849,37 @@ internal static class LayoutSmoke
                 Application.DoEvents();
                 Require(queueGrid.Rows.Count == 0 && !draftButton.Enabled,
                     "Draft button must disable without a selected record");
+                const string correctUrl = "https://github.com/sgennadi/DISM-GUI/issues/12345";
+                foreach (var wrongUrl in new[] {
+                    "http://github.com/sgennadi/DISM-GUI/issues/3",
+                    "https://evil.example/sgennadi/DISM-GUI/issues/3",
+                    "https://github.com/sgennadi/DISM-GUI/pull/3",
+                    "https://github.com/sgennadi/DISM-GUI/issues/3?token=secret",
+                    "https://github.com/sgennadi/DISM-GUI/issues/0"
+                })
+                {
+                    var rejected = false;
+                    try { UniversalDiagnosticsDelivery.NormalizeIssueUrl(wrongUrl); }
+                    catch (ArgumentException) { rejected = true; }
+                    Require(rejected, "Delivery must reject noncanonical GitHub Issue URLs");
+                }
+                UniversalDiagnosticsDelivery.SetStatus(result.ReportId,
+                    "submitted", correctUrl);
+                saved.RefreshRecords();
+                Application.DoEvents();
+                Require(queueGrid.Rows.Count == 1 && !draftButton.Enabled &&
+                        pendingButton!.Enabled && !submittedButton!.Enabled &&
+                        queuePreview!.Text.Contains(correctUrl) &&
+                        queuePreview.Text.Contains("\"status\": \"submitted\""),
+                    "Manually submitted record must preserve its Issue link without duplicates");
+                UniversalDiagnosticsDelivery.SetStatus(result.ReportId, "pending");
+                statusFilter.SelectedItem = "All statuses";
+                saved.RefreshRecords();
+                Application.DoEvents();
+                Require(queueGrid.Rows.Count == 2 &&
+                        System.IO.File.ReadAllText(path).Contains("\"status\": \"pending\"") &&
+                        !System.IO.File.ReadAllText(path).Contains(correctUrl),
+                    "Undo must restore pending status and erase the saved Issue URL");
                 saved.Close();
             }
         }
