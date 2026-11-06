@@ -432,7 +432,7 @@ Public NotInheritable Class UpdateManager
                 .Margin = Padding.Empty, .BackColor = Color.White
             }
             changesHeading.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-            changesHeading.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 238))
+            changesHeading.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 205))
             changesHeading.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
             changesPanel.Controls.Add(changesHeading, 0, 0)
 
@@ -494,16 +494,16 @@ Public NotInheritable Class UpdateManager
             progressPanel.Controls.Add(progressBar, 0, 1)
             root.Controls.Add(progressPanel, 0, 3)
 
+            ' Percentage widths keep the Update Center actions accessible
+            ' even when the font scale is 175% and a vertical scrollbar is shown.
             Dim actions As New TableLayoutPanel With {
-                .Dock = DockStyle.Fill, .ColumnCount = 5, .RowCount = 1,
+                .Dock = DockStyle.Fill, .ColumnCount = 4, .RowCount = 1,
                 .Margin = Padding.Empty, .Padding = New Padding(0, 13, 0, 5),
                 .BackColor = ModernTheme.Backdrop
             }
-            actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 183))
-            actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 182))
-            actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-            actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 135))
-            actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 107))
+            For i As Integer = 1 To 4
+                actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 25.0F))
+            Next
             root.Controls.Add(actions, 0, 4)
 
             check = New Button With {.Text = "Check", .Dock = DockStyle.Fill,
@@ -525,21 +525,26 @@ Public NotInheritable Class UpdateManager
                 Process.Start(New ProcessStartInfo(ProjectUrl & "/releases") With
                               {.UseShellExecute = True})
             End Sub
-            actions.Controls.Add(releases, 3, 0)
+            actions.Controls.Add(releases, 2, 0)
 
             closeButton = New Button With {.Text = "Close", .Dock = DockStyle.Fill,
                                            .Margin = Padding.Empty}
             ModernTheme.StyleButton(closeButton, "neutral")
             AddHandler closeButton.Click, Sub(sender, e) Me.Close()
             Me.CancelButton = closeButton
-            actions.Controls.Add(closeButton, 4, 0)
+            actions.Controls.Add(closeButton, 3, 0)
 
             Dim tips As New ToolTip()
             tips.SetToolTip(check, "Query the latest published stable release on GitHub")
             tips.SetToolTip(install, "Available after a release and SHA-256 digest are verified")
             tips.SetToolTip(releases, "Open the download page in your browser")
             tips.SetToolTip(closeButton, "Close only the Update Center")
-            ModernTheme.MakeDialogScrollable(Me, root, 980, 730)
+            ' MakeDialogScrollable scales its minimumWidth internally.
+            ' Cancel only that minimum-width inflation so the Latest stable
+            ' label and four action buttons remain in the visible viewport.
+            Dim fontScale As Single = Math.Max(1.0F, Me.Font.Height / 17.0F)
+            ModernTheme.MakeDialogScrollable(Me, root,
+                CInt(Math.Ceiling(760.0F / fontScale)), 730)
             ' Opening Update Center checks the latest release automatically;
             ' the manual Check for updates button remains available for refresh.
             AddHandler Me.Shown, Sub(sender, e) CheckClicked(check, EventArgs.Empty)

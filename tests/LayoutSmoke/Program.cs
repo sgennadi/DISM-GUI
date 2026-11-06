@@ -2002,6 +2002,19 @@ internal static class LayoutSmoke
                         updateViewport.HorizontalScroll.Value <= 5 &&
                         updateViewport.VerticalScroll.Value <= 5,
                     "Update Center should open at the top-left rather than focus-scroll to footer");
+                var viewportBounds = updateViewport!.RectangleToScreen(
+                    updateViewport.ClientRectangle);
+                var latestBounds = latestCaption!.RectangleToScreen(
+                    latestCaption.ClientRectangle);
+                Require(!updateViewport.HorizontalScroll.Visible &&
+                        latestBounds.Right <= viewportBounds.Right + 3,
+                    "Update Center Latest stable must be visible without horizontal scrolling");
+                var footerButtons = AllControls(updateForm).OfType<Button>()
+                    .Where(b => b.Text is "Check" or "Update" or "Reinstall" or
+                                     "Releases" or "Close").ToArray();
+                Require(footerButtons.Length == 4 &&
+                        footerButtons.All(b => b.Width >= 105),
+                    "Update Center actions must keep four readable columns");
                 Snapshot(updateForm, "DISM-GUI-Update-Center");
                 updateForm.Hide();
             }

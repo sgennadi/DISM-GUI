@@ -232,6 +232,13 @@ The original DISM diagnostics, support contact and manual Issue draft remain.
 See [embedded integration details](docs/UNIVERSAL-DIAGNOSTICS.md).
 DISM GUI continues to report version **4.3.10**.
 
+## Update Center high-DPI layout (4.3.10 test branch)
+
+The **Updates** dialog keeps its installed/latest version columns and the
+Check, Update/Reinstall, Releases and Close actions within the window width
+at simulated 125%, 150% and 175% font scaling. Long changelogs scroll
+vertically; horizontal scrolling is not required.
+
 ## Error diagnostics and GitHub issue workflow (4.3.7)
 
 Use **Tools > Report error to GitHub** or **About > Report error to GitHub**.
