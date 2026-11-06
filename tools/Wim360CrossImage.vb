@@ -117,16 +117,17 @@ Public NotInheritable Class Wim360CrossImage
                                    ) As Wim360IndexComparer.Result
         ValidatePair(baseline, baselineIndex, candidate, candidateIndex)
         Dim entries As New List(Of Wim360IndexComparer.Item)()
-        For Each pair In New (Slot As Integer, Fields As Dictionary(Of String, String))() {
-                (1, Fields(ImageAt(baseline, baselineIndex))),
-                (2, Fields(ImageAt(candidate, candidateIndex)))
-            }
-            For Each entry In pair.Fields
-                entries.Add(New Wim360IndexComparer.Item With {
-                    .Index = pair.Slot, .Kind = "Metadata",
-                    .Key = entry.Key, .Value = If(entry.Value, "")
-                })
-            Next
+        For Each entry In Fields(ImageAt(baseline, baselineIndex))
+            entries.Add(New Wim360IndexComparer.Item With {
+                .Index = 1, .Kind = "Metadata",
+                .Key = entry.Key, .Value = If(entry.Value, "")
+            })
+        Next
+        For Each entry In Fields(ImageAt(candidate, candidateIndex))
+            entries.Add(New Wim360IndexComparer.Item With {
+                .Index = 2, .Kind = "Metadata",
+                .Key = entry.Key, .Value = If(entry.Value, "")
+            })
         Next
         Dim result = Wim360IndexComparer.CompareRecords(
             baseline.ImageFile & " | " & candidate.ImageFile,
