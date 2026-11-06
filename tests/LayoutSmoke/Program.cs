@@ -330,6 +330,26 @@ internal static class LayoutSmoke
                 grid.Columns[4].HeaderText.StartsWith("B:") &&
                 ((Button)Find(viewer, "btn360CrossExport")!).Enabled,
                 "Cross-file comparison grid/CSV export must use independently labeled columns");
+        var sticky = Find(viewer, "Wim360CrossStickyActions") as TableLayoutPanel;
+        var compareAction = Find(viewer, "btn360CrossCompare") as Button;
+        var exportAction = Find(viewer, "btn360CrossExport") as Button;
+        var closeAction = Find(viewer, "btn360CrossClose") as Button;
+        Require(sticky is not null && sticky.Dock == DockStyle.Bottom &&
+                compareAction is not null && exportAction is not null && closeAction is not null,
+                "Cross-image footer actions must remain reachable at high DPI");
+        var dialogViewport = viewer.RectangleToScreen(viewer.ClientRectangle);
+        foreach (var action in new[] { compareAction!, exportAction!, closeAction! })
+        {
+            VerifyReadableButton(action, "Cross-image sticky footer");
+            var bounds = action.RectangleToScreen(action.ClientRectangle);
+            Require(Rectangle.Intersect(dialogViewport, bounds).Height >= action.Height - 5 &&
+                    Rectangle.Intersect(dialogViewport, bounds).Width >= action.Width - 5,
+                    "Cross-image sticky footer button is clipped outside the dialog: " + action.Text);
+        }
+        var lastSourceColumn = grid.GetColumnDisplayRectangle(4, false);
+        Require(lastSourceColumn.Width >= 150 &&
+                lastSourceColumn.Right <= grid.ClientSize.Width,
+                "Cross-image B column is hidden beyond the grid at simulated high DPI");
         var state = Find(viewer, "cmb360CrossState") as ComboBox;
         state!.SelectedItem = "Only in B";
         Application.DoEvents();
