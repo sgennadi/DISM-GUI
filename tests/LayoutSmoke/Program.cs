@@ -658,8 +658,11 @@ internal static class LayoutSmoke
             "DISMGUI-Local-Diagnostics-" + Guid.NewGuid().ToString("N"));
         var oldTest = Environment.GetEnvironmentVariable("DISMGUI_TEST_DIAGNOSTICS");
         var oldPath = Environment.GetEnvironmentVariable("DISMGUI_TEST_LOG_DIRECTORY");
+        var oldUdx = Environment.GetEnvironmentVariable("UDX_STATE_DIR");
         Environment.SetEnvironmentVariable("DISMGUI_TEST_DIAGNOSTICS", "1");
         Environment.SetEnvironmentVariable("DISMGUI_TEST_LOG_DIRECTORY", temp);
+        Environment.SetEnvironmentVariable("UDX_STATE_DIR",
+            System.IO.Path.Combine(temp, "universal"));
         try
         {
             Require(RuntimeDiagnostics.ReadRecent().Contains("no recorded runtime errors"),
@@ -675,12 +678,57 @@ internal static class LayoutSmoke
                     history.Contains("code=87") &&
                     !history.Contains("DO_NOT_KEEP_THIS_SECRET"),
                     "Persistent local diagnostics should be redacted, bounded and store failed DISM exits.");
+            var queueFolder = UniversalDiagnosticsEmbedded.QueueDirectory(
+                "sgennadi/DISM-GUI");
+            var queueFiles = System.IO.Directory.GetFiles(queueFolder, "*.json");
+            Require(queueFiles.Length == 2,
+                "DISM and WIM errors must enter the shared local queue once each");
+            var queueContent = string.Join("\n",
+                queueFiles.Select(System.IO.File.ReadAllText));
+            Require(queueContent.Contains("\"universal-diagnostics/v1\"") &&
+                    queueContent.Contains("\"WIM 360\"") &&
+                    queueContent.Contains("\"DISM\"") &&
+                    queueContent.Contains("\"DismExit\"") &&
+                    !queueContent.Contains("DO_NOT_KEEP_THIS_SECRET") &&
+                    !queueContent.Contains("Password=") &&
+                    !queueContent.Contains("events.log"),
+                "Automatic queue must contain only coarse anonymized diagnostics");
+            RuntimeDiagnostics.RecordDismExit("DISM command", "87");
+            Require(System.IO.Directory.GetFiles(queueFolder, "*.json").Length == 2,
+                "Identical errors in 24 hours must be deduplicated in the shared queue");
+            // An event written in another process is detected by its canonical
+            // fingerprint even before this process has cached the signature.
+            var external = UniversalDiagnosticsEmbedded.Capture(
+                """{"project":"sgennadi/DISM-GUI","component":"DISM","error_type":"DismExit","code":"42","summary":"External fingerprint fixture"}""");
+            Require(!UniversalDiagnosticsRuntime.RecordFailure(
+                        "DISM test", "DISM exit", 42) &&
+                    System.IO.Directory.GetFiles(queueFolder, "*.json").Length == 3,
+                "Persistent queue signatures must prevent duplicates across launches");
+            Require(UniversalDiagnosticsRuntime.RecordFailure(
+                        "C:\\Users\\private-person\\secret.wim", "SafeError", 777),
+                "An unrelated generic failure must still be captured");
+            var privateRecord = System.IO.Directory.GetFiles(queueFolder, "*.json")
+                .Select(System.IO.File.ReadAllText)
+                .Single(x => x.Contains("\"code\": \"777\""));
+            Require(privateRecord.Contains("\"component\": \"Application\"") &&
+                    !privateRecord.Contains("private-person") &&
+                    !privateRecord.Contains("secret.wim"),
+                "Unknown failure area must never leak a user-controlled path");
+            // The shared queue must still capture when the older journal's
+            // directory becomes unwritable or is a regular file.
+            var blockedJournal = System.IO.Path.Combine(temp, "not-a-directory");
+            System.IO.File.WriteAllText(blockedJournal, "test fixture");
+            Environment.SetEnvironmentVariable("DISMGUI_TEST_LOG_DIRECTORY", blockedJournal);
+            RuntimeDiagnostics.RecordDismExit("DISM command", "99");
+            Environment.SetEnvironmentVariable("DISMGUI_TEST_LOG_DIRECTORY", temp);
+            Require(System.IO.Directory.GetFiles(queueFolder, "*.json").Length == 5,
+                "Shared queue must survive an unavailable legacy journal");
             var raw = System.IO.File.ReadAllText(
                 System.IO.Path.Combine(temp, "events.log"));
             Require(raw.Contains("sig=") &&
                     !raw.Contains("DO_NOT_KEEP_THIS_SECRET") &&
-                    raw.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length == 2,
-                "Local journal must use coarse signatures and exclude successful DISM exits.");
+                    raw.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length == 3,
+                "Local journal preserves repeated local failures; the universal queue deduplicates them.");
             var withoutHistory = ErrorDiagnostics.BuildReport(
                 "Failure", "Test", false, "", "System", 96);
             Require(!withoutHistory.Contains("DISM command") &&
@@ -701,6 +749,7 @@ internal static class LayoutSmoke
         {
             Environment.SetEnvironmentVariable("DISMGUI_TEST_DIAGNOSTICS", oldTest);
             Environment.SetEnvironmentVariable("DISMGUI_TEST_LOG_DIRECTORY", oldPath);
+            Environment.SetEnvironmentVariable("UDX_STATE_DIR", oldUdx);
             try { System.IO.Directory.Delete(temp, recursive: true); }
             catch { /* Disposable test artifacts are not production files. */ }
         }
@@ -784,10 +833,48 @@ internal static class LayoutSmoke
                 var draftButton = Find(saved, "btnUniversalQueueGitHubDraft") as Button;
                 var queuePreview = Find(saved, "txtUniversalQueuePreview") as TextBox;
                 var statusFilter = Find(saved, "cmbUniversalQueueStatus") as ComboBox;
+                var submittedButton = Find(saved, "btnUniversalQueueSubmitted") as Button;
+                var pendingButton = Find(saved, "btnUniversalQueuePending") as Button;
                 Require(queueGrid is not null && draftButton is not null &&
                         queuePreview is not null && statusFilter is not null &&
+                        submittedButton is not null && pendingButton is not null &&
                         queueGrid.Rows.Count == 2,
                     "The saved diagnostics queue must load the two test events");
+                var dateCell = Convert.ToString(queueGrid!.Rows[0].Cells[0].Value);
+                var fullTimestamp = queueGrid.Rows[0].Cells[0].ToolTipText;
+                Require(dateCell is not null && dateCell.Length == 16 &&
+                        dateCell[10] == ' ' && !dateCell.Contains("[IPv6]") &&
+                        fullTimestamp.Length == 20 &&
+                        fullTimestamp.Contains('T') && fullTimestamp.EndsWith("Z"),
+                    "Queue list must show readable compact UTC with full ISO timestamp in tooltip");
+                var copyAction = Find(saved, "btnUniversalQueueCopy") as Button;
+                var exportAction = Find(saved, "btnUniversalQueueExport") as Button;
+                var folderAction = Find(saved, "btnUniversalQueueFolder") as Button;
+                Require(copyAction?.Text == "Copy JSON" &&
+                        exportAction?.Text == "Export JSON..." &&
+                        folderAction?.Text == "Open folder" &&
+                        draftButton!.Text == "GitHub draft...",
+                    "Saved diagnostics action captions must fit small high-DPI windows");
+                var queueHeaderFont = queueGrid.ColumnHeadersDefaultCellStyle.Font
+                    ?? queueGrid.Font;
+                var headerHeight = TextRenderer.MeasureText("Date (UTC)",
+                    queueHeaderFont, new Size(1600, 120),
+                    TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Height;
+                Require(queueGrid.ColumnHeadersHeight >= headerHeight + 4 &&
+                        queueGrid.RowTemplate.Height >= headerHeight + 2,
+                    "Saved diagnostics grid header/data text must not clip vertically");
+                foreach (var action in new[] { draftButton!, submittedButton!, pendingButton! })
+                {
+                    var buttonMeasure = TextRenderer.MeasureText(action.Text,
+                        action.Font, new Size(1600, 120),
+                        TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
+                    Require(action.ClientSize.Width >= buttonMeasure.Width + 9 &&
+                            action.ClientSize.Height >= buttonMeasure.Height + 6,
+                        $"Saved diagnostics action '{action.Text}' is clipped");
+                }
+                NoOverlap(draftButton!, submittedButton!, "Draft and Submitted actions");
+                NoOverlap(submittedButton, pendingButton!, "Submitted and Pending actions");
+                Snapshot(saved, "DISM-GUI-Universal-Diagnostics-Queue");
                 queueGrid!.ClearSelection();
                 queueGrid.Rows[0].Selected = true;
                 Application.DoEvents();
@@ -797,6 +884,17 @@ internal static class LayoutSmoke
                         !queuePreview.Text.Contains("PRIVATE_TEST_SECRET") &&
                         !queuePreview.Text.Contains("private.txt"),
                     "Saved GitHub draft must use sanitized, explicitly selected data");
+                using (var previewDoc = System.Text.Json.JsonDocument.Parse(queuePreview.Text))
+                {
+                    var timestamp = previewDoc.RootElement.GetProperty("event")
+                        .GetProperty("timestamp_utc").GetString();
+                    Require(DateTime.TryParseExact(timestamp,
+                            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+                            System.Globalization.CultureInfo.InvariantCulture,
+                            System.Globalization.DateTimeStyles.AssumeUniversal, out _) &&
+                            !timestamp!.Contains("[IPv6]"),
+                        "Validated UTC timestamps must not be mistaken for IPv6 addresses");
+                }
                 var queueDraft = Uri.UnescapeDataString(ErrorDiagnostics.BuildGitHubIssueUrl(
                     "DISM GUI saved diagnostic", queuePreview.Text));
                 Require(queueDraft.Contains("universal-diagnostics/v1") &&
@@ -806,6 +904,37 @@ internal static class LayoutSmoke
                 Application.DoEvents();
                 Require(queueGrid.Rows.Count == 0 && !draftButton.Enabled,
                     "Draft button must disable without a selected record");
+                const string correctUrl = "https://github.com/sgennadi/DISM-GUI/issues/12345";
+                foreach (var wrongUrl in new[] {
+                    "http://github.com/sgennadi/DISM-GUI/issues/3",
+                    "https://evil.example/sgennadi/DISM-GUI/issues/3",
+                    "https://github.com/sgennadi/DISM-GUI/pull/3",
+                    "https://github.com/sgennadi/DISM-GUI/issues/3?token=secret",
+                    "https://github.com/sgennadi/DISM-GUI/issues/0"
+                })
+                {
+                    var rejected = false;
+                    try { UniversalDiagnosticsDelivery.NormalizeIssueUrl(wrongUrl); }
+                    catch (ArgumentException) { rejected = true; }
+                    Require(rejected, "Delivery must reject noncanonical GitHub Issue URLs");
+                }
+                UniversalDiagnosticsDelivery.SetStatus(result.ReportId,
+                    "submitted", correctUrl);
+                saved.RefreshRecords();
+                Application.DoEvents();
+                Require(queueGrid.Rows.Count == 1 && !draftButton.Enabled &&
+                        pendingButton!.Enabled && !submittedButton!.Enabled &&
+                        queuePreview!.Text.Contains(correctUrl) &&
+                        queuePreview.Text.Contains("\"status\": \"submitted\""),
+                    "Manually submitted record must preserve its Issue link without duplicates");
+                UniversalDiagnosticsDelivery.SetStatus(result.ReportId, "pending");
+                statusFilter.SelectedItem = "All statuses";
+                saved.RefreshRecords();
+                Application.DoEvents();
+                Require(queueGrid.Rows.Count == 2 &&
+                        System.IO.File.ReadAllText(path).Contains("\"status\": \"pending\"") &&
+                        !System.IO.File.ReadAllText(path).Contains(correctUrl),
+                    "Undo must restore pending status and erase the saved Issue URL");
                 saved.Close();
             }
         }
@@ -1612,6 +1741,18 @@ internal static class LayoutSmoke
     [STAThread]
     private static int Main()
     {
+        // Isolate ALL smoke-test reports, including exceptions from layout
+        // fixtures, from the user's real local diagnostics folders.
+        var previousUdx = Environment.GetEnvironmentVariable("UDX_STATE_DIR");
+        var previousTest = Environment.GetEnvironmentVariable("DISMGUI_TEST_DIAGNOSTICS");
+        var previousLogDir = Environment.GetEnvironmentVariable("DISMGUI_TEST_LOG_DIRECTORY");
+        var scratch = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+            "DISMGUI-LayoutSmoke-" + Guid.NewGuid().ToString("N"));
+        Environment.SetEnvironmentVariable("UDX_STATE_DIR",
+            System.IO.Path.Combine(scratch, "universal"));
+        Environment.SetEnvironmentVariable("DISMGUI_TEST_DIAGNOSTICS", "1");
+        Environment.SetEnvironmentVariable("DISMGUI_TEST_LOG_DIRECTORY",
+            System.IO.Path.Combine(scratch, "runtime"));
         try
         {
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
@@ -2095,6 +2236,14 @@ internal static class LayoutSmoke
         {
             Console.Error.WriteLine("UI layout regression: " + ex);
             return 1;
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("UDX_STATE_DIR", previousUdx);
+            Environment.SetEnvironmentVariable("DISMGUI_TEST_DIAGNOSTICS", previousTest);
+            Environment.SetEnvironmentVariable("DISMGUI_TEST_LOG_DIRECTORY", previousLogDir);
+            try { if (System.IO.Directory.Exists(scratch)) System.IO.Directory.Delete(scratch, true); }
+            catch { /* CI fixture cleanup is best effort. */ }
         }
     }
 }

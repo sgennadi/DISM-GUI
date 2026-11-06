@@ -23,6 +23,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         Public Property Summary As String = ""
         Public Property Fingerprint As String = ""
         Public Property DeliveryStatus As String = ""
+        Public Property DeliveryUrl As String = ""
         Public Property FilePath As String = ""
     End Class
 
@@ -38,6 +39,8 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
     Private ReadOnly copyButton As Button
     Private ReadOnly deleteButton As Button
     Private ReadOnly draftButton As Button
+    Private ReadOnly submittedButton As Button
+    Private ReadOnly pendingButton As Button
 
     Public Sub New()
         Me.Name = "UniversalDiagnosticsQueueForm"
@@ -46,6 +49,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         Me.Size = New Size(1120, 800)
         Me.Font = ModernTheme.UiFont(9.4F)
         Me.AutoScaleMode = AutoScaleMode.Font
+        Dim uiScale As Single = Math.Max(1.0F, Me.Font.Height / 17.0F)
         Me.StartPosition = FormStartPosition.CenterParent
         Me.ShowInTaskbar = False
         Me.BackColor = Color.White
@@ -61,11 +65,16 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
             .BackColor = Color.White
         }
         root.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        root.RowStyles.Add(New RowStyle(SizeType.Absolute, 55))
-        root.RowStyles.Add(New RowStyle(SizeType.Absolute, 53))
+        ' Keep the text rows and footer buttons tall enough at 125%-175%
+        ' font scaling. Prefer shortening the grid/preview to clipping text.
+        root.RowStyles.Add(New RowStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(55.0F * Math.Min(uiScale, 1.35F)))))
+        root.RowStyles.Add(New RowStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(53.0F * Math.Min(uiScale, 1.35F)))))
         root.RowStyles.Add(New RowStyle(SizeType.Percent, 53))
         root.RowStyles.Add(New RowStyle(SizeType.Percent, 47))
-        root.RowStyles.Add(New RowStyle(SizeType.Absolute, 112))
+        root.RowStyles.Add(New RowStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(112.0F * uiScale))))
         Me.Controls.Add(root)
 
         Dim title As New Label With {
@@ -124,11 +133,15 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
             .Margin = New Padding(0, 4, 0, 5),
             .BackgroundColor = Color.White
         }
-        AddColumn("Date (UTC)", 130)
-        AddColumn("Area", 150)
-        AddColumn("Code", 75)
-        AddColumn("Summary", 325)
-        AddColumn("Status", 85)
+        grid.ColumnHeadersHeightSizeMode =
+            DataGridViewColumnHeadersHeightSizeMode.DisableResizing
+        grid.ColumnHeadersHeight = CInt(Math.Ceiling(33.0F * uiScale))
+        grid.RowTemplate.Height = CInt(Math.Ceiling(27.0F * uiScale))
+        AddColumn("Date (UTC)", 185)
+        AddColumn("Area", 140)
+        AddColumn("Code", 115)
+        AddColumn("Summary", 310)
+        AddColumn("Status", 110)
         AddHandler grid.SelectionChanged, Sub(sender, e) ShowSelected()
         root.Controls.Add(grid, 0, 2)
 
@@ -145,7 +158,8 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
             .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 3
         }
         footer.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        footer.RowStyles.Add(New RowStyle(SizeType.Absolute, 30))
+        footer.RowStyles.Add(New RowStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(30.0F * uiScale))))
         footer.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
         footer.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
         root.Controls.Add(footer, 0, 4)
@@ -160,10 +174,10 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         footer.Controls.Add(footnote, 0, 0)
 
         Dim buttons As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 3, .RowCount = 2
+            .Dock = DockStyle.Fill, .ColumnCount = 4, .RowCount = 2
         }
-        For i As Integer = 1 To 3
-            buttons.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F / 3.0F))
+        For i As Integer = 1 To 4
+            buttons.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 25.0F))
         Next
         buttons.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
         buttons.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
@@ -171,7 +185,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         footer.Controls.Add(buttons, 0, 1)
 
         copyButton = New Button With {
-            .Name = "btnUniversalQueueCopy", .Text = "Copy reviewed details",
+            .Name = "btnUniversalQueueCopy", .Text = "Copy JSON",
             .Dock = DockStyle.Fill, .Enabled = False,
             .Margin = New Padding(3, 3, 7, 2)
         }
@@ -188,7 +202,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         buttons.Controls.Add(copyButton, 0, 0)
 
         exportButton = New Button With {
-            .Name = "btnUniversalQueueExport", .Text = "Export reviewed JSON...",
+            .Name = "btnUniversalQueueExport", .Text = "Export JSON...",
             .Dock = DockStyle.Fill, .Enabled = False,
             .Margin = New Padding(3, 3, 7, 2)
         }
@@ -197,7 +211,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         buttons.Controls.Add(exportButton, 1, 0)
 
         deleteButton = New Button With {
-            .Name = "btnUniversalQueueDelete", .Text = "Delete selected...",
+            .Name = "btnUniversalQueueDelete", .Text = "Delete...",
             .Dock = DockStyle.Fill, .Enabled = False,
             .Margin = New Padding(3, 3, 1, 2)
         }
@@ -206,7 +220,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         buttons.Controls.Add(deleteButton, 2, 0)
 
         Dim openFolder As New Button With {
-            .Name = "btnUniversalQueueFolder", .Text = "Open queue folder",
+            .Name = "btnUniversalQueueFolder", .Text = "Open folder",
             .Dock = DockStyle.Fill, .Margin = New Padding(3, 2, 7, 2)
         }
         ModernTheme.StyleButton(openFolder, "browse")
@@ -219,17 +233,37 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
                 footnote.Text = "Cannot open queue folder (" & ex.GetType().Name & ")."
             End Try
         End Sub
-        buttons.Controls.Add(openFolder, 0, 1)
+        buttons.Controls.Add(openFolder, 3, 0)
 
         draftButton = New Button With {
             .Name = "btnUniversalQueueGitHubDraft",
-            .Text = "Open GitHub draft...",
+            .Text = "GitHub draft...",
             .Dock = DockStyle.Fill, .Enabled = False,
             .Margin = New Padding(3, 2, 7, 2)
         }
         ModernTheme.StyleButton(draftButton, "secondary")
         AddHandler draftButton.Click, AddressOf OpenReviewedDraft
-        buttons.Controls.Add(draftButton, 1, 1)
+        buttons.Controls.Add(draftButton, 0, 1)
+
+        submittedButton = New Button With {
+            .Name = "btnUniversalQueueSubmitted",
+            .Text = "Mark submitted...",
+            .Dock = DockStyle.Fill, .Enabled = False,
+            .Margin = New Padding(3, 2, 7, 2)
+        }
+        ModernTheme.StyleButton(submittedButton, "secondary")
+        AddHandler submittedButton.Click, AddressOf MarkSubmitted
+        buttons.Controls.Add(submittedButton, 1, 1)
+
+        pendingButton = New Button With {
+            .Name = "btnUniversalQueuePending",
+            .Text = "Mark pending",
+            .Dock = DockStyle.Fill, .Enabled = False,
+            .Margin = New Padding(3, 2, 7, 2)
+        }
+        ModernTheme.StyleButton(pendingButton, "neutral")
+        AddHandler pendingButton.Click, AddressOf MarkPending
+        buttons.Controls.Add(pendingButton, 2, 1)
 
         Dim close As New Button With {
             .Name = "btnUniversalQueueClose", .Text = "Close",
@@ -238,7 +272,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         ModernTheme.StyleButton(close, "neutral")
         AddHandler close.Click, Sub(sender, e) Me.Close()
         Me.CancelButton = close
-        buttons.Controls.Add(close, 2, 1)
+        buttons.Controls.Add(close, 3, 1)
 
         WindowGeometry.Install(Me, "Software\DISMGUI\UniversalQueue")
         AddHandler Me.Shown, Sub(sender, e) RefreshRecords()
@@ -272,6 +306,23 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         Return cleaned.Substring(0, Math.Min(cleaned.Length, maxLength))
     End Function
 
+    Private Shared Function SafeTimestamp(obj As JsonElement) As String
+        Dim raw As JsonElement
+        If Not obj.TryGetProperty("timestamp_utc", raw) OrElse
+           raw.ValueKind <> JsonValueKind.String Then Return ""
+        Dim value = raw.GetString()
+        Dim parsed As DateTime
+        If Not DateTime.TryParseExact(value, "yyyy-MM-dd'T'HH:mm:ss'Z'",
+               Globalization.CultureInfo.InvariantCulture,
+               Globalization.DateTimeStyles.AssumeUniversal Or
+               Globalization.DateTimeStyles.AdjustToUniversal, parsed) Then
+            Return ""
+        End If
+        ' A validated ISO UTC timestamp is safe; general-purpose IPv6
+        ' redaction would otherwise turn HH:mm:ss into [IPv6].
+        Return value
+    End Function
+
     Private Shared Function ReadEntry(path As String) As SavedEntry
         Try
             Dim file As New FileInfo(path)
@@ -298,9 +349,17 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
                    Field(eventJson, "project", 100) <> Project Then Return Nothing
                 Dim state = Field(delivery, "status", 20).ToLowerInvariant()
                 If state <> "pending" AndAlso state <> "submitted" Then Return Nothing
+                Dim savedIssue = ""
+                Dim urlField As JsonElement
+                If state = "submitted" AndAlso
+                   delivery.TryGetProperty("url", urlField) AndAlso
+                   urlField.ValueKind = JsonValueKind.String Then
+                    savedIssue = UniversalDiagnosticsDelivery.SafeIssueUrl(
+                        urlField.GetString())
+                End If
                 Return New SavedEntry With {
                     .Id = fileId.ToString("D"),
-                    .WhenUtc = Field(eventJson, "timestamp_utc", 32),
+                    .WhenUtc = SafeTimestamp(eventJson),
                     .Component = Field(eventJson, "component", 90),
                     .ErrorType = Field(eventJson, "error_type", 90),
                     .Code = Field(eventJson, "code", 60),
@@ -309,6 +368,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
                     .Summary = Field(eventJson, "summary", 450),
                     .Fingerprint = Field(eventJson, "fingerprint", 64),
                     .DeliveryStatus = state,
+                    .DeliveryUrl = savedIssue,
                     .FilePath = path
                 }
             End Using
@@ -337,7 +397,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         Dim record As New Dictionary(Of String, Object) From {
             {"event", eventValue},
             {"delivery", New Dictionary(Of String, String) From {
-                {"status", item.DeliveryStatus}, {"url", ""}
+                {"status", item.DeliveryStatus}, {"url", item.DeliveryUrl}
             }}
         }
         Return JsonSerializer.Serialize(record,
@@ -356,7 +416,12 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         copyButton.Enabled = available
         exportButton.Enabled = available
         deleteButton.Enabled = available
-        draftButton.Enabled = available
+        draftButton.Enabled = available AndAlso
+            item.DeliveryStatus = "pending"
+        submittedButton.Enabled = available AndAlso
+            item.DeliveryStatus = "pending"
+        pendingButton.Enabled = available AndAlso
+            item.DeliveryStatus = "submitted"
     End Sub
 
     Public Sub RefreshRecords()
@@ -382,6 +447,13 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         End Try
     End Sub
 
+    Private Shared Function CompactUtc(iso As String) As String
+        ' The full validated timestamp remains in the JSON preview/export.
+        ' The list shows UTC to the minute to keep Date and Code readable.
+        If String.IsNullOrEmpty(iso) OrElse iso.Length <> 20 Then Return ""
+        Return iso.Substring(0, 10) & " " & iso.Substring(11, 5)
+    End Function
+
     Private Sub ApplyFilters(Optional preserved As String = "")
         Dim query = searchBox.Text.Trim()
         Dim chosen = statusBox.SelectedItem.ToString()
@@ -400,10 +472,12 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
                 Return searchable.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0
             End Function)
             For Each entry In candidates
-                Dim position = grid.Rows.Add(entry.WhenUtc, entry.Component,
+                Dim position = grid.Rows.Add(CompactUtc(entry.WhenUtc), entry.Component,
                                              entry.Code, entry.Summary,
                                              entry.DeliveryStatus)
                 grid.Rows(position).Tag = entry
+                grid.Rows(position).Cells(0).ToolTipText = entry.WhenUtc
+                grid.Rows(position).Cells(3).ToolTipText = entry.Summary
                 If entry.Id = preserved Then
                     grid.Rows(position).Selected = True
                 End If
@@ -438,6 +512,109 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
             footnote.Text = "Draft opened. Submit in GitHub manually; local status unchanged."
         Catch ex As Exception
             footnote.Text = "Could not open GitHub draft (" & ex.GetType().Name & ")."
+        End Try
+    End Sub
+
+    Private Function AskSubmittedIssueUrl() As String
+        Using form As New Form With {
+            .Text = "Confirm manual GitHub Issue submission",
+            .StartPosition = FormStartPosition.CenterParent,
+            .FormBorderStyle = FormBorderStyle.FixedDialog,
+            .MinimizeBox = False, .MaximizeBox = False,
+            .ShowInTaskbar = False,
+            .Size = New Size(730, 240),
+            .Font = ModernTheme.UiFont(9.5F)
+        }
+            Dim layout As New TableLayoutPanel With {
+                .Dock = DockStyle.Fill,
+                .ColumnCount = 1, .RowCount = 3,
+                .Padding = New Padding(16, 10, 16, 12)
+            }
+            layout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+            layout.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 35))
+            layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 51))
+            form.Controls.Add(layout)
+
+            Dim explanation As New Label With {
+                .Dock = DockStyle.Fill,
+                .TextAlign = ContentAlignment.MiddleLeft,
+                .Text = "Only after YOU have submitted a GitHub Issue, paste its link." &
+                    Environment.NewLine &
+                    "This records the link LOCALLY. It never submits, checks or changes GitHub.",
+                .AutoEllipsis = False
+            }
+            layout.Controls.Add(explanation, 0, 0)
+            Dim issueBox As New TextBox With {
+                .Name = "txtUniversalSubmittedUrl",
+                .Dock = DockStyle.Fill,
+                .PlaceholderText = "https://github.com/sgennadi/DISM-GUI/issues/123",
+                .Margin = New Padding(0, 4, 0, 4)
+            }
+            layout.Controls.Add(issueBox, 0, 1)
+            Dim actions As New FlowLayoutPanel With {
+                .Dock = DockStyle.Fill, .FlowDirection = FlowDirection.RightToLeft
+            }
+            Dim accept As New Button With {
+                .Text = "Record locally", .DialogResult = DialogResult.OK,
+                .Size = New Size(165, 34)
+            }
+            Dim cancel As New Button With {
+                .Text = "Cancel", .DialogResult = DialogResult.Cancel,
+                .Size = New Size(110, 34)
+            }
+            actions.Controls.Add(accept)
+            actions.Controls.Add(cancel)
+            layout.Controls.Add(actions, 0, 2)
+            form.AcceptButton = accept
+            form.CancelButton = cancel
+            If form.ShowDialog(Me) <> DialogResult.OK Then Return Nothing
+            Return issueBox.Text.Trim()
+        End Using
+    End Function
+
+    Private Sub MarkSubmitted(sender As Object, e As EventArgs)
+        Dim item = Selected()
+        If item Is Nothing OrElse item.DeliveryStatus <> "pending" Then Return
+        Dim entered = AskSubmittedIssueUrl()
+        If entered Is Nothing Then Return
+        Try
+            Dim issueUrl = UniversalDiagnosticsDelivery.NormalizeIssueUrl(entered)
+            If MessageBox.Show(Me,
+                "Confirm you already SUBMITTED this Issue on GitHub?" &
+                Environment.NewLine & issueUrl & Environment.NewLine &
+                "Only its LOCAL status will become Submitted.",
+                "Confirm existing GitHub Issue",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) <> DialogResult.Yes Then Return
+            UniversalDiagnosticsDelivery.SetStatus(item.Id, "submitted", issueUrl)
+            RefreshRecords()
+            footnote.Text = "Manually marked Submitted. No network request was made."
+        Catch ex As Exception When TypeOf ex Is ArgumentException OrElse
+                                   TypeOf ex Is IOException OrElse
+                                   TypeOf ex Is UnauthorizedAccessException OrElse
+                                   TypeOf ex Is InvalidDataException
+            MessageBox.Show(Me, ex.Message, "Cannot mark report submitted",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning)
+        End Try
+    End Sub
+
+    Private Sub MarkPending(sender As Object, e As EventArgs)
+        Dim item = Selected()
+        If item Is Nothing OrElse item.DeliveryStatus <> "submitted" Then Return
+        If MessageBox.Show(Me,
+            "Reset this LOCAL report to Pending and remove its saved Issue link?" &
+            Environment.NewLine & "Any existing Issue on GitHub will be unaffected.",
+            "Reset local delivery state",
+            MessageBoxButtons.YesNo, MessageBoxIcon.Question) <> DialogResult.Yes Then Return
+        Try
+            UniversalDiagnosticsDelivery.SetStatus(item.Id, "pending")
+            RefreshRecords()
+            footnote.Text = "Locally marked Pending. No GitHub Issue was changed."
+        Catch ex As Exception When TypeOf ex Is IOException OrElse
+                                   TypeOf ex Is UnauthorizedAccessException OrElse
+                                   TypeOf ex Is InvalidDataException
+            MessageBox.Show(Me, ex.Message, "Cannot reset report",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning)
         End Try
     End Sub
 
