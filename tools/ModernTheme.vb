@@ -844,7 +844,7 @@ Public NotInheritable Class ModernTheme
         logArea.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         split.Panel2.Controls.Add(logArea)
         Dim logHeader As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 5, .RowCount = 1,
+            .Dock = DockStyle.Fill, .ColumnCount = 4, .RowCount = 1,
             .BackColor = Color.FromArgb(230, 240, 250),
             .Padding = New Padding(12, 5, 10, 5),
             .Margin = Padding.Empty
@@ -852,7 +852,6 @@ Public NotInheritable Class ModernTheme
         logHeader.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         logHeader.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 113))
         logHeader.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 124))
-        logHeader.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 87))
         logHeader.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 87))
         logHeader.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         logArea.Controls.Add(logHeader, 0, 0)
@@ -909,11 +908,9 @@ Public NotInheritable Class ModernTheme
         StyleButton(clear, "neutral")
         AddHandler clear.Click, Sub(sender, e) output.Clear()
         logHeader.Controls.Add(clear, 3, 0)
-        exitButton.Text = "Exit"
-        exitButton.Dock = DockStyle.Fill
-        exitButton.Margin = New Padding(4, 2, 0, 2)
-        StyleButton(exitButton, "neutral")
-        logHeader.Controls.Add(exitButton, 4, 0)
+        ' Do not duplicate the main window close X in the output toolbar.
+        ' Keep the original event handler object for legacy references.
+        exitButton.Visible = False
         FitTableButtonCells(logHeader)
 
         output.Dock = DockStyle.Fill

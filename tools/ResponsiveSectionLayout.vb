@@ -171,7 +171,7 @@ Public NotInheritable Class ResponsiveSectionLayout
         mountRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 157))
         left.Controls.Add(mountRow, 0, 4)
         mountRow.Controls.Add(mount, 0, 0)
-        chooseMount.Margin = New Padding(7, 3, 0, 4)
+        chooseMount.Margin = New Padding(7, 3, 12, 4)
         mountRow.Controls.Add(chooseMount, 1, 0)
 
         readOnlyCheckbox.Margin = New Padding(3, 12, 0, 6)
@@ -199,7 +199,8 @@ Public NotInheritable Class ResponsiveSectionLayout
         dismountButton.Dock = DockStyle.Fill
         dismountButton.Margin = New Padding(0, 4, 0, 8)
         actions.Controls.Add(dismountButton, 0, 1)
-        openMounted.Text = "Open mounted folder"
+        openMounted.Text = "Open folder"
+        openMounted.AccessibleDescription = "Open the currently mounted WIM directory"
         ModernTheme.StyleButton(openMounted, "neutral")
         openMounted.Dock = DockStyle.Fill
         openMounted.Margin = New Padding(0, 4, 0, 8)

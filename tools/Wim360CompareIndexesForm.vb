@@ -102,9 +102,10 @@ Public NotInheritable Class Wim360CompareIndexesForm
         For Each h As Integer In headerRows
             root.RowStyles.Add(New RowStyle(SizeType.Absolute, h))
         Next
+        ' Allow the source-WIM verification note to wrap to multiple lines.
         Dim statusHeight As Integer = If(stackedLayout,
-            CInt(Math.Ceiling(52 + 17 * (uiScale - 1))),
-            CInt(Math.Ceiling(80 * uiScale)))
+            CInt(Math.Ceiling(98 + 24 * (uiScale - 1))),
+            CInt(Math.Ceiling(104 * uiScale)))
         Dim actionsHeight As Integer = If(stackedLayout,
             CInt(Math.Ceiling(51 + 15 * (uiScale - 1))),
             CInt(Math.Ceiling(68 * uiScale)))
@@ -327,7 +328,9 @@ Public NotInheritable Class Wim360CompareIndexesForm
         hintLabel = MakeLabel("No image files will be modified.", 9, False)
         hintLabel.Name = "lbl360IndexCompareHint"
         hintLabel.ForeColor = ModernTheme.Muted
-        hintLabel.AutoEllipsis = True
+        hintLabel.AutoEllipsis = False
+        hintLabel.TextAlign = ContentAlignment.TopLeft
+        hintLabel.Padding = New Padding(0, 3, 0, 2)
         statusPanel.Controls.Add(hintLabel, 0, 1)
         root.Controls.Add(statusPanel, 0, 4)
 
