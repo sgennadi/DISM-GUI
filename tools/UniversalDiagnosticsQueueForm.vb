@@ -137,11 +137,11 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
             DataGridViewColumnHeadersHeightSizeMode.DisableResizing
         grid.ColumnHeadersHeight = CInt(Math.Ceiling(33.0F * uiScale))
         grid.RowTemplate.Height = CInt(Math.Ceiling(27.0F * uiScale))
-        AddColumn("Date (UTC)", 130)
-        AddColumn("Area", 150)
-        AddColumn("Code", 75)
-        AddColumn("Summary", 325)
-        AddColumn("Status", 85)
+        AddColumn("Date (UTC)", 185)
+        AddColumn("Area", 140)
+        AddColumn("Code", 115)
+        AddColumn("Summary", 310)
+        AddColumn("Status", 110)
         AddHandler grid.SelectionChanged, Sub(sender, e) ShowSelected()
         root.Controls.Add(grid, 0, 2)
 
@@ -185,7 +185,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         footer.Controls.Add(buttons, 0, 1)
 
         copyButton = New Button With {
-            .Name = "btnUniversalQueueCopy", .Text = "Copy reviewed details",
+            .Name = "btnUniversalQueueCopy", .Text = "Copy JSON",
             .Dock = DockStyle.Fill, .Enabled = False,
             .Margin = New Padding(3, 3, 7, 2)
         }
@@ -202,7 +202,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         buttons.Controls.Add(copyButton, 0, 0)
 
         exportButton = New Button With {
-            .Name = "btnUniversalQueueExport", .Text = "Export reviewed JSON...",
+            .Name = "btnUniversalQueueExport", .Text = "Export JSON...",
             .Dock = DockStyle.Fill, .Enabled = False,
             .Margin = New Padding(3, 3, 7, 2)
         }
@@ -211,7 +211,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         buttons.Controls.Add(exportButton, 1, 0)
 
         deleteButton = New Button With {
-            .Name = "btnUniversalQueueDelete", .Text = "Delete selected...",
+            .Name = "btnUniversalQueueDelete", .Text = "Delete...",
             .Dock = DockStyle.Fill, .Enabled = False,
             .Margin = New Padding(3, 3, 1, 2)
         }
@@ -220,7 +220,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         buttons.Controls.Add(deleteButton, 2, 0)
 
         Dim openFolder As New Button With {
-            .Name = "btnUniversalQueueFolder", .Text = "Open queue folder",
+            .Name = "btnUniversalQueueFolder", .Text = "Open folder",
             .Dock = DockStyle.Fill, .Margin = New Padding(3, 2, 7, 2)
         }
         ModernTheme.StyleButton(openFolder, "browse")
@@ -237,7 +237,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
 
         draftButton = New Button With {
             .Name = "btnUniversalQueueGitHubDraft",
-            .Text = "Open GitHub draft...",
+            .Text = "GitHub draft...",
             .Dock = DockStyle.Fill, .Enabled = False,
             .Margin = New Padding(3, 2, 7, 2)
         }
@@ -447,6 +447,13 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         End Try
     End Sub
 
+    Private Shared Function CompactUtc(iso As String) As String
+        ' The full validated timestamp remains in the JSON preview/export.
+        ' The list shows UTC to the minute to keep Date and Code readable.
+        If String.IsNullOrEmpty(iso) OrElse iso.Length <> 20 Then Return ""
+        Return iso.Substring(0, 10) & " " & iso.Substring(11, 5)
+    End Function
+
     Private Sub ApplyFilters(Optional preserved As String = "")
         Dim query = searchBox.Text.Trim()
         Dim chosen = statusBox.SelectedItem.ToString()
@@ -465,10 +472,12 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
                 Return searchable.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0
             End Function)
             For Each entry In candidates
-                Dim position = grid.Rows.Add(entry.WhenUtc, entry.Component,
+                Dim position = grid.Rows.Add(CompactUtc(entry.WhenUtc), entry.Component,
                                              entry.Code, entry.Summary,
                                              entry.DeliveryStatus)
                 grid.Rows(position).Tag = entry
+                grid.Rows(position).Cells(0).ToolTipText = entry.WhenUtc
+                grid.Rows(position).Cells(3).ToolTipText = entry.Summary
                 If entry.Id = preserved Then
                     grid.Rows(position).Selected = True
                 End If
