@@ -187,6 +187,78 @@ Public NotInheritable Class Wim360OfflineList
         End Using
     End Function
 
+    ' One-index variant for comparing TWO DIFFERENT WIM/ESD containers.
+    ' Keeps the same full-file before/after SHA-256 and fail-closed,
+    ' Unicode-safe offline enumerator as the existing multi-index mode.
+    ' No result escapes unless the complete catalog and both hashes pass.
+    Public Shared Function ListOneVerified(report As Wim360Reader.WimReport,
+                        index As Integer, token As CancellationToken,
+                        Optional progress As IProgress(Of String) = Nothing
+                        ) As List(Of Wim360IndexComparer.Item)
+        If report Is Nothing Then Throw New ArgumentNullException(NameOf(report))
+        If report.IsSplitSet Then Throw New NotSupportedException(
+            "Split SWM is metadata-only; use a standard WIM or ESD for path comparison.")
+        If Not report.Images.Any(Function(x) x.Index = index) Then
+            Throw New ArgumentOutOfRangeException(NameOf(index),
+                "Choose an index that exists in this WIM/ESD file.")
+        End If
+        token.ThrowIfCancellationRequested()
+        Dim imagePath = Path.GetFullPath(report.ImageFile)
+        Dim source = New FileInfo(imagePath)
+        If Not source.Exists Then Throw New FileNotFoundException("Image missing.", imagePath)
+        If source.Length <> report.FileSizeBytes OrElse
+           source.LastWriteTimeUtc <> report.ModifiedUtc Then
+            Throw New InvalidOperationException(
+                "The selected image changed since Inspect. Inspect it again.")
+        End If
+        ' Do not mix a catalog from an updated image with a stale index
+        ' selection from the WIM 360 dashboard.
+        Dim verified = Wim360Reader.Inspect(imagePath)
+        If verified.IsSplitSet OrElse verified.ImageCount <> report.ImageCount OrElse
+           Not verified.Images.Any(Function(x)
+                Return x.Index = index AndAlso
+                    String.Equals(x.Name,
+                        report.Images.First(Function(y) y.Index = index).Name,
+                        StringComparison.Ordinal)
+           End Function) Then
+            Throw New InvalidOperationException(
+                "WIM index metadata changed; inspect the source image again.")
+        End If
+        source.Refresh()
+        If source.Length <> report.FileSizeBytes OrElse
+           source.LastWriteTimeUtc <> report.ModifiedUtc Then
+            Throw New InvalidOperationException(
+                "WIM file changed while checking metadata. Inspect again.")
+        End If
+        Dim priorTime = source.LastWriteTimeUtc
+        Dim priorLength = source.Length
+        Dim digestBefore = ImageDigest(imagePath, token, progress, "Baseline SHA-256")
+        token.ThrowIfCancellationRequested()
+        Dim items = ListIndex(imagePath, index, token, progress)
+        token.ThrowIfCancellationRequested()
+        Dim digestAfter = ImageDigest(imagePath, token, progress, "Final SHA-256")
+        source.Refresh()
+        If source.Length <> priorLength OrElse
+           Not CryptographicOperations.FixedTimeEquals(digestBefore, digestAfter) Then
+            Throw New IOException(
+                "Source WIM bytes changed during enumeration. Comparison discarded.")
+        End If
+        If source.LastWriteTimeUtc <> priorTime Then
+            Try
+                File.SetLastWriteTimeUtc(imagePath, priorTime)
+                source.Refresh()
+                If source.LastWriteTimeUtc <> priorTime Then
+                    Throw New IOException("WIM source timestamp could not be restored.")
+                End If
+            Catch ex As Exception
+                Throw New IOException(
+                    "Source bytes passed SHA-256 but Windows updated the file timestamp. " &
+                    "The timestamp could not be restored; comparison discarded.", ex)
+            End Try
+        End If
+        Return items
+    End Function
+
     ' Full-file SHA-256 is intentionally used rather than a sampled fingerprint.
     ' The DISM PowerShell reader may touch LastWriteTime on some Windows builds:
     ' restore that timestamp ONLY after proving that all bytes remain identical.

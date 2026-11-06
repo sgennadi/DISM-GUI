@@ -244,6 +244,132 @@ internal static class LayoutSmoke
         "<VERSION><MAJOR>10</MAJOR><MINOR>0</MINOR><BUILD>26100</BUILD></VERSION>" +
         "</WINDOWS></IMAGE></WIM>";
 
+    private static void VerifyCrossImageComparison(Form owner)
+    {
+        // Two independent files with the SAME original image index number.
+        // The cross-file diff must assign virtual columns A=1, B=2 rather
+        // than collapsing both original Index 1 values into a single column.
+        var baseline = Wim360Reader.ParseMetadataXml(
+            WIM_METADATA_FIXTURE, @"C:\Images\install.wim", 10485760);
+        var candidate = Wim360Reader.ParseMetadataXml(
+            WIM_METADATA_FIXTURE.Replace("Microsoft Windows PE", "Windows 11 Enterprise"),
+            @"D:\Images\install.esd", 10485760);
+        baseline.Images[0].Edition = "Pro";
+        candidate.Images[0].Edition = "Enterprise";
+        var metadata = Wim360CrossImage.CompareMetadataPair(baseline, 1, candidate, 1);
+        Require(metadata.Indexes.SequenceEqual(new[] { 1, 2 }) &&
+                metadata.Rows.Count == 10 &&
+                metadata.Rows.Single(x => x.Name == "Edition").State == "Different" &&
+                metadata.Rows.Single(x => x.Name == "Edition").At(1) == "Pro" &&
+                metadata.Rows.Single(x => x.Name == "Edition").At(2) == "Enterprise",
+                "Cross-image metadata must keep two independent columns for Index 1 versus Index 1");
+        Require(metadata.ColumnLabels[1].StartsWith("A: install.wim") &&
+                metadata.ColumnLabels[2].StartsWith("B: install.esd") &&
+                Wim360IndexComparer.ToCsv(metadata, metadata.Rows)
+                    .Contains("\"B: install.esd [1]\""),
+                "Cross-image CSV must label both original files and indices");
+        var aRecords = new[] {
+            new Wim360IndexComparer.Item { Index=1, Kind="Files", Key=@"Windows\common.txt", Value="Present" },
+            new Wim360IndexComparer.Item { Index=1, Kind="Files", Key=@"Windows\only-a.txt", Value="Present" },
+            new Wim360IndexComparer.Item { Index=1, Kind="Folders", Key=@"Data\OnlyA", Value="Present" },
+            new Wim360IndexComparer.Item { Index=1, Kind="Files", Key="=HYPERLINK()", Value="Present" }
+        };
+        var bRecords = new[] {
+            new Wim360IndexComparer.Item { Index=1, Kind="Files", Key=@"Windows\common.txt", Value="Present" },
+            new Wim360IndexComparer.Item { Index=1, Kind="Files", Key=@"Windows\only-b.txt", Value="Present" },
+            new Wim360IndexComparer.Item { Index=1, Kind="Folders", Key=@"Data\OnlyB", Value="Present" }
+        };
+        var paths = Wim360CrossImage.ComparePathsPair(baseline, 1, candidate, 1,
+                                                       aRecords, bRecords);
+        Require(paths.Rows.Count == 6 &&
+                paths.Rows.Single(x => x.Name.EndsWith("only-a.txt")).State == "Only in Index 1" &&
+                paths.Rows.Single(x => x.Name.EndsWith("only-b.txt")).State == "Only in Index 2" &&
+                paths.Rows.Single(x => x.Name.EndsWith("common.txt")).State == "Present in all" &&
+                Wim360IndexComparer.Filter(paths.Rows, "All types", "Differences only", "", 2).Count == 5 &&
+                Wim360IndexComparer.ToCsv(paths, paths.Rows).Contains("\"'=HYPERLINK()\""),
+                "Cross-WIM offline path presence, filters or CSV formula escaping failed");
+        bool sameRejected = false;
+        try { Wim360CrossImage.ValidatePair(baseline, 1, baseline, 2); }
+        catch (ArgumentException) { sameRejected = true; }
+        Require(sameRejected,
+                "Cross-image comparison must reject two indexes in the same WIM file");
+        bool unknownIndexRejected = false;
+        try { Wim360CrossImage.ValidatePair(baseline, 3, candidate, 1); }
+        catch (ArgumentOutOfRangeException) { unknownIndexRejected = true; }
+        Require(unknownIndexRejected,
+                "Cross-WIM comparison must reject missing image index numbers");
+        using (var canceled = new System.Threading.CancellationTokenSource())
+        {
+            canceled.Cancel();
+            bool rejected = false;
+            try {
+                Wim360CrossImage.Compare(baseline, 1, candidate, 1, true, canceled.Token);
+            } catch (OperationCanceledException) { rejected = true; }
+            Require(rejected, "Cross-image cancellation must not produce a partial result");
+        }
+        using var viewer = new Wim360CrossImageForm(baseline, 1);
+        viewer.Show(owner);
+        Application.DoEvents();
+        VerifyScrollableDialog(viewer, "WIM 360 cross-image comparison");
+        Require(Find(viewer, "txt360CrossBaseline") is TextBox &&
+                Find(viewer, "txt360CrossCandidate") is TextBox &&
+                Find(viewer, "cmb360CrossBaselineIndex") is ComboBox &&
+                Find(viewer, "cmb360CrossCandidateIndex") is ComboBox &&
+                Find(viewer, "btn360CrossBrowseCandidate") is Button &&
+                Find(viewer, "btn360CrossLoadCandidate") is Button &&
+                Find(viewer, "btn360CrossCompare") is Button,
+                "Cross-WIM GUI missing source image/index selectors and browse/load controls");
+        Require(!((Button)Find(viewer, "btn360CrossCompare")!).Enabled,
+                "Cannot start a cross-image comparison until both files are inspected");
+        viewer.PreviewForTest(paths);
+        Application.DoEvents();
+        var grid = Find(viewer, "grid360CrossComparison") as DataGridView;
+        Require(grid is not null && grid.VirtualMode &&
+                grid.Columns.Count == 5 && grid.RowCount == 6 &&
+                grid.Columns[3].HeaderText.StartsWith("A:") &&
+                grid.Columns[4].HeaderText.StartsWith("B:") &&
+                ((Button)Find(viewer, "btn360CrossExport")!).Enabled,
+                "Cross-file comparison grid/CSV export must use independently labeled columns");
+        var sticky = Find(viewer, "Wim360CrossStickyActions") as TableLayoutPanel;
+        var compareAction = Find(viewer, "btn360CrossCompare") as Button;
+        var exportAction = Find(viewer, "btn360CrossExport") as Button;
+        var closeAction = Find(viewer, "btn360CrossClose") as Button;
+        Require(sticky is not null && sticky.Dock == DockStyle.Bottom &&
+                compareAction is not null && exportAction is not null && closeAction is not null,
+                "Cross-image footer actions must remain reachable at high DPI");
+        var dialogViewport = viewer.RectangleToScreen(viewer.ClientRectangle);
+        foreach (var action in new[] { compareAction!, exportAction!, closeAction! })
+        {
+            VerifyReadableButton(action, "Cross-image sticky footer");
+            var bounds = action.RectangleToScreen(action.ClientRectangle);
+            Require(Rectangle.Intersect(dialogViewport, bounds).Height >= action.Height - 5 &&
+                    Rectangle.Intersect(dialogViewport, bounds).Width >= action.Width - 5,
+                    "Cross-image sticky footer button is clipped outside the dialog: " + action.Text);
+        }
+        var sourceViewport = Find(viewer, "Wim360CrossViewport") as Panel;
+        Require(sourceViewport is not null, "Cross-image viewport is missing");
+        var gridViewportArea = Rectangle.Intersect(
+            grid.RectangleToScreen(grid.ClientRectangle),
+            sourceViewport!.RectangleToScreen(sourceViewport.ClientRectangle));
+        Require(gridViewportArea.Height >= 118,
+            "Cross-image sticky footer hides the comparison grid at simulated high DPI: " +
+            gridViewportArea.Height + "px visible");
+        var lastSourceColumn = grid.GetColumnDisplayRectangle(4, false);
+        Require(lastSourceColumn.Width >= 150 &&
+                lastSourceColumn.Right <= grid.ClientSize.Width,
+                "Cross-image B column is hidden beyond the grid at simulated high DPI");
+        var state = Find(viewer, "cmb360CrossState") as ComboBox;
+        state!.SelectedItem = "Only in B";
+        Application.DoEvents();
+        Require(grid.RowCount == 2,
+                "Cross-image Only in B filter must show paths missing from A only");
+        state.SelectedItem = "All results";
+        Application.DoEvents();
+        Snapshot(viewer, "DISM-GUI-WIM360-Cross-Image");
+        viewer.Close();
+        Console.WriteLine("PASS two WIM/ESD source metadata/path matrices, original index mapping, filters and GUI");
+    }
+
     private static void VerifyThreeIndexComparison(Form owner)
     {
         var xml = WIM_METADATA_FIXTURE.Replace("</WIM>",
@@ -1916,6 +2042,7 @@ internal static class LayoutSmoke
             Application.DoEvents();
             VerifyWimMetadata();
             VerifyThreeIndexComparison(form);
+            VerifyCrossImageComparison(form);
             VerifyMountedAudit();
             VerifyRuntimeDiagnostics();
             VerifyUniversalDiagnosticsBridge();

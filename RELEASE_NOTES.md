@@ -1,48 +1,48 @@
-# DISM GUI 4.3.15 — Stable
+# DISM GUI 4.3.16 — Stable
 
-Portable self-contained Windows builds (x86 / x64 / ARM64), .NET 10
-and Visual Studio 2026. The previous 4.3.14 stable release is retained.
+Portable self-contained Windows builds for x86, x64 and ARM64
+(Visual Studio 2026 / .NET 10). Previous 4.3.15 remains available.
 
-## Driver Studio — driver package integrity
+## WIM 360 — compare two independent WIM/ESD files
 
-- **Audit selected** appears in the Driver Studio details header. It audits
-  selected New/Newer driver packages, or the highlighted INF if none are
-  selected. A batch accepts up to 30 INFs.
-- A read-only, deterministic **SHA-256 package manifest** includes the
-  complete source-folder tree: INF, CAT, SYS, DLL, other files and their
-  relative paths and sizes. The scan rejects reparse points, path anomalies
-  and source files changing while read. Packages above **1,600 files / 2 GiB**
-  are rejected rather than silently incompletely checked.
-- INF parsing records generic/decorated CatalogFile declarations and
-  architecture hints from model sections. Definite architecture mismatches
-  become **Review**, never automatically selected New/Newer.
-- Windows Authenticode verifies the selected CAT file. Missing, invalid or
-  unverified catalogs are **not** approved for selective import. Signature
-  validity alone does not certify each driver payload or device ranking.
-- **Install selected INF** requires a completed approved source-package
-  audit for every selected INF. Before *every* DISM operation, it rechecks
-  the entire folder fingerprint and CAT signature. A changed package
-  immediately stops the batch rather than using stale decisions.
-- Following successful DISM commands, Driver Studio queries the mounted
-  image inventory and reports how many original INF/provider/class/version/
-  date identities are found. This verifies **staging**, not actual PnP
-  selection on a device. Unavailable or mismatching postflight inventory
-  is reported explicitly.
-- No automatic mount/commit/discard/rollback, unsigned-driver override or
-  GitHub diagnostics upload. Existing DISM output and user control remain.
+- New **Compare 2 files** action beside Compare indexes inside WIM 360.
+  Two separate WIM/ESD paths, Inspect actions and per-container index
+  selectors. Each column shows A/B, original file name and original
+  WIM image index, even for Index 1 versus Index 1.
+- **Index metadata (no mounting):** compare image name, build,
+  architecture, edition, languages, image size, product and install type.
+- **Files + folders (no mounting):** use the Windows DISM PowerShell
+  Get-WindowsImageContent catalog to compare which Unicode file/folder
+  paths are present or absent in A and B. Filters: Differences only,
+  Only in A/B, Different, Exists in both, Present in both, type and search.
+- **Safety:** check catalog snapshots, verify FULL source-file SHA-256
+  before and after each offline listing, and revalidate both sources
+  before presenting the result. On cancellation, changed files, partial
+  catalogs or failed checks, no partial comparison is displayed.
+- **CSV export:** preserve A/B image/index labels and protect names
+  against spreadsheet formula injection. The virtual data grid scales
+  to large catalogs with cancellable enumeration and progress reporting.
+- **High-DPI:** adaptive A/B column sizing, sticky Compare/Export/Close
+  toolbar at the bottom of the dialog, shorter stacked rows, version
+  in title, separate persisted window size/position.
 
-## Interface and testing
+## Scope and limits
 
-- High DPI shows a short **PACKAGE DETAILS** label beside Audit selected.
-  The source-package metric uses a compact label on smaller displays.
-- GitHub Windows CI covers x86/x64/ARM64 compilation/packaging, synthetic
-  signed-status-negative CAT fixtures, architecture and catalog selection,
-  payload tampering and read-only real WIM mount tests, with simulated
-  125%, 150%, and 175% WinForms layout checks.
-- Tested code is read-only except when the operator explicitly confirms
-  selective DISM import. Full CAT trust / OEM compatibility and write-mode
-  install / discard cycles on a real disposable Windows install.wim must
-  still be validated on a Windows workstation before production use.
+- **Path presence is NOT file-content equality.** Two paths can point to
+  different bytes or lengths. This feature intentionally makes no
+  assertion about per-file hashes or file sizes without mounting.
+- This mode never mounts, applies, commits, converts or discards an image.
+  Split SWM is not supported for direct cross-container path enumeration.
+- Some DISM API versions may touch the source's last-modified timestamp.
+  WIM 360 restores it only after confirming the entire WIM/ESD SHA-256
+  is unchanged. On failed/canceled operations, timestamp restoration
+  cannot be guaranteed even though the application itself does not
+  issue any image-writing command.
+- CI uses two separately captured, disposable, **real DISM-created**
+  WIM files, validates missing/common Unicode paths, source SHA-256
+  and timestamps, and checks synthetic matrices, filters, CSV and
+  WinForms layouts at 125%, 150%, 175%. A production image still
+  requires operator validation before deployment decisions.
 
-Based on DISMGUI by Mike Celone (mikecel79/DISMGUI); attribution and existing
-redistribution notices remain.
+Existing WIM 360 same-container comparison, Driver Studio 4.3.15
+integrity audit, diagnostics and update paths remain unchanged.

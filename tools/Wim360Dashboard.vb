@@ -394,10 +394,21 @@ Public NotInheritable Class Wim360Dashboard
             End Using
         End Sub
         actions.Controls.Add(compareIndexesButton, 0, 4)
-        Dim compareHelp = MakeText("2–8 indexes: present / missing / different",
-                                   9.1F, False, ModernTheme.Muted)
-        compareHelp.Margin = New Padding(4, 3, 0, 3)
-        actions.Controls.Add(compareHelp, 1, 4)
+        Dim compareOther As New Button With {
+            .Name = "btn360CompareDifferentFiles",
+            .Text = "Compare 2 files",
+            .Dock = DockStyle.Fill,
+            .Margin = New Padding(0, 4, 8, 4)
+        }
+        ModernTheme.StyleButton(compareOther, "secondary")
+        AddHandler compareOther.Click, Sub(sender, e)
+            Dim chosen = SelectedImage()
+            Dim initialIndex = If(chosen Is Nothing, 0, chosen.Index)
+            Using viewer As New Wim360CrossImageForm(report, initialIndex)
+                viewer.ShowDialog(Me.FindForm())
+            End Using
+        End Sub
+        actions.Controls.Add(compareOther, 1, 4)
 
         AddHandler fileBox.TextChanged, Sub(sender, e)
             overviewText.Text = "File selection changed. Click Inspect to refresh the metadata overview."

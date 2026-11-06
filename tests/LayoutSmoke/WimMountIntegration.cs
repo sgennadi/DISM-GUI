@@ -307,6 +307,46 @@ internal static class WimMountIntegration
             report.Images.Any(x => x.MountStatus.StartsWith("Mounted",
                                                 StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Offline index comparison modified or mounted the WIM.");
+        // Cross-container integration: capture an entirely separate WIM with
+        // its own Index 1, rather than reusing two indexes in one file.
+        // Neither source may be mounted, edited or left with a changed mtime.
+        var otherRoot = Path.Combine(root, "cross-image-source-b");
+        var otherWim = Path.Combine(root, "different-install.wim");
+        Directory.CreateDirectory(Path.Combine(otherRoot, "Windows", "System32"));
+        File.WriteAllText(Path.Combine(otherRoot, "Windows", "System32", "common.txt"), "different bytes");
+        File.WriteAllText(Path.Combine(otherRoot, "Windows", "System32", "new-in-b.txt"), "only in B");
+        CheckDism(new[] {
+            "/English", "/Capture-Image", "/ImageFile:" + otherWim,
+            "/CaptureDir:" + otherRoot, "/Name:Windows Second Container"
+        }, 180000);
+        var otherReport = Wim360Reader.Inspect(otherWim);
+        var digestA = Digest(wim);
+        var digestB = Digest(otherWim);
+        var stampA = File.GetLastWriteTimeUtc(wim);
+        var stampB = File.GetLastWriteTimeUtc(otherWim);
+        var crossPaths = Wim360CrossImage.Compare(report, 1, otherReport, 1,
+                                                  true, CancellationToken.None);
+        if (crossPaths.Rows.Single(x => x.Name.EndsWith("common.txt",
+                StringComparison.Ordinal)).State != "Present in all" ||
+            crossPaths.Rows.Single(x => x.Name.EndsWith("new-in-b.txt",
+                StringComparison.Ordinal)).State != "Only in Index 2" ||
+            crossPaths.Rows.Single(x => x.Name.EndsWith("not-in-2.txt",
+                StringComparison.Ordinal)).State != "Only in Index 1" ||
+            !crossPaths.ColumnLabels[1].Contains("offline-3-index.wim") ||
+            !crossPaths.ColumnLabels[2].Contains("different-install.wim") ||
+            digestA != Digest(wim) || digestB != Digest(otherWim) ||
+            stampA != File.GetLastWriteTimeUtc(wim) ||
+            stampB != File.GetLastWriteTimeUtc(otherWim))
+            throw new InvalidOperationException(
+                "Cross-container comparison failed presence, labels or WIM source integrity checks.");
+        var crossMetadata = Wim360CrossImage.Compare(report, 1, otherReport, 1,
+                                                     false, CancellationToken.None);
+        if (crossMetadata.Rows.Single(x => x.Name == "Image name").State != "Different" ||
+            crossMetadata.Rows.Count != 10)
+            throw new InvalidOperationException(
+                "Real-WIM cross-container metadata did not compare independent indexes.");
+        Console.WriteLine("PASS two independent DISM-created WIMs, Index 1 versus Index 1, " +
+                          "offline metadata/Unicode-safe path differences, verified source SHA-256 and mtime.");
         Console.WriteLine("PASS real 3-index Unicode-safe DISM offline file/folder presence, " +
                           "Russian/Hebrew Unicode, unique/missing/empty-folder filters " +
                           "and unchanged WIM SHA-256.");

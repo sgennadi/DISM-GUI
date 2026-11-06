@@ -111,6 +111,43 @@ CSV text is protected against spreadsheet formula injection. The JSON format
 has `ExportKind: Wim360IndexMetadata` and is **not** an inventory snapshot
 for **Compare JSON snapshots**; those require an actual mounted-index audit.
 
+### Compare TWO different WIM/ESD containers (4.3.16)
+
+In **WIM 360 → Compare 2 files**, select two independent WIM or ESD
+files, run **Inspect** for A and B, then choose one image index inside
+each. This is separate from **Compare indexes**, which examines several
+indexes inside **one** WIM. You can compare install.wim index 1 with an
+entirely different install.wim or install.esd index 1; the two columns
+are clearly labeled **A: filename [original index]** and **B: ...**.
+
+- **Index metadata (no mounting)** compares architecture, edition,
+  Windows build, languages, install type, image name and other WIMGAPI
+  fields. No DISM mount or write operation occurs.
+- **Files + folders (no mounting)** compares file and directory **paths**
+  from both catalogs, preserving Unicode Russian/Hebrew filenames.
+  The filters include Differences only, Only in A, Only in B, Different,
+  Exists in both, Present in both, type and free-text search.
+- **Export filtered CSV** includes explicit A/B source headers and
+  protects filenames starting with spreadsheet formula characters.
+- The offline catalog is accepted only after an independent, full-file
+  **SHA-256 before/after** check of **each** source image and an index
+  snapshot validation. A missing/unreadable/truncated catalog, changed
+  source, checksum failure or cancellation **discards the comparison**
+  instead of showing false missing files.
+- A Windows DISM API call may update a source file's modification time
+  even during a nominally read-only query. The original timestamp is
+  restored only if a full SHA-256 proves the source bytes unchanged.
+  Failed or interrupted operations cannot guarantee timestamp restoration.
+
+**Critical distinction:** the offline comparison reports only *presence*
+and *absence* of paths. Identical paths do **not** imply equal file sizes
+or bytes; that would require mounted file comparison or additional
+per-file hashing. No source is automatically mounted, applied, committed,
+discarded, or converted. Split SWM sets are not supported by this
+cross-container catalog mode. A real disposable-WIM Windows test is included
+in CI; physical Windows/Server versions and production WIMs still need
+manual validation before relying on reports for deployment decisions.
+
 ### Compare 2–8 indexes inside one WIM or ESD (test RC)
 
 After **Inspect**, choose **Compare indexes**. Two or three indexes are
@@ -325,7 +362,7 @@ does not mark the local event as submitted. No background upload occurs.
 There is **no required collector EXE, DLL, installer or GitHub token**.
 The original DISM diagnostics, support contact and manual Issue draft remain.
 See [embedded integration details](docs/UNIVERSAL-DIAGNOSTICS.md).
-Current stable version: **4.3.15**. Earlier releases remain available.
+Current stable version: **4.3.16**. Earlier releases remain available.
 
 ## Other dialogs: 175% horizontal-scroll fixes (4.3.10 test branch)
 
