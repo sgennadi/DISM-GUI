@@ -65,64 +65,14 @@ Public NotInheritable Class Wim360CrossMounted
     ' The enumerator is also used in the synthetic Windows regression suite.
     ' Skip reparse entries, reject incomplete/unreadable scans, and enforce
     ' the same 250,000 entry cap as same-container mounted comparison.
+    ' This safety-aware walker keeps genuine WIM/WOF-backed reparse
+    ' files (regular image content) while refusing symlinks and junctions.
     Public Shared Function ListMountedTree(rootFolder As String, slot As Integer,
                                            token As CancellationToken
                                            ) As List(Of Wim360IndexComparer.Item)
         If slot <> 1 AndAlso slot <> 2 Then Throw New ArgumentOutOfRangeException(NameOf(slot))
-        If String.IsNullOrWhiteSpace(rootFolder) Then
-            Throw New ArgumentException("A mounted image directory is required.")
-        End If
-        Dim root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(rootFolder))
-        If Not Directory.Exists(root) Then Throw New DirectoryNotFoundException(root)
-        If (File.GetAttributes(root) And FileAttributes.ReparsePoint) = FileAttributes.ReparsePoint Then
-            Throw New InvalidDataException("Reparse point mount folder is not supported.")
-        End If
-        Dim options As New EnumerationOptions With {
-            .RecurseSubdirectories = True,
-            .IgnoreInaccessible = False,
-            .AttributesToSkip = FileAttributes.ReparsePoint
-        }
-        Dim count As Integer = 0
-        Dim items As New List(Of Wim360IndexComparer.Item)()
-        For Each fullName In Directory.EnumerateFiles(root, "*", options)
-            token.ThrowIfCancellationRequested()
-            count += 1
-            If count > MaxEntriesPerSource Then
-                Throw New InvalidOperationException(
-                    "Mounted source " & slot.ToString() &
-                    " exceeds the 250,000 item safety limit. No partial results shown.")
-            End If
-            If (File.GetAttributes(fullName) And FileAttributes.ReparsePoint) = FileAttributes.ReparsePoint Then
-                Continue For
-            End If
-            Dim relative = Path.GetRelativePath(root, fullName).Replace("/"c, "\"c)
-            Dim bytes = New FileInfo(fullName).Length
-            items.Add(New Wim360IndexComparer.Item With {
-                .Index = slot,
-                .Kind = "Files",
-                .Key = relative,
-                .Value = bytes.ToString(CultureInfo.InvariantCulture) & " bytes"
-            })
-        Next
-        For Each fullName In Directory.EnumerateDirectories(root, "*", options)
-            token.ThrowIfCancellationRequested()
-            count += 1
-            If count > MaxEntriesPerSource Then
-                Throw New InvalidOperationException(
-                    "Mounted source " & slot.ToString() &
-                    " exceeds the 250,000 item safety limit. No partial results shown.")
-            End If
-            If (File.GetAttributes(fullName) And FileAttributes.ReparsePoint) = FileAttributes.ReparsePoint Then
-                Continue For
-            End If
-            items.Add(New Wim360IndexComparer.Item With {
-                .Index = slot,
-                .Kind = "Folders",
-                .Key = Path.GetRelativePath(root, fullName).Replace("/"c, "\"c),
-                .Value = "Present"
-            })
-        Next
-        Return items
+        Return Wim360ReparseSafety.EnumerateMountTree(rootFolder, slot,
+                                                       token, MaxEntriesPerSource)
     End Function
 
     ' Pure merge seam: the inputs may originate from two different original
