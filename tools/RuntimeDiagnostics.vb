@@ -92,6 +92,9 @@ Public NotInheritable Class RuntimeDiagnostics
                 End If
                 File.AppendAllText(log, line, New UTF8Encoding(False))
             End SyncLock
+            ' Parallel local formats are now connected. The shared queue only
+            ' receives coarse, deduplicated metadata, never the journal detail.
+            UniversalDiagnosticsRuntime.RecordFailure(area, kind, code)
         Catch
             ' Diagnostics are never permitted to crash DISM GUI or interrupt
             ' imaging, even if the profile is read-only or disk is full.

@@ -481,6 +481,7 @@ Public NotInheritable Class DriverStudioPanel
             ShowDecisions(results, "Image inventory not checked")
         Catch ex As Exception
             If IsDisposed Then Return
+            RuntimeDiagnostics.RecordException("Driver Studio scan", ex)
             statusLabel.Text = "INF scan failed: " & ex.Message
             InvalidateComparison()
             statusLabel.Text = "INF scan failed: " & ex.Message
@@ -520,6 +521,7 @@ Public NotInheritable Class DriverStudioPanel
                                " installed driver entries. No changes made."
         Catch ex As Exception
             If IsDisposed Then Return
+            RuntimeDiagnostics.RecordException("Driver Studio compare", ex)
             ' Never turn an unavailable inventory into "New" decisions.
             ' VB.NET forbids Await inside Catch; use the source INF scan already
             ' completed before reading the installed-driver inventory.
@@ -712,6 +714,10 @@ Public NotInheritable Class DriverStudioPanel
                         Exit For
                     End If
                 Next
+                If Not outcome.Succeeded Then
+                    RuntimeDiagnostics.RecordDismExit(
+                        "Driver Studio install", outcome.ExitCode.ToString())
+                End If
                 If Not outcome.Succeeded OrElse outcome.RebootRequired Then
                     detailBox.Text = If(outcome.Succeeded,
                         "Restart required before further servicing.",
@@ -725,6 +731,7 @@ Public NotInheritable Class DriverStudioPanel
                 " successful, " & (selected.Count - completed).ToString() &
                 " not attempted. Commit/Discard was NOT performed. Compare again."
         Catch ex As Exception
+            RuntimeDiagnostics.RecordException("Driver Studio install", ex)
             importHistory.Add("STOPPED | " & ex.Message)
             statusLabel.Text = "Selective import stopped after " &
                 completed.ToString() & " attempt(s): " & ex.Message

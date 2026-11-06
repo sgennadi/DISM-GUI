@@ -470,6 +470,7 @@ Public NotInheritable Class Wim360Servicing
         Catch ex As OperationCanceledException
             Throw
         Catch ex As Exception
+            RuntimeDiagnostics.RecordException("WIM 360 driver inventory", ex)
             driverWarning = Diagnostic(ex)
         End Try
         cancellation.ThrowIfCancellationRequested()
@@ -482,6 +483,7 @@ Public NotInheritable Class Wim360Servicing
         Catch ex As OperationCanceledException
             Throw
         Catch ex As Exception
+            RuntimeDiagnostics.RecordException("WIM 360 package inventory", ex)
             packageWarning = Diagnostic(ex)
         End Try
         cancellation.ThrowIfCancellationRequested()
@@ -496,6 +498,7 @@ Public NotInheritable Class Wim360Servicing
         Catch ex As OperationCanceledException
             Throw
         Catch ex As Exception
+            RuntimeDiagnostics.RecordException("WIM 360 component inventory", ex)
             featureWarning = Diagnostic(ex)
             capabilityWarning = featureWarning
         End Try
