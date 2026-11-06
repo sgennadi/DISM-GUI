@@ -240,7 +240,8 @@ Public NotInheritable Class Wim360CrossImageForm
         Dim actions As New TableLayoutPanel With {
             .Name = "Wim360CrossStickyActions",
             .Dock = DockStyle.Bottom, .ColumnCount = 3, .RowCount = 1,
-            .Height = CInt(Math.Ceiling(68 * Math.Max(1.0F, Me.Font.Height / 16.0F))),
+            .Height = Math.Max(61, Math.Min(76, CInt(Math.Ceiling(
+                57 * Math.Max(1.0F, Me.Font.Height / 16.0F))))),
             .Padding = New Padding(14, 3, 14, 3),
             .BackColor = Color.White
         }
