@@ -290,7 +290,7 @@ suppressed when the related inventory returned a warning. Duplicate identities
 are reported as ambiguous, rather than silently treated as a change. Always
 export with cleared Type/State/Search filters to get a complete comparison.
 
-### Mount safety, Commit/Discard verification and recovery journal (development candidate)
+### Mount safety, Commit/Discard verification and recovery journal (4.3.18)
 
 **WIM 360 → Mount health** is a read-only view of the current WIMGAPI
 mount registration and the recent **local** Commit/Discard operation journal.
@@ -431,7 +431,7 @@ does not mark the local event as submitted. No background upload occurs.
 There is **no required collector EXE, DLL, installer or GitHub token**.
 The original DISM diagnostics, support contact and manual Issue draft remain.
 See [embedded integration details](docs/UNIVERSAL-DIAGNOSTICS.md).
-Current stable version: **4.3.17**. Earlier releases remain available.
+Current stable version: **4.3.18**. Earlier releases remain available.
 
 ## Other dialogs: 175% horizontal-scroll fixes (4.3.10 test branch)
 

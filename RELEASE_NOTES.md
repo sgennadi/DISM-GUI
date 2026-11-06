@@ -1,58 +1,60 @@
-# DISM GUI 4.3.17 — Stable
+# DISM GUI 4.3.18 — Stable
 
-Portable self-contained Visual Studio 2026 / .NET 10 builds for Windows
-x64, x86 and ARM64. The previous stable 4.3.16 remains available.
+Portable, self-contained Windows builds for x64, x86 and ARM64
+(Visual Studio 2026 / .NET 10). Previous stable 4.3.17 is retained.
 
-## WIM 360 — cross-image mounted files and SHA-256
+## WIM 360 — safe Commit/Discard and Mount health
 
-- **Compare 2 files** now offers a third mode:
-  **Files + sizes (already mounted)**, alongside the existing
-  read-only metadata and offline path-presence modes.
-- Select one index in each of two **different** WIM/ESD files.
-  Both indexes must already be mounted in separate directories.
-  Prefer DISM **read-only** mounts. The application never mounts,
-  commits, discards, unmounts or modifies either source image.
-- Lists files, byte lengths, paths and empty folders for both
-  mount roots. Classifies missing, unique, same-size, different-size
-  results with A/B source and original-index labels.
-- **SHA-256...** checks one selected file or bounded filtered batch.
-  Maximum **50 paths / 1 GiB total reads** across both mounted images,
-  with explicit confirmation and cancellation.
-  Source paths, file sizes, reparse types and timestamps are checked
-  before or after reading; verified rows are applied **atomically**
-  only after the whole operation succeeds. Other rows remain a
-  size/path comparison, not an assertion of equal content.
+- Legacy **Dismount WIM** now performs a fresh read-only WIMGAPI
+  verification of the exact WIM/ESD source, numeric image index, registered
+  mount directory and access mode **before starting DISM**.
+- **Commit** requires an active `Mounted (R/W)` registration. **Discard**
+  requires a valid active R/W or read-only mount. Missing files, stale
+  mount selection, linked mount roots, changed registration or an
+  incorrect index reject the operation without calling DISM.
+- A second validation occurs immediately inside the background worker,
+  before either of the legacy Commit or Discard DISM launch branches.
+  It guards against an external mount change after the user confirms.
+- **Atomic local recovery journal:** a `Pending` JSON entry is persisted
+  before DISM starts. The operation is blocked if the entry cannot be
+  written. After execution, the application checks both the DISM exit
+  status and WIMGAPI registration to distinguish `Verified` from
+  `Review required`. A process/power interruption leaves the pending
+  record for review instead of assuming success.
+- If DISM successfully dismounts the image but the journal cannot be
+  finalized, the Mount UI still reflects the verified dismount, while
+  the user sees an explicit journal warning rather than a false success.
+- **Mount health** in WIM 360 shows the selected source's registration,
+  local recent operation history, and safe recovery guidance. Actions
+  are limited to Refresh, Copy report, Close. The dialog is English,
+  DPI-aware, and retains its size/position.
+- No automatic retry, cleanup-mountpoints, remount, rollback, Commit or
+  Discard. Existing Driver Studio, WIM 360 comparisons and Universal
+  Diagnostics remain unchanged.
 
-## Important WIMMount reparse fix
+## Automated verification
 
-Real Windows DISM-mounted WIM files are regular content backed by
-Microsoft **IO_REPARSE_TAG_WIM** (or **IO_REPARSE_TAG_WOF**).
-Earlier generic reparse filtering skipped these real files, leaving
-only directories in some mounted comparisons. The new shared
-read-only walker recognizes these two safe content-backing types
-while refusing other reparse files and all reparse directories
-(including symlinks and junctions). This fix also applies to
-**Compare indexes** within a single mounted WIM/ESD.
+- Windows x86 / x64 / ARM64 compilation and packaging.
+- Synthetic tests: mismatched WIM index/root, read-only Commit blocked,
+  invalid mount state, pending/failed/verified local journal and
+  DPI-aware Mount health window at simulated 125%, 150%, 175%.
+- Elevated Windows x64 CI creates a disposable WIM, copies it to an
+  isolated file, mounts it **read/write**, adds a test file, commits and
+  verifies persistence; then mounts it again, adds a second test file
+  and discards, confirming that the second file did NOT persist and
+  that the post-Commit WIM hash stayed unchanged. A final read-only
+  mount verifies content and dismount cleanup. No production image
+  or actual Windows servicing installation is altered.
 
-## Interface, safeguards and validation
+## Safety limitation
 
-- Cross-image Compare / SHA-256 / Export / Close stay in the
-  bottom toolbar at simulated 125%, 150% and 175% font scaling.
-  Adaptive A/B grid sizing and compact mode text avoid truncation.
-  Window geometry is saved independently from the main DISM GUI.
-- A scan refuses more than **250,000 entries per mount** and
-  rejects inaccessible paths rather than silently showing a
-  partial comparison. Unknown/untrusted reparse types are skipped.
-- Windows CI creates and mounts two real, independent test WIMs
-  using DISM **/ReadOnly**, validates differences and SHA-256
-  for same-size, different-byte files, and dismounts with **/Discard**.
-  Both image SHA-256 sums and original timestamps are verified.
-- Synthetic unit tests also cover symlinks (where supported),
-  traversal rejection, changed file sizes, canceled hash operations,
-  same-WIM backward compatibility and protected CSV output.
-- These tests cannot prove behavior for every real Microsoft Windows
-  install.wim, machine-specific driver, or production storage setup.
-  Validate representative test images before production use.
+DISM Commit is not an atomic, reversible transaction. Sudden power loss
+or process termination may leave partially persisted content even if
+the local journal says Pending. The program does NOT automatically
+retry, clean or discard an uncertain mount. Inspect DISM logs and
+registered mount state, and use only disposable image copies for
+initial testing. These tests do not validate real Windows 11/Server
+driver/package servicing or every storage/permission configuration.
 
-All other WIM 360, Driver Studio 4.3.15, diagnostics and update
-workflows remain unchanged. No automatic diagnostic upload added.
+Original DISMGUI by Mike Celone (mikecel79/DISMGUI); original attribution
+and existing distribution notices retained.
