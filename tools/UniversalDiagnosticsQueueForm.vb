@@ -49,6 +49,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         Me.Size = New Size(1120, 800)
         Me.Font = ModernTheme.UiFont(9.4F)
         Me.AutoScaleMode = AutoScaleMode.Font
+        Dim uiScale As Single = Math.Max(1.0F, Me.Font.Height / 17.0F)
         Me.StartPosition = FormStartPosition.CenterParent
         Me.ShowInTaskbar = False
         Me.BackColor = Color.White
@@ -64,11 +65,16 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
             .BackColor = Color.White
         }
         root.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        root.RowStyles.Add(New RowStyle(SizeType.Absolute, 55))
-        root.RowStyles.Add(New RowStyle(SizeType.Absolute, 53))
+        ' Keep the text rows and footer buttons tall enough at 125%-175%
+        ' font scaling. Prefer shortening the grid/preview to clipping text.
+        root.RowStyles.Add(New RowStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(55.0F * Math.Min(uiScale, 1.35F)))))
+        root.RowStyles.Add(New RowStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(53.0F * Math.Min(uiScale, 1.35F)))))
         root.RowStyles.Add(New RowStyle(SizeType.Percent, 53))
         root.RowStyles.Add(New RowStyle(SizeType.Percent, 47))
-        root.RowStyles.Add(New RowStyle(SizeType.Absolute, 112))
+        root.RowStyles.Add(New RowStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(112.0F * uiScale))))
         Me.Controls.Add(root)
 
         Dim title As New Label With {
@@ -127,6 +133,10 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
             .Margin = New Padding(0, 4, 0, 5),
             .BackgroundColor = Color.White
         }
+        grid.ColumnHeadersHeightSizeMode =
+            DataGridViewColumnHeadersHeightSizeMode.DisableResizing
+        grid.ColumnHeadersHeight = CInt(Math.Ceiling(33.0F * uiScale))
+        grid.RowTemplate.Height = CInt(Math.Ceiling(27.0F * uiScale))
         AddColumn("Date (UTC)", 130)
         AddColumn("Area", 150)
         AddColumn("Code", 75)
@@ -148,7 +158,8 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
             .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 3
         }
         footer.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        footer.RowStyles.Add(New RowStyle(SizeType.Absolute, 30))
+        footer.RowStyles.Add(New RowStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(30.0F * uiScale))))
         footer.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
         footer.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
         root.Controls.Add(footer, 0, 4)
@@ -295,6 +306,23 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
         Return cleaned.Substring(0, Math.Min(cleaned.Length, maxLength))
     End Function
 
+    Private Shared Function SafeTimestamp(obj As JsonElement) As String
+        Dim raw As JsonElement
+        If Not obj.TryGetProperty("timestamp_utc", raw) OrElse
+           raw.ValueKind <> JsonValueKind.String Then Return ""
+        Dim value = raw.GetString()
+        Dim parsed As DateTime
+        If Not DateTime.TryParseExact(value, "yyyy-MM-dd'T'HH:mm:ss'Z'",
+               Globalization.CultureInfo.InvariantCulture,
+               Globalization.DateTimeStyles.AssumeUniversal Or
+               Globalization.DateTimeStyles.AdjustToUniversal, parsed) Then
+            Return ""
+        End If
+        ' A validated ISO UTC timestamp is safe; general-purpose IPv6
+        ' redaction would otherwise turn HH:mm:ss into [IPv6].
+        Return value
+    End Function
+
     Private Shared Function ReadEntry(path As String) As SavedEntry
         Try
             Dim file As New FileInfo(path)
@@ -331,7 +359,7 @@ Public NotInheritable Class UniversalDiagnosticsQueueForm
                 End If
                 Return New SavedEntry With {
                     .Id = fileId.ToString("D"),
-                    .WhenUtc = Field(eventJson, "timestamp_utc", 32),
+                    .WhenUtc = SafeTimestamp(eventJson),
                     .Component = Field(eventJson, "component", 90),
                     .ErrorType = Field(eventJson, "error_type", 90),
                     .Code = Field(eventJson, "code", 60),
