@@ -26,6 +26,11 @@ Public NotInheritable Class DriverStudioEngine
         Public Property Sha256 As String = ""
         Public Property ValidationError As String = ""
         Public Property HardwareIds As New List(Of String)()
+        ' Parsed hints, not a claim that Windows will select this INF for a device.
+        Public Property Architectures As New List(Of String)()
+        ' Includes generic CatalogFile and decorated CatalogFile.NT* assignments.
+        Public Property CatalogFiles As New Dictionary(Of String, String)(
+            StringComparer.OrdinalIgnoreCase)
     End Class
 
     Public NotInheritable Class Decision
@@ -128,12 +133,19 @@ Public NotInheritable Class DriverStudioEngine
         Dim section As String = ""
         Dim hasPerModelDriverVer As Boolean = False
         Dim ids As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        Dim architectures As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
         For Each raw As String In infText.Split({vbCrLf, vbLf},
                                                StringSplitOptions.None)
             Dim line = raw.Trim()
             If line.Length = 0 OrElse line.StartsWith(";") Then Continue For
             If line.StartsWith("[") AndAlso line.EndsWith("]") Then
                 section = line.Substring(1, line.Length - 2).Trim()
+                ' Manufacturer model sections and decorated IDs may restrict
+                ' the architecture even when [Version] is generic.
+                For Each m As Match In Regex.Matches(section,
+                        "NT(amd64|arm64|x86|ia64)(?=[^A-Za-z]|$)", RegexOptions.IgnoreCase)
+                    architectures.Add(m.Groups(1).Value.ToUpperInvariant())
+                Next
                 Continue For
             End If
             Dim commentPosition = line.IndexOf(";"c)
@@ -160,6 +172,12 @@ Public NotInheritable Class DriverStudioEngine
                 End If
             End If
 
+            If section.Equals("Manufacturer", StringComparison.OrdinalIgnoreCase) Then
+                For Each m As Match In Regex.Matches(line,
+                        "NT(amd64|arm64|x86|ia64)(?=[^A-Za-z]|$)", RegexOptions.IgnoreCase)
+                    architectures.Add(m.Groups(1).Value.ToUpperInvariant())
+                Next
+            End If
             If section.IndexOf(".NT", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
                section.Equals("Manufacturer", StringComparison.OrdinalIgnoreCase) Then
                 For Each m As Match In Regex.Matches(line,
@@ -170,6 +188,14 @@ Public NotInheritable Class DriverStudioEngine
             End If
         Next
         item.HardwareIds = ids.OrderBy(Function(x) x, StringComparer.Ordinal).ToList()
+        item.Architectures = architectures.OrderBy(Function(x) x, StringComparer.Ordinal).ToList()
+        For Each entry In versionEntries
+            If Regex.IsMatch(entry.Key,
+                    "^CatalogFile(?:\.NT(?:amd64|arm64|x86|ia64)(?:\.[0-9.]+)?)?$",
+                    RegexOptions.IgnoreCase) Then
+                item.CatalogFiles(entry.Key) = ResolveStrings(entry.Value, stringEntries)
+            End If
+        Next
         Dim providerValue As String = Nothing
         If versionEntries.TryGetValue("Provider", providerValue) Then
             item.Provider = ResolveStrings(providerValue, stringEntries)
@@ -243,6 +269,26 @@ Public NotInheritable Class DriverStudioEngine
                        ThenBy(Function(x) x.FilePath, StringComparer.OrdinalIgnoreCase).ToList()
     End Function
 
+    ' Architecture declarations are hints; a match is not a full OS build,
+    ' HWID or device-ranking compatibility guarantee. A definite mismatch
+    ' must never default to New/Newer for automatic installation.
+    Public Shared Function ArchitectureMismatch(p As DriverPackage,
+                                                imageArchitecture As String) As Boolean
+        If p Is Nothing OrElse p.Architectures.Count = 0 OrElse
+           String.IsNullOrWhiteSpace(imageArchitecture) Then Return False
+        Dim target = imageArchitecture.ToUpperInvariant().Trim()
+        If target.Contains("ARM64") Then
+            target = "ARM64"
+        ElseIf target.Contains("AMD64") OrElse target.Contains("X64") Then
+            target = "AMD64"
+        ElseIf target.Contains("X86") OrElse target = "0" Then
+            target = "X86"
+        Else
+            Return False
+        End If
+        Return Not p.Architectures.Contains(target, StringComparer.OrdinalIgnoreCase)
+    End Function
+
     Private Shared Function IsExactIdentity(a As DriverPackage, b As DriverPackage) As Boolean
         Return Same(a.InfName, b.InfName) AndAlso
                a.Provider.Length > 0 AndAlso b.Provider.Length > 0 AndAlso
@@ -297,7 +343,8 @@ Public NotInheritable Class DriverStudioEngine
 
     Public Shared Function CompareCandidates(source As IEnumerable(Of DriverPackage),
             installed As IEnumerable(Of DriverPackage),
-            inventoryVerified As Boolean) As List(Of Decision)
+            inventoryVerified As Boolean,
+            Optional targetArchitecture As String = "") As List(Of Decision)
         Dim list = source.ToList()
         Dim existing = installed.ToList()
         Dim decisions As New List(Of Decision)()
@@ -352,6 +399,14 @@ Public NotInheritable Class DriverStudioEngine
                         End If
                     End If
                 End If
+            End If
+            If inventoryVerified AndAlso (d.Status = "New" OrElse d.Status = "Newer") AndAlso
+               ArchitectureMismatch(p, targetArchitecture) Then
+                d.Status = "Review"
+                d.Selected = False
+                d.Detail = "INF explicitly targets " & String.Join(", ", p.Architectures) &
+                    ", but the selected Windows image is " & targetArchitecture &
+                    ". No automatic import; use a compatible driver."
             End If
             decisions.Add(d)
         Next

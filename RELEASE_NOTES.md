@@ -1,46 +1,48 @@
-# DISM GUI 4.3.14 — Stable
+# DISM GUI 4.3.15 — Stable
 
-Portable, self-contained Windows builds for **x64, x86 and ARM64**,
-built with Visual Studio 2026 / .NET 10. Release 4.3.13 remains available.
+Portable self-contained Windows builds (x86 / x64 / ARM64), .NET 10
+and Visual Studio 2026. The previous 4.3.14 stable release is retained.
 
-## WIM 360 — bounded batch SHA-256 comparison
+## Driver Studio — driver package integrity
 
-- In **WIM 360 → Compare indexes → Files + sizes (already mounted)**,
-  click **SHA-256...** to choose either **Verify selected file** or
-  **Verify filtered same-size files**. This does not add an extra cramped
-  footer button, including at simulated 175% font scaling.
-- Batch verification reads files present in all **2–8 selected indexes**
-  with identical reported sizes under the current Type / Result / Search
-  filters. This detects content differences that simple size comparison
-  cannot detect.
-- **50 paths / 1 GiB total read budget**, including all selected indexes.
-  If the active filters exceed either limit, the app asks the operator to
-  narrow them; it never truncates silently.
-- The operator explicitly confirms before batch hashing. Status shows
-  per-file progress. **Cancel scan** requests cancellation, including while
-  reading a large file. Completed hash rows are applied atomically only
-  after the whole batch succeeds; cancellation, inaccessible paths or a
-  changed file do not display partial results.
-- Fresh mount registration checks, path traversal protection, reparse-point
-  checks and file length / last-write-time validation reduce stale or
-  misleading results. The image is **not** mounted, changed, committed or
-  discarded by hashing. Existing single-file SHA-256 remains available.
+- **Audit selected** appears in the Driver Studio details header. It audits
+  selected New/Newer driver packages, or the highlighted INF if none are
+  selected. A batch accepts up to 30 INFs.
+- A read-only, deterministic **SHA-256 package manifest** includes the
+  complete source-folder tree: INF, CAT, SYS, DLL, other files and their
+  relative paths and sizes. The scan rejects reparse points, path anomalies
+  and source files changing while read. Packages above **1,600 files / 2 GiB**
+  are rejected rather than silently incompletely checked.
+- INF parsing records generic/decorated CatalogFile declarations and
+  architecture hints from model sections. Definite architecture mismatches
+  become **Review**, never automatically selected New/Newer.
+- Windows Authenticode verifies the selected CAT file. Missing, invalid or
+  unverified catalogs are **not** approved for selective import. Signature
+  validity alone does not certify each driver payload or device ranking.
+- **Install selected INF** requires a completed approved source-package
+  audit for every selected INF. Before *every* DISM operation, it rechecks
+  the entire folder fingerprint and CAT signature. A changed package
+  immediately stops the batch rather than using stale decisions.
+- Following successful DISM commands, Driver Studio queries the mounted
+  image inventory and reports how many original INF/provider/class/version/
+  date identities are found. This verifies **staging**, not actual PnP
+  selection on a device. Unavailable or mismatching postflight inventory
+  is reported explicitly.
+- No automatic mount/commit/discard/rollback, unsigned-driver override or
+  GitHub diagnostics upload. Existing DISM output and user control remain.
 
-## Interface / tests
+## Interface and testing
 
-- Short **SHA-256...** footer caption avoids 175% high-DPI truncation; an
-  explicit regression test checks horizontal readability.
-- Added synthetic tests for equal-size selection, missing/different-size
-  exclusions, 50-file limit and 1 GiB total-read budget.
-- Windows CI tests all x86/x64/ARM64 packages; x64 runs read-only WIM mount
-  integration and 125%, 150%, 175% simulated WinForms layout tests.
-- A real multi-index Windows image with several mounted indexes should still
-  be tested manually on a disposable copy before production servicing.
+- High DPI shows a short **PACKAGE DETAILS** label beside Audit selected.
+  The source-package metric uses a compact label on smaller displays.
+- GitHub Windows CI covers x86/x64/ARM64 compilation/packaging, synthetic
+  signed-status-negative CAT fixtures, architecture and catalog selection,
+  payload tampering and read-only real WIM mount tests, with simulated
+  125%, 150%, and 175% WinForms layout checks.
+- Tested code is read-only except when the operator explicitly confirms
+  selective DISM import. Full CAT trust / OEM compatibility and write-mode
+  install / discard cycles on a real disposable Windows install.wim must
+  still be validated on a Windows workstation before production use.
 
-**Accuracy note:** the offline WIM source SHA-256 check protects the source
-container, but it is not a per-file comparison. Batch SHA-256 is only offered
-for already-mounted file trees. No background GitHub diagnostics upload,
-external required runtime, or automatic DISM write action was introduced.
-
-Original DISMGUI by Mike Celone (mikecel79/DISMGUI); original attribution
-and existing distribution notices are retained.
+Based on DISMGUI by Mike Celone (mikecel79/DISMGUI); attribution and existing
+redistribution notices remain.

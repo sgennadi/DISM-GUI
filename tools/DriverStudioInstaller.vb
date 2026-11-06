@@ -144,6 +144,35 @@ Public NotInheritable Class DriverStudioInstaller
         }
     End Function
 
+    ' Postflight is an inventory check, not proof that PnP has selected
+    ' this driver for a physical device. DISM may stage unused drivers.
+    Public Shared Function IsPresentInInventory(
+                package As DriverStudioEngine.DriverPackage,
+                inventory As IEnumerable(Of DriverStudioEngine.DriverPackage)) As Boolean
+        If package Is Nothing OrElse inventory Is Nothing Then Return False
+        Return inventory.Any(Function(p)
+            Return String.Equals(Path.GetFileName(p.InfName), package.InfName,
+                                 StringComparison.OrdinalIgnoreCase) AndAlso
+                String.Equals(p.Provider, package.Provider, StringComparison.OrdinalIgnoreCase) AndAlso
+                String.Equals(p.ClassName, package.ClassName, StringComparison.OrdinalIgnoreCase) AndAlso
+                String.Equals(p.Version, package.Version, StringComparison.OrdinalIgnoreCase) AndAlso
+                SameDate(p.DriverDate, package.DriverDate)
+        End Function)
+    End Function
+
+    Private Shared Function SameDate(a As String, b As String) As Boolean
+        Dim parsedA As DateTime
+        Dim parsedB As DateTime
+        Dim patterns = {"M/d/yyyy", "MM/dd/yyyy", "yyyy-MM-dd"}
+        If Not DateTime.TryParseExact(If(a, "").Trim(), patterns,
+                      Globalization.CultureInfo.InvariantCulture,
+                      Globalization.DateTimeStyles.None, parsedA) OrElse
+           Not DateTime.TryParseExact(If(b, "").Trim(), patterns,
+                      Globalization.CultureInfo.InvariantCulture,
+                      Globalization.DateTimeStyles.None, parsedB) Then Return False
+        Return parsedA.Date = parsedB.Date
+    End Function
+
     Private Shared Function DismExecutable() As String
         Dim systemName = If(Environment.Is64BitOperatingSystem AndAlso
                             Not Environment.Is64BitProcess, "Sysnative", "System32")
@@ -155,7 +184,9 @@ Public NotInheritable Class DriverStudioInstaller
     End Function
 
     Public Shared Async Function AddOneAsync(mountFolder As String,
-                  package As DriverStudioEngine.DriverPackage) As Task(Of InstallResult)
+                  package As DriverStudioEngine.DriverPackage,
+                  approvedAudit As DriverStudioPackageAudit.AuditResult,
+                  targetArchitecture As String) As Task(Of InstallResult)
         If package Is Nothing OrElse String.IsNullOrWhiteSpace(package.FilePath) Then
             Throw New ArgumentException("Missing INF source.")
         End If
@@ -163,6 +194,20 @@ Public NotInheritable Class DriverStudioInstaller
         ' This does not certify all accompanying driver payloads; DISM enforces
         ' package validity and signature checks.
         Dim fresh = Await Task.Run(Function() DriverStudioEngine.ReadInf(package.FilePath))
+        If approvedAudit Is Nothing OrElse Not approvedAudit.CanInstall Then
+            Throw New InvalidOperationException(
+                "An intact package with a trusted catalog must be audited before DISM.")
+        End If
+        If DriverStudioEngine.ArchitectureMismatch(fresh, targetArchitecture) Then
+            Throw New InvalidOperationException(
+                "INF architecture is incompatible with the mounted image.")
+        End If
+        ' Re-hash the entire package and re-check the selected CAT immediately
+        ' before DISM reads the source. Never allow an unchecked source in.
+        Await Task.Run(Function()
+            Return DriverStudioPackageAudit.VerifyUnchanged(
+                approvedAudit, fresh, targetArchitecture)
+        End Function)
         If Not String.Equals(fresh.Sha256, package.Sha256,
                              StringComparison.OrdinalIgnoreCase) Then
             Throw New InvalidOperationException(

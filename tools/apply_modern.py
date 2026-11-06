@@ -33,7 +33,7 @@ for name in ("ModernTheme.vb", "ResponsiveSectionLayout.vb", "ResponsiveForms.vb
              "Wim360CompareIndexesForm.vb", "Wim360InventoryForm.vb",
              "Wim360SnapshotDiff.vb", "Wim360CompareForm.vb", "DriverStudioEngine.vb",
              "DriverStudioInventory.vb", "DriverStudioPanel.vb",
-             "DriverStudioInstaller.vb"):
+             "DriverStudioInstaller.vb", "DriverStudioPackageAudit.vb"):
     shutil.copyfile(tools / name, project / name)
 
 # Embed the same multi-resolution icon in the executable and every window.
