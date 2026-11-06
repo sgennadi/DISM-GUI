@@ -83,7 +83,8 @@ Public NotInheritable Class frmAbout
         body.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         root.Controls.Add(body, 0, 1)
 
-        Dim versionText = "Version " & GetType(frmAbout).Assembly.GetName().Version.ToString()
+        ' Match the other user-facing captions: major.minor.build, no v prefix.
+        Dim versionText = "Version " & GetType(frmAbout).Assembly.GetName().Version.ToString(3)
         body.Controls.Add(CreateLabel(versionText, 13, True, ModernTheme.TextInk), 0, 0)
         Dim platform = RuntimeInformation.ProcessArchitecture.ToString()
         body.Controls.Add(CreateLabel(".NET 10 LTS   |   " & platform &
@@ -123,21 +124,22 @@ Public NotInheritable Class frmAbout
             .BackColor = ModernTheme.Backdrop, .Padding = New Padding(0, 11, 0, 0),
             .Margin = Padding.Empty
         }
-        footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 165))
-        footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 165))
-        footer.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 110))
+        ' Compact captions and proportional widths keep every action readable
+        ' at 125-175% font scaling without clipping the GitHub support button.
+        For Each share As Single In {21.0F, 21.0F, 38.0F, 20.0F}
+            footer.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, share))
+        Next
         root.Controls.Add(footer, 0, 2)
 
-        Dim updateButton As New Button With {.Text = "Check Updates",
-                                             .Dock = DockStyle.Fill,
+        Dim updateButton As New Button With {.Name = "btnAboutUpdates",
+                                             .Text = "Updates", .Dock = DockStyle.Fill,
                                              .Margin = New Padding(0, 0, 12, 2)}
         ModernTheme.StyleButton(updateButton, "primary")
         AddHandler updateButton.Click, Sub(sender, e) UpdateManager.ShowUpdateDialog(Me)
         footer.Controls.Add(updateButton, 0, 0)
 
         Dim emailButton As New Button With {
-            .Name = "btnEmailSupport", .Text = "Email Support",
+            .Name = "btnEmailSupport", .Text = "Email",
             .Dock = DockStyle.Fill, .Margin = New Padding(0, 0, 12, 2)
         }
         ModernTheme.StyleButton(emailButton, "browse")
@@ -147,7 +149,7 @@ Public NotInheritable Class frmAbout
         footer.Controls.Add(emailButton, 1, 0)
 
         Dim reportButton As New Button With {
-            .Name = "btnReportProblem", .Text = "Report error to GitHub",
+            .Name = "btnReportProblem", .Text = "Report error",
             .Dock = DockStyle.Fill, .Margin = New Padding(0, 0, 12, 2)
         }
         ModernTheme.StyleButton(reportButton, "browse")

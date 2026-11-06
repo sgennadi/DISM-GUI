@@ -559,6 +559,16 @@ Public NotInheritable Class ModernTheme
             End Using
         End Sub
         toolsMenu.Items.Add(reportProblemMenu)
+        Dim queueViewerMenu As New ToolStripMenuItem("View saved diagnostics...") With {
+            .Name = "mnuUniversalDiagnosticsQueue",
+            .ToolTipText = "Review, search, export or remove local reports. No upload."
+        }
+        AddHandler queueViewerMenu.Click, Sub(sender, e)
+            Using viewer As New UniversalDiagnosticsQueueForm()
+                viewer.ShowDialog(frm)
+            End Using
+        End Sub
+        toolsMenu.Items.Add(queueViewerMenu)
         Dim testCenterMenu As New ToolStripMenuItem("Run complete safe tests...") With {
             .Name = "mnuIntegratedTestCenter",
             .ToolTipText = "Test DISM, WIM/SWM, environment, DPI and reporting without image changes."

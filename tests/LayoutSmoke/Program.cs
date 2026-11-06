@@ -319,6 +319,13 @@ internal static class LayoutSmoke
                 Wim360IndexComparer.Filter(comparison.Rows, "Files",
                     "Different", "changed.dll").Count == 1,
                 "Index comparison filters must combine state, type and search");
+        var changesOnly = Wim360IndexComparer.Filter(
+            comparison.Rows, "All types", "Differences only", "", 3);
+        Require(changesOnly.Count == 4 &&
+                !changesOnly.Any(x => x.Name.EndsWith("common.dll")) &&
+                changesOnly.Any(x => x.Name.EndsWith("changed.dll")) &&
+                changesOnly.Any(x => x.Name.EndsWith("missing.dll")),
+                "Changes-only filter must include missing/unique/different rows");
         var allPresent = Wim360IndexComparer.Filter(comparison.Rows, "All types",
             "Exists in all", "", 3);
         Require(allPresent.Count == 2 &&
@@ -348,8 +355,10 @@ internal static class LayoutSmoke
                 new Wim360IndexComparer.Item { Index = 2, Kind="Files", Key="same.inf", Value="Present" },
                 new Wim360IndexComparer.Item { Index = 3, Kind="Files", Key="same.inf", Value="Present" }
             });
-        Require(repeated.Rows.Single().State == "Ambiguous duplicates",
-                "Streamed comparer must not hide ambiguous duplicate identities");
+        Require(repeated.Rows.Single().State == "Ambiguous duplicates" &&
+                Wim360IndexComparer.Filter(repeated.Rows, "All types",
+                    "Differences only", "", 3).Count == 1,
+                "Changes-only filter must retain ambiguous duplicate identities");
 
         var folderComparison = Wim360IndexComparer.CompareRecords(report.ImageFile,
             "Mounted file paths / sizes", new[] { 1, 2, 3 }, new[] {
@@ -460,7 +469,11 @@ internal static class LayoutSmoke
             $"Third WIM index is offscreen in the three-column comparison: " +
             $"right={thirdIndexRect.Right}, width={matrix.ClientSize.Width}, " +
             $"fontScale={Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_FONT_SCALE")}");
-        state!.SelectedItem = "Missing / only in some";
+        state!.SelectedItem = "Differences only";
+        Application.DoEvents();
+        Require(matrix.RowCount == 4,
+                "Changes-only GUI filter must hide matching file entries");
+        state.SelectedItem = "Missing / only in some";
         Application.DoEvents();
         Require(matrix.RowCount == 3,
                 "Missing filter must include unique and partially absent paths");
@@ -468,6 +481,11 @@ internal static class LayoutSmoke
         Application.DoEvents();
         Require(matrix.RowCount == 2,
                 "Missing-from-index filter must show paths absent in index 3");
+        dialog.PreviewForTest(comparison);
+        Application.DoEvents();
+        Require(state.SelectedItem?.ToString() == "Missing from Index 3" &&
+                matrix.RowCount == 2,
+                "Comparison refresh must retain applicable user filters");
         state.SelectedItem = "Present in Index 3";
         Application.DoEvents();
         Require(matrix.RowCount == 3,
@@ -477,6 +495,95 @@ internal static class LayoutSmoke
         Snapshot(dialog, "DISM-GUI-WIM360-Compare-Three-Indexes");
         dialog.Close();
         Console.WriteLine("PASS WIM 360 three-index metadata, files, inventory filters and CSV");
+    }
+
+    private static void VerifyInspectOverview()
+    {
+        // Three editions from one Windows build, as in install.wim.
+        var catalog = new Wim360Reader.WimReport { ImageFile = @"C:\Images\install.wim" };
+        catalog.Images.Add(new Wim360Reader.ImageInfo {
+            Index = 1, Name = "Windows 11 Home", Edition = "Core",
+            Architecture = "x64", Version = "10.0.26100",
+            Languages = "en-US, he-IL" });
+        catalog.Images.Add(new Wim360Reader.ImageInfo {
+            Index = 2, Name = "Windows 11 Home Single Language",
+            Edition = "CoreSingleLanguage", Architecture = "x64",
+            Version = "10.0.26100", Languages = "he-IL, en-US" });
+        catalog.Images.Add(new Wim360Reader.ImageInfo {
+            Index = 3, Name = "Windows 11 Pro", Edition = "Professional",
+            Architecture = "x64", Version = "10.0.26100",
+            Languages = "en-US" });
+        var overview = Wim360InspectOverview.Analyze(catalog);
+        Require(overview.Text.Contains("3 indexes") &&
+                overview.Text.Contains("OS builds: 10.0.26100 in all 3 indexes") &&
+                overview.Text.Contains("Core [1]") &&
+                overview.Text.Contains("CoreSingleLanguage [2]") &&
+                overview.Text.Contains("Professional [3]") &&
+                overview.Text.Contains("Languages:") &&
+                overview.Text.Contains("Matching metadata does NOT prove identical files") &&
+                overview.SuggestedPairs.Count == 3 &&
+                overview.SuggestedPairs.Any(x =>
+                    x.FirstIndex == 1 && x.SecondIndex == 3 &&
+                    x.Reason.Contains("different editions")),
+                "Three-index metadata overview or suggested compare pairs are wrong");
+        Require(Wim360Reader.FormatReport(catalog).Contains("AUTOMATIC INDEX OVERVIEW") &&
+                Wim360Reader.FormatReport(catalog).Contains("Compare 1 vs 3"),
+                "Copy report must include the automatic metadata overview");
+
+        // Recommended pair launches the existing multi-index viewer with precisely
+        // the suggested two indexes selected, rather than the first three.
+        using (var suggestedViewer = new Wim360CompareIndexesForm(
+            catalog, new[] { 1, 3 }, true))
+        {
+            var selected = Find(suggestedViewer, "lst360CompareIndexes") as CheckedListBox;
+            var checkedIndexes = selected?.CheckedItems.Cast<Wim360Reader.ImageInfo>()
+                .Select(x => x.Index).OrderBy(x => x).ToArray();
+            var suggestedFilter = Find(suggestedViewer, "cmb360IndexCompareState") as ComboBox;
+            Require(checkedIndexes is not null &&
+                    checkedIndexes.SequenceEqual(new[] { 1, 3 }) &&
+                    suggestedFilter?.SelectedItem?.ToString() == "Differences only",
+                "Suggested indexes must be preselected with differences-only filter");
+        }
+
+        // Different build, same edition and architecture: a useful upgrade
+        // comparison, without pretending that same-build file bytes match.
+        catalog.Images[0].Edition = "Professional";
+        catalog.Images[0].Version = "10.0.22621";
+        var builds = Wim360InspectOverview.Analyze(catalog);
+        Require(builds.Text.Contains("OS builds: 10.0.22621 [1]; 10.0.26100 [2, 3]") &&
+                builds.SuggestedPairs.Any(x =>
+                    x.FirstIndex == 1 && x.SecondIndex == 3 &&
+                    x.Reason.Contains("different builds")) &&
+                builds.SuggestedPairs.Any(x =>
+                    x.FirstIndex == 2 && x.SecondIndex == 3 &&
+                    x.Reason.Contains("different editions")),
+                "Overview lost build-versus-edition comparison guidance");
+
+        // Missing metadata must NOT be classified as identical builds.
+        catalog.Images[0].Version = "";
+        catalog.Images[0].Architecture = "";
+        catalog.Images[0].Edition = "";
+        var incomplete = Wim360InspectOverview.Analyze(catalog);
+        Require(incomplete.Text.Contains("Some metadata is missing") &&
+                incomplete.Text.Contains("Not listed") &&
+                !incomplete.Text.Contains("OS builds: 10.0.26100 in all"),
+                "Overview falsely treated missing metadata as matching");
+
+        // A one-index WIM has no meaningful cross-index suggestion.
+        var single = new Wim360Reader.WimReport();
+        single.Images.Add(new Wim360Reader.ImageInfo {
+            Index = 5, Edition = "WindowsPE", Version = "10.0.26100",
+            Architecture = "ARM64" });
+        var only = Wim360InspectOverview.Analyze(single);
+        Require(only.SuggestedPairs.Count == 0 &&
+                only.Text.Contains("Only one index"),
+                "Single-index WIM must not invent compare recommendations");
+
+        // Do not mutate source metadata: Inspect is read-only.
+        Require(catalog.Images[1].Languages == "he-IL, en-US" &&
+                catalog.Images[2].Version == "10.0.26100",
+                "Metadata overview unexpectedly modified the WIM report");
+        Console.WriteLine("PASS WIM 360 Inspect automatic metadata overview and compare guidance");
     }
 
     private static void VerifyWimMetadata()
@@ -541,6 +648,7 @@ internal static class LayoutSmoke
             duplicateRejected = true;
         }
         Require(duplicateRejected, "WIM XML parser must reject duplicate indexes");
+        VerifyInspectOverview();
         Console.WriteLine("PASS WIM 360 metadata, architecture, report and XML safety tests");
     }
 
@@ -598,6 +706,119 @@ internal static class LayoutSmoke
         }
     }
 
+    private static void VerifyUniversalDiagnosticsBridge()
+    {
+        var payload = UniversalDiagnosticsBridge.BuildCapturePayload(
+            "WIM 360", "4.3.10", "Mount failed (87)",
+            "Password: PRIVATE_TEST_SECRET\nC:\\Users\\tester\\Private\\image.wim");
+        using (var parsed = System.Text.Json.JsonDocument.Parse(payload))
+        {
+            var root = parsed.RootElement;
+            Require(root.GetProperty("project").GetString() == "sgennadi/DISM-GUI" &&
+                    root.GetProperty("component").GetString() == "WIM 360" &&
+                    root.GetProperty("version").GetString() == "4.3.10" &&
+                    root.GetProperty("code").GetString() == "MANUAL" &&
+                    root.GetProperty("level").GetString() == "error" &&
+                    !root.TryGetProperty("excerpt", out _) &&
+                    !payload.Contains("PRIVATE_TEST_SECRET") &&
+                    !payload.Contains("tester") &&
+                    !payload.Contains("image.wim") &&
+                    !payload.Contains("GH_TOKEN"),
+                    "UniversalDiagnostics payload must be schema v1 and redact secrets/logs");
+        }
+        var previous = Environment.GetEnvironmentVariable("UDX_STATE_DIR");
+        var temp = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+            "udx-embedded-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Environment.SetEnvironmentVariable("UDX_STATE_DIR", temp);
+            var result = UniversalDiagnosticsBridge.CaptureAsync(payload)
+                .GetAwaiter().GetResult();
+            Require(result.Success && Guid.TryParse(result.ReportId, out _) &&
+                    result.Message.Contains("local diagnostics queue") &&
+                    result.Message.Contains("Nothing was sent"),
+                "Embedded UniversalDiagnostics local capture failed");
+
+            var projectFolder = UniversalDiagnosticsEmbedded.QueueDirectory(
+                "sgennadi/DISM-GUI");
+            var path = System.IO.Path.Combine(projectFolder,
+                result.ReportId + ".json");
+            Require(System.IO.File.Exists(path),
+                "Embedded diagnostic event was not stored in the expected queue");
+            var raw = System.IO.File.ReadAllText(path);
+            using (var record = System.Text.Json.JsonDocument.Parse(raw))
+            {
+                var root = record.RootElement;
+                var ev = root.GetProperty("event");
+                Require(ev.GetProperty("schema").GetString() == "universal-diagnostics/v1" &&
+                        ev.GetProperty("id").GetString() == result.ReportId &&
+                        ev.GetProperty("project").GetString() == "sgennadi/DISM-GUI" &&
+                        ev.GetProperty("version").GetString() == "4.3.10" &&
+                        ev.GetProperty("fingerprint").GetString()!.Length == 64 &&
+                        root.GetProperty("delivery").GetProperty("status").GetString() == "pending" &&
+                        root.GetProperty("delivery").GetProperty("url").GetString() == "" &&
+                        !ev.TryGetProperty("excerpt", out _),
+                    "Embedded queue record does not match universal-diagnostics/v1");
+            }
+            Require(!raw.Contains("PRIVATE_TEST_SECRET") &&
+                    !raw.Contains("tester") &&
+                    !raw.Contains("image.wim") &&
+                    !raw.Contains("GH_TOKEN"),
+                "Embedded queue leaked a private identifier");
+            var extra = """{"project":"sgennadi/DISM-GUI","component":"Diagnostics","summary":"Password: SUPER_SECRET_ABC\nC:\\Users\\tester\\private.txt"}""";
+            var secondary = UniversalDiagnosticsEmbedded.Capture(extra);
+            var secondaryRaw = System.IO.File.ReadAllText(secondary.Path);
+            Require(!secondaryRaw.Contains("SUPER_SECRET_ABC") &&
+                    !secondaryRaw.Contains("tester") &&
+                    !secondaryRaw.Contains("private.txt"),
+                "Canonical embedded core must redact untrusted summaries");
+            Require(System.IO.Directory.GetFiles(projectFolder, "*.json").Length == 2,
+                "Exactly two embedded test reports should be stored, without helper EXE");
+            // A saved event can be reviewed and used in a manually submitted
+            // browser Issue draft. Never invoke the live browser in CI.
+            using (var saved = new UniversalDiagnosticsQueueForm())
+            {
+                saved.Show();
+                Application.DoEvents();
+                var queueGrid = Find(saved, "gridUniversalQueue") as DataGridView;
+                var draftButton = Find(saved, "btnUniversalQueueGitHubDraft") as Button;
+                var queuePreview = Find(saved, "txtUniversalQueuePreview") as TextBox;
+                var statusFilter = Find(saved, "cmbUniversalQueueStatus") as ComboBox;
+                Require(queueGrid is not null && draftButton is not null &&
+                        queuePreview is not null && statusFilter is not null &&
+                        queueGrid.Rows.Count == 2,
+                    "The saved diagnostics queue must load the two test events");
+                queueGrid!.ClearSelection();
+                queueGrid.Rows[0].Selected = true;
+                Application.DoEvents();
+                Require(draftButton!.Enabled &&
+                        queuePreview!.Text.Contains("universal-diagnostics/v1") &&
+                        !queuePreview.Text.Contains("SUPER_SECRET_ABC") &&
+                        !queuePreview.Text.Contains("PRIVATE_TEST_SECRET") &&
+                        !queuePreview.Text.Contains("private.txt"),
+                    "Saved GitHub draft must use sanitized, explicitly selected data");
+                var queueDraft = Uri.UnescapeDataString(ErrorDiagnostics.BuildGitHubIssueUrl(
+                    "DISM GUI saved diagnostic", queuePreview.Text));
+                Require(queueDraft.Contains("universal-diagnostics/v1") &&
+                        !queueDraft.Contains("SUPER_SECRET_ABC"),
+                    "Saved reports must produce a sanitized manual Issue draft URL");
+                statusFilter!.SelectedItem = "Submitted";
+                Application.DoEvents();
+                Require(queueGrid.Rows.Count == 0 && !draftButton.Enabled,
+                    "Draft button must disable without a selected record");
+                saved.Close();
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("UDX_STATE_DIR", previous);
+            try { System.IO.Directory.Delete(temp, recursive: true); }
+            catch { /* Test files are disposable. */ }
+        }
+        Console.WriteLine("PASS embedded UniversalDiagnostics v1 queue, schema and redaction. No helper EXE.");
+
+    }
+
     private static void VerifyErrorDiagnostics()
     {
         var raw = "Password: DO_NOT_UPLOAD_123\n" +
@@ -622,11 +843,14 @@ internal static class LayoutSmoke
         Require(report.Contains("DISM GUI: ") &&
                 report.Contains("Display DPI: 144") &&
                 report.Contains("DISM output: not included") &&
+                report.Contains("## Summary\r\n[Bug]") &&
+                report.Contains("\r\n\r\n## Diagnostic context (sanitized)\r\n") &&
                 !report.Contains("DO_NOT_UPLOAD_123"),
                 "Default diagnostic report must exclude logs and show version/DPI");
         var withLog = ErrorDiagnostics.BuildReport(
             "WIM 360 returned an error", "Scan failed", true, raw, "WIM 360", 144);
         Require(withLog.Contains("DISM output (last 60 lines") &&
+                withLog.Contains("\r\n## Checklist\r\n") &&
                 !withLog.Contains("214516-214516") &&
                 !withLog.Contains("tech@example.com"),
                 "Opt-in log report must redact before preview");
@@ -652,20 +876,47 @@ internal static class LayoutSmoke
         var description = Find(dialog, "txtSupportDescription") as TextBox;
         var copy = Find(dialog, "btnSupportCopy") as Button;
         var draft = Find(dialog, "btnSupportGitHub") as Button;
+        var queue = Find(dialog, "btnSupportUniversalQueue") as Button;
         var close = Find(dialog, "btnSupportClose") as Button;
         Require(include is not null && reviewed is not null && preview is not null &&
                 history is not null && openHistory is not null && clearHistory is not null &&
                 title is not null && description is not null &&
-                copy is not null && draft is not null && close is not null,
+                copy is not null && draft is not null && queue is not null &&
+                close is not null,
                 "Error report UI is missing required preview, consent or export controls");
         Require(preview!.WordWrap && preview.ScrollBars == ScrollBars.Vertical,
                 "Diagnostics preview must wrap long report lines without requiring horizontal scrolling");
+        var supportViewport = Find(dialog, "SupportReportLayoutViewport") as Panel;
+        var refreshPreview = Find(dialog, "btnSupportGenerate") as Button;
+        Require(supportViewport is not null && refreshPreview is not null &&
+                !supportViewport.HorizontalScroll.Visible,
+                "Diagnostics form must not require horizontal scrolling at high DPI");
+        var viewportRight = supportViewport!.RectangleToScreen(
+            supportViewport.ClientRectangle).Right;
+        Require(refreshPreview!.RectangleToScreen(
+                    refreshPreview.ClientRectangle).Right <= viewportRight + 3 &&
+                preview.RectangleToScreen(preview.ClientRectangle).Right <= viewportRight + 3,
+            "Diagnostics preview and Refresh controls must stay inside the viewport");
+        // Windows' native multiline TextBox displays LF-only strings as a
+        // single visual line. Test actual native line positions, not just
+        // report text containing separator characters.
+        var contextIndex = preview.Text.IndexOf(
+            "## Diagnostic context (sanitized)", StringComparison.Ordinal);
+        var checklistIndex = preview.Text.IndexOf(
+            "## Checklist", StringComparison.Ordinal);
+        Require(preview.Lines.Length >= 12 &&
+                contextIndex > 0 && checklistIndex > contextIndex &&
+                preview.GetLineFromCharIndex(contextIndex) >= 5 &&
+                preview.GetLineFromCharIndex(checklistIndex) >
+                    preview.GetLineFromCharIndex(contextIndex),
+                "Diagnostics preview headings must occupy separate visible lines in WinForms");
         Require(!include!.Checked && !history!.Checked &&
-                !reviewed!.Checked && !draft!.Enabled,
+                !reviewed!.Checked && !draft!.Enabled && !queue!.Enabled,
                 "Diagnostic logs must opt-in and GitHub action must require review");
         NoOverlap(openHistory!, clearHistory!, "Open / Clear diagnostic logs");
         NoOverlap(clearHistory, copy!, "Clear diagnostic logs / Copy");
         NoOverlap(copy, draft, "Diagnostics Copy / GitHub draft actions");
+        NoOverlap(queue, draft, "Universal queue / GitHub draft actions");
         NoOverlap(draft, close!, "Diagnostics GitHub draft / Close actions");
 
         include.Checked = true;
@@ -837,6 +1088,10 @@ internal static class LayoutSmoke
         window.Show(owner);
         Application.DoEvents();
         VerifyScrollableDialog(window, "WIM 360 inventory");
+        var inventoryViewport = Find(window, "Wim360InventoryLayoutViewport") as Panel;
+        Require(inventoryViewport is not null &&
+                !inventoryViewport.HorizontalScroll.Visible,
+            "Inventory window must not scroll horizontally outside the results grid");
         var grid = Find(window, "grid360Catalog") as DataGridView;
         var type = Find(window, "cmb360CatalogType") as ComboBox;
         var state = Find(window, "cmb360CatalogState") as ComboBox;
@@ -849,6 +1104,13 @@ internal static class LayoutSmoke
                 search is not null && csv is not null && json is not null &&
                 clear is not null && close is not null,
                 "WIM 360 catalog search, grid and export buttons must be present");
+        var inventoryRight = inventoryViewport!.RectangleToScreen(
+            inventoryViewport.ClientRectangle).Right;
+        Require(clear!.RectangleToScreen(clear.ClientRectangle).Right <= inventoryRight + 3 &&
+                close!.RectangleToScreen(close.ClientRectangle).Right <= inventoryRight + 3,
+            "Inventory filters and Close must fit horizontally at high DPI");
+        Require(search!.ClientSize.Width >= 170 && clear.ClientSize.Width >= 140,
+            "Inventory search and Clear filters must remain usable at 175%");
         Require(grid!.VirtualMode && grid.RowCount == 7,
                 "Catalog must show all inventory rows via virtual, read-only grid");
         NoOverlap(type!, state!, "WIM catalog type and state filters");
@@ -1001,6 +1263,10 @@ internal static class LayoutSmoke
         window.Show(owner);
         Application.DoEvents();
         VerifyScrollableDialog(window, "WIM 360 snapshot comparison");
+        var snapshotViewport = Find(window, "Wim360CompareLayoutViewport") as Panel;
+        Require(snapshotViewport is not null &&
+                !snapshotViewport.HorizontalScroll.Visible,
+            "Snapshot comparison must not scroll horizontally outside the results grid");
         var baselineField = Find(window, "txt360Baseline") as TextBox;
         var currentField = Find(window, "txt360Current") as TextBox;
         var runButton = Find(window, "btn360CompareRun") as Button;
@@ -1016,6 +1282,13 @@ internal static class LayoutSmoke
                 type is not null && search is not null && csv is not null &&
                 json is not null && close is not null,
                 "WIM 360 snapshot comparison form must expose files, filters and exports");
+        var snapshotRight = snapshotViewport!.RectangleToScreen(
+            snapshotViewport.ClientRectangle).Right;
+        Require(runButton!.RectangleToScreen(runButton.ClientRectangle).Right <= snapshotRight + 3 &&
+                close!.RectangleToScreen(close.ClientRectangle).Right <= snapshotRight + 3,
+            "Snapshot Compare and Close must fit horizontally at high DPI");
+        Require(search!.ClientSize.Width >= 170 && runButton.ClientSize.Width >= 145,
+            "Snapshot free-text search and Compare JSON must remain usable at 175%");
         Require(!csv!.Enabled && !json!.Enabled &&
                 grid!.VirtualMode && grid.RowCount == 0,
                 "Snapshot compare must not export before a comparison");
@@ -1072,6 +1345,9 @@ internal static class LayoutSmoke
         window.Show(owner);
         Application.DoEvents();
         VerifyScrollableDialog(window, "Integrated Test Center");
+        var testViewport = Find(window, "TestCenterLayoutViewport") as Panel;
+        Require(testViewport is not null && !testViewport.HorizontalScroll.Visible,
+            "Integrated Test Center must fit the viewport without horizontal scrolling");
         var grid = Find(window, "gridTestCenterResults") as DataGridView;
         var browse = Find(window, "btnTestCenterBrowse") as Button;
         var image = Find(window, "txtTestCenterImage") as TextBox;
@@ -1085,6 +1361,11 @@ internal static class LayoutSmoke
                 optional is not null && run is not null && copy is not null &&
                 save is not null && support is not null && cancel is not null,
                 "Integrated Test Center must have all checking/reporting controls");
+        var testRight = testViewport!.RectangleToScreen(
+            testViewport.ClientRectangle).Right;
+        Require(run!.RectangleToScreen(run.ClientRectangle).Right <= testRight + 3 &&
+                cancel!.RectangleToScreen(cancel.ClientRectangle).Right <= testRight + 3,
+            "Integrated Test Center Run and Close must be visible at high DPI");
         Require(!optional!.Checked && run!.Enabled &&
                 !copy!.Enabled && !save!.Enabled && !support!.Enabled,
                 "Mounted audit must be opt-in and reports disabled until checks complete");
@@ -1355,6 +1636,7 @@ internal static class LayoutSmoke
             VerifyThreeIndexComparison(form);
             VerifyMountedAudit();
             VerifyRuntimeDiagnostics();
+            VerifyUniversalDiagnosticsBridge();
             VerifyErrorDiagnostics();
             VerifyIntegratedTestCenter(form);
             var detailFixture = VerifyDetailedInventory();
@@ -1381,6 +1663,20 @@ internal static class LayoutSmoke
             wimPathField!.Text = @"C:\test\boot.wim";
             dashboard!.PreviewMetadataForTest(WIM_METADATA_FIXTURE);
             var indexGrid = Find(dashboard, "grid360Indexes") as DataGridView;
+            var overviewText = Find(dashboard, "txt360Overview") as TextBox;
+            var recommendedButton = Find(dashboard, "btn360CompareSuggested") as Button;
+            var recommendedLabel = Find(dashboard, "lbl360SuggestedPair") as Label;
+            Require(recommendedButton is not null && recommendedButton.Enabled &&
+                    recommendedLabel is not null &&
+                    recommendedLabel.Text.StartsWith("Recommended: ") &&
+                    recommendedLabel.AutoEllipsis,
+                    "Inspect should expose a readable, enabled recommended-pair action");
+            Require(overviewText is not null && overviewText.ReadOnly &&
+                    overviewText.Multiline && overviewText.ScrollBars == ScrollBars.Vertical &&
+                    overviewText.Text.Contains("2 indexes") &&
+                    overviewText.Text.Contains("OS builds: 10.0.26100 in all 2 indexes") &&
+                    overviewText.Text.Contains("Compare 1 vs 2"),
+                    "Inspect must display a readable, immediate cross-index metadata overview");
             Require(indexGrid!.Rows.Count == 2,
                     "WIM 360 should display both indexes from the fixture");
             var auditWimButton = Find(dashboard, "btn360AuditMounted") as Button;
@@ -1662,16 +1958,27 @@ internal static class LayoutSmoke
                 var supportEmailLink = Find(about, "lnkSupportEmail") as LinkLabel;
                 var supportEmailButton = Find(about, "btnEmailSupport") as Button;
                 var reportIssueButton = Find(about, "btnReportProblem") as Button;
-                Require(reportIssueButton is not null &&
-                        reportIssueButton.Text == "Report error to GitHub",
-                        "About must provide a direct diagnostics and GitHub Issue workflow");
+                var updatesButton = Find(about, "btnAboutUpdates") as Button;
+                Require(reportIssueButton is not null && updatesButton is not null &&
+                        reportIssueButton.Text == "Report error" &&
+                        updatesButton.Text == "Updates",
+                        "About must provide readable Updates and error-report actions");
                 Require(supportEmailLink is not null && supportEmailButton is not null,
                         "About Support email link and button must exist");
                 Require(supportEmailLink!.Text.Contains("sgennadi@hotmail.com") &&
-                        supportEmailButton!.Text == "Email Support",
+                        supportEmailButton!.Text == "Email",
                         "About must display the intended support email address");
                 Require(supportEmailButton.Height >= 28 && supportEmailButton.Width >= 120,
                         "Email Support button is too small or clipped");
+                foreach (var aboutAction in new[] { updatesButton!, supportEmailButton,
+                                                     reportIssueButton! })
+                {
+                    var needed = TextRenderer.MeasureText(aboutAction.Text,
+                        aboutAction.Font, new Size(1600, 120),
+                        TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width;
+                    Require(needed + 12 <= aboutAction.ClientSize.Width,
+                        $"About action '{aboutAction.Text}' is horizontally clipped at high DPI");
+                }
                 var mailto = SupportContact.BuildSupportMailto();
                 var decoded = Uri.UnescapeDataString(mailto);
                 Require(mailto.StartsWith("mailto:sgennadi@hotmail.com?subject=",
@@ -1695,6 +2002,25 @@ internal static class LayoutSmoke
                 Application.DoEvents();
                 Require(updateForm.Text == $"DISM GUI {appVersion} - Updates",
                         "Update Center title must show actual version without v prefix");
+                var installedCaption = Find(updateForm, "lblUpdateInstalledVersion") as Label;
+                var latestCaption = Find(updateForm, "lblUpdateLatestVersion") as Label;
+                var upToDateCaption = typeof(UpdateManager).GetMethod(
+                    "UpToDateCaption", System.Reflection.BindingFlags.Static |
+                                       System.Reflection.BindingFlags.NonPublic);
+                var formattedReleaseVersion = typeof(UpdateManager).GetMethod(
+                    "DisplayVersion", System.Reflection.BindingFlags.Static |
+                                      System.Reflection.BindingFlags.NonPublic);
+                Require(installedCaption is not null && latestCaption is not null &&
+                        upToDateCaption is not null && formattedReleaseVersion is not null,
+                    "Update Center numeric version labels/formatters are missing");
+                Require(installedCaption!.Text.StartsWith("Installed: " + appVersion + " (") &&
+                        !installedCaption.Text.Contains("Installed: v", StringComparison.OrdinalIgnoreCase) &&
+                        !latestCaption!.Text.Contains("Latest stable: v", StringComparison.OrdinalIgnoreCase),
+                    "Installed/latest UI captions must never display v-prefixed versions");
+                var rawTagVersion = new Version(4, 3, 10);
+                Require((string)formattedReleaseVersion!.Invoke(null, new object[] { rawTagVersion })! == "4.3.10" &&
+                        (string)upToDateCaption!.Invoke(null, new object[] { rawTagVersion })! == "Up to date - 4.3.10",
+                    "Up to date must display numeric version without v prefix");
                 var notesBox = Find(updateForm, "txtReleaseChangelog") as TextBox;
                 var notesHeader = Find(updateForm, "lblChangelogTitle") as Label;
                 var notesLink = Find(updateForm, "lnkFullChangelog") as LinkLabel;
@@ -1728,6 +2054,19 @@ internal static class LayoutSmoke
                         updateViewport.HorizontalScroll.Value <= 5 &&
                         updateViewport.VerticalScroll.Value <= 5,
                     "Update Center should open at the top-left rather than focus-scroll to footer");
+                var viewportBounds = updateViewport!.RectangleToScreen(
+                    updateViewport.ClientRectangle);
+                var latestBounds = latestCaption!.RectangleToScreen(
+                    latestCaption.ClientRectangle);
+                Require(!updateViewport.HorizontalScroll.Visible &&
+                        latestBounds.Right <= viewportBounds.Right + 3,
+                    "Update Center Latest stable must be visible without horizontal scrolling");
+                var footerButtons = AllControls(updateForm).OfType<Button>()
+                    .Where(b => b.Text is "Check" or "Update" or "Reinstall" or
+                                     "Releases" or "Close").ToArray();
+                Require(footerButtons.Length == 4 &&
+                        footerButtons.All(b => b.Width >= 105),
+                    "Update Center actions must keep four readable columns");
                 Snapshot(updateForm, "DISM-GUI-Update-Center");
                 updateForm.Hide();
             }
@@ -1740,9 +2079,10 @@ internal static class LayoutSmoke
                 System.Reflection.BindingFlags.Static);
             Require(formatter is not null, "Release changelog formatter missing");
             var formatted = (string)formatter!.Invoke(null, new object[] {
-                "## Changes\n- Fixed controls\nSee [Release](https://github.com/example)"
+                "## Changes in v4.3.10\n- Fixed controls\nSee [Release](https://github.com/example)"
             })!;
-            Require(formatted.Contains("Changes") &&
+            Require(formatted.Contains("Changes in 4.3.10") &&
+                    !formatted.Contains("v4.3.10", StringComparison.OrdinalIgnoreCase) &&
                     formatted.Contains("• Fixed controls") &&
                     formatted.Contains("See Release") &&
                     !formatted.Contains("](https://"),

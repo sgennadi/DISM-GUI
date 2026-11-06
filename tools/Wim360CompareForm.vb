@@ -91,10 +91,11 @@ Public NotInheritable Class Wim360CompareForm
             .Margin = New Padding(0, 3, 0, 8)
         }
         filterBar.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        filterBar.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 155))
-        filterBar.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 174))
-        filterBar.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        filterBar.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 153))
+        ' Percentage widths keep search usable and the Compare action
+        ' visible when font sizes increase. No forced horizontal scrolling.
+        For Each share As Single In {22.0F, 22.0F, 33.0F, 23.0F}
+            filterBar.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, share))
+        Next
         root.Controls.Add(filterBar, 0, 3)
         changeFilter = New ComboBox With {
             .Name = "cmb360CompareChange", .Dock = DockStyle.Fill,
@@ -225,7 +226,11 @@ Public NotInheritable Class Wim360CompareForm
         typeFilter.SelectedIndex = 0
         AddHandler baselinePath.TextChanged, AddressOf SourcesChanged
         AddHandler currentPath.TextChanged, AddressOf SourcesChanged
-        ModernTheme.MakeDialogScrollable(Me, root, 980, 680)
+        ' A narrow viewport must still show all filters and compare controls;
+        ' only the data grid may scroll horizontally for detailed rows.
+        Dim fontScale As Single = Math.Max(1.0F, Me.Font.Height / 17.0F)
+        ModernTheme.MakeDialogScrollable(Me, root,
+            CInt(Math.Ceiling(780.0F / fontScale)), 680)
         WindowGeometry.Install(Me, "Software\DISMGUI\Wim360Compare")
     End Sub
 

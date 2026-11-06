@@ -414,6 +414,10 @@ Public NotInheritable Class Wim360Reader
             End If
             lines.Add("")
         Next
+        ' Keep the automatic Inspect overview in Copy report as well.
+        lines.Add("AUTOMATIC INDEX OVERVIEW")
+        lines.Add(Wim360InspectOverview.Analyze(report).Text)
+        lines.Add("")
         If report.MountScanWarning.Length > 0 Then lines.Add(report.MountScanWarning)
         Return String.Join(Environment.NewLine, lines)
     End Function

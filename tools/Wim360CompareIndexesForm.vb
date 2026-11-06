@@ -33,10 +33,23 @@ Public NotInheritable Class Wim360CompareIndexesForm
     Private job As CancellationTokenSource
     Private working As Boolean
 
-    Public Sub New(report As Wim360Reader.WimReport)
+    Public Sub New(report As Wim360Reader.WimReport,
+                   Optional preferredIndexes As IEnumerable(Of Integer) = Nothing,
+                   Optional showDifferencesOnly As Boolean = False)
         If report Is Nothing Then Throw New ArgumentNullException(NameOf(report))
         If report.Images.Count < 2 Then
             Throw New ArgumentException("Compare Indexes requires at least two indexes.")
+        End If
+        Dim defaults = report.Images.OrderBy(Function(x) x.Index).
+            Take(Math.Min(3, report.ImageCount)).
+            Select(Function(x) x.Index).ToArray()
+        If preferredIndexes IsNot Nothing Then
+            defaults = preferredIndexes.Distinct().OrderBy(Function(x) x).ToArray()
+        End If
+        If defaults.Length < 2 OrElse defaults.Length > 8 OrElse
+            defaults.Any(Function(i) Not report.Images.Any(Function(x) x.Index = i)) Then
+            Throw New ArgumentException("Choose 2 to 8 valid indexes.",
+                                        NameOf(preferredIndexes))
         End If
         source = report
         Me.Name = "Wim360CompareIndexesForm"
@@ -179,10 +192,8 @@ Public NotInheritable Class Wim360CompareIndexesForm
             .BorderStyle = BorderStyle.FixedSingle,
             .HorizontalScrollbar = True
         }
-        Dim count As Integer = 0
         For Each image In report.Images.OrderBy(Function(x) x.Index)
-            selectedIndexes.Items.Add(image, count < 3)
-            count += 1
+            selectedIndexes.Items.Add(image, defaults.Contains(image.Index))
         Next
         selectArea.Controls.Add(selectedIndexes, 0, 1)
         settings.Controls.Add(selectArea, 0, 0)
@@ -255,7 +266,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
             .DropDownStyle = ComboBoxStyle.DropDownList,
             .Margin = New Padding(0, 2, 9, 2)
         }
-        stateBox.Items.AddRange(New Object() {"All results", "Missing / only in some",
+        stateBox.Items.AddRange(New Object() {"All results", "Differences only", "Missing / only in some",
                                                  "Different", "Present in all",
                                                  "Ambiguous duplicates"})
         stateBox.SelectedIndex = 0
@@ -415,9 +426,10 @@ Public NotInheritable Class Wim360CompareIndexesForm
         WindowGeometry.Install(Me, "Software\DISMGUI\Wim360IndexComparison")
 
         ' A metadata diff needs no mount and is available as soon as the window opens.
-        Dim defaults = report.Images.OrderBy(Function(x) x.Index).
-            Take(Math.Min(3, report.ImageCount)).Select(Function(x) x.Index).ToArray()
         ShowComparison(Wim360IndexComparer.Metadata(report, defaults))
+        ' Inspect shortcut defaults to actionable metadata differences.
+        ' The ordinary Compare Indexes command still starts with all rows.
+        If showDifferencesOnly Then stateBox.SelectedItem = "Differences only"
     End Sub
 
     Private Shared Function MakeLabel(caption As String, size As Single,
@@ -588,6 +600,11 @@ Public NotInheritable Class Wim360CompareIndexesForm
 
     Private Sub ShowComparison(result As Wim360IndexComparer.Result)
         searchDelay.Stop()
+        ' Preserve applicable user filters across re-runs and modes. Removed
+        ' index-specific filters safely fall back to All results.
+        Dim previousCategory = Convert.ToString(categoryBox.SelectedItem)
+        Dim previousState = Convert.ToString(stateBox.SelectedItem)
+        Dim previousQuery = searchBox.Text
         comparison = result
         grid.SuspendLayout()
         Try
@@ -611,9 +628,12 @@ Public NotInheritable Class Wim360CompareIndexesForm
             categoryBox.Items.Add(kind)
         Next
         categoryBox.SelectedIndex = 0
+        If categoryBox.Items.Contains(previousCategory) Then
+            categoryBox.SelectedItem = previousCategory
+        End If
         stateBox.Items.Clear()
         stateBox.Items.AddRange(New Object() {
-            "All results", "Missing / only in some",
+            "All results", "Differences only", "Missing / only in some",
             "Different", "Exists in all", "Present in all",
             "Ambiguous duplicates"
         })
@@ -623,7 +643,10 @@ Public NotInheritable Class Wim360CompareIndexesForm
             stateBox.Items.Add("Present in Index " & index.ToString())
         Next
         stateBox.SelectedIndex = 0
-        searchBox.Clear()
+        If stateBox.Items.Contains(previousState) Then
+            stateBox.SelectedItem = previousState
+        End If
+        searchBox.Text = previousQuery
         exportButton.Enabled = True
         ApplyFilter()
         UpdateHashButton()

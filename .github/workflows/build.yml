@@ -81,7 +81,8 @@ jobs:
           $badFiles = @(Get-ChildItem -LiteralPath "artifacts/${{ matrix.rid }}" -File | Where-Object {
             $_.Extension -ieq '.pdb' -or
             $_.Name -ieq 'DISM GUI.dll.config' -or
-            $_.Name -ieq 'DISM GUI.exe.config'
+            $_.Name -ieq 'DISM GUI.exe.config' -or
+            $_.Name -match '^UniversalDiagnostics\.(exe|dll)$'
           })
           if ($badFiles.Count -ne 0) { throw "Unexpected debug/config files in portable package" }
       - uses: actions/upload-artifact@v7
@@ -119,7 +120,7 @@ jobs:
             zip="dist/DISMGUI-VS2026-$rid.zip"
             test -s "$zip"
             unzip -Z1 "$zip" | grep -Fxq 'DISM GUI.exe'
-            if unzip -Z1 "$zip" | grep -Ei '\.pdb$|DISM GUI\.(dll|exe)\.config$'; then
+            if unzip -Z1 "$zip" | grep -Ei '\.pdb$|DISM GUI\.(dll|exe)\.config$|(^|/)UniversalDiagnostics\.(exe|dll)$'; then
               echo "Unexpected debug symbols or legacy config in $zip" >&2
               exit 1
             fi

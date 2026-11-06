@@ -171,29 +171,34 @@ Public NotInheritable Class IntegratedTestCenterForm
         }
         footer.Controls.Add(statusLabel, 0, 0)
 
+        ' Four proportional buttons remain visible at high font scaling.
+        ' The old fixed-width columns forced horizontal scrolling at 175%.
         Dim actions As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 5, .RowCount = 1,
+            .Dock = DockStyle.Fill, .ColumnCount = 4, .RowCount = 1,
             .Margin = Padding.Empty
         }
         actions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        For Each w As Integer In {126, 132, 185, 105}
-            actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, w))
+        For i As Integer = 1 To 4
+            actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 25.0F))
         Next
         footer.Controls.Add(actions, 0, 1)
 
-        copyButton = AddButton(actions, "btnTestCenterCopy", "Copy report", 1,
+        copyButton = AddButton(actions, "btnTestCenterCopy", "Copy report", 0,
                                "browse", AddressOf CopyClicked)
-        saveButton = AddButton(actions, "btnTestCenterSave", "Save report", 2,
+        saveButton = AddButton(actions, "btnTestCenterSave", "Save report", 1,
                                "browse", AddressOf SaveClicked)
-        supportButton = AddButton(actions, "btnTestCenterSupport", "Report issue...", 3,
+        supportButton = AddButton(actions, "btnTestCenterSupport", "Report issue...", 2,
                                   "secondary", AddressOf SupportClicked)
-        cancelAction = AddButton(actions, "btnTestCenterCancel", "Cancel / close", 4,
+        cancelAction = AddButton(actions, "btnTestCenterCancel", "Cancel / close", 3,
                                  "neutral", AddressOf CancelClicked)
         copyButton.Enabled = False
         saveButton.Enabled = False
         supportButton.Enabled = False
-        ModernTheme.MakeDialogScrollable(Me, root, 940, 680)
+        ' ScaleDialogTables expands heights for readability, but the canvas
+        ' width must fit the actual viewport; use vertical scrolling instead.
+        Dim fontScale As Single = Math.Max(1.0F, Me.Font.Height / 17.0F)
+        ModernTheme.MakeDialogScrollable(Me, root,
+            CInt(Math.Ceiling(780.0F / fontScale)), 680)
         WindowGeometry.Install(Me, "Software\DISMGUI\IntegratedTestCenter")
         AddHandler Me.FormClosing, Sub(sender, e)
             If running IsNot Nothing Then

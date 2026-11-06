@@ -17,6 +17,14 @@ Public NotInheritable Class ErrorDiagnostics
     Private Shared ReadOnly Gate As New Object()
     Private Shared latestFailure As String = ""
 
+    ' WinForms multiline TextBox requires CRLF on Windows. The support
+    ' report is built from Markdown lines and may also include user-supplied
+    ' LF-only descriptions or DISM output, so normalize every source.
+    Private Shared Function NativeLineBreaks(input As String) As String
+        Return If(input, "").Replace(vbCrLf, vbLf).Replace(vbCr, vbLf).
+            Replace(vbLf, Environment.NewLine)
+    End Function
+
     Private Shared Function ReplaceSensitive(value As String, pattern As String,
                                               replacement As String) As String
         Return Regex.Replace(value, pattern, replacement,
@@ -63,7 +71,7 @@ Public NotInheritable Class ErrorDiagnostics
         If tail.Length > MaxLogCharacters Then
             tail = tail.Substring(tail.Length - MaxLogCharacters)
         End If
-        Return Redact(tail)
+        Return NativeLineBreaks(Redact(tail))
     End Function
 
     Public Shared Sub RememberFailure(operation As String, failure As Exception)
@@ -143,7 +151,7 @@ Public NotInheritable Class ErrorDiagnostics
         If result.Length > MaxReportCharacters Then
             result = result.Substring(0, MaxReportCharacters) & vbLf & "(report shortened)"
         End If
-        Return result
+        Return NativeLineBreaks(result)
     End Function
 
     ' Prefilled browser issue, not an automatic GitHub API POST.

@@ -49,7 +49,21 @@ Select **WIM 360** at the top of the left navigation. Choose a `.wim` or
 `.esd` file, or select one in **Mount & Inspect** first. Click **Inspect** to
 read all image-index metadata through the Windows WIMGAPI in read-only mode.
 Select an index to view architecture, build, edition, languages and
-mount state. **Use index in Mount** transfers the selected WIM path and
+mount state. Right after **Inspect**, the new **Automatic index overview**
+summarizes all indexes' edition, Windows build, architecture and languages
+without mounting the image. It identifies shared builds, explicitly lists
+differences and recommends up to three pairs for **Compare indexes**, such
+as Home vs Pro on the same build. If metadata is missing, the overview
+does not guess that indexes are the same. It also warns that matching
+metadata is not proof of identical file contents. The overview is included
+in **Copy report**; it never changes the WIM.
+The **Compare suggested pair** action opens the existing index comparison
+with the two suggested indexes already selected and the **Differences only**
+filter active. The first preview compares metadata only. To compare actual
+file/folder presence without mounting, choose **Files + folders (no mounting)**
+and click **Compare selected indexes**. Filters are retained across re-runs
+when they still apply; **Reset** clears them.
+**Use index in Mount** transfers the selected WIM path and
 index to the original Mount form but **never mounts or modifies the image**.
 Use **Copy report** to copy the read-only text report. The new
 **Export indexes CSV** and **Export indexes JSON** buttons save an unmounted
@@ -202,11 +216,56 @@ opens a draft addressed to **[sgennadi@hotmail.com](mailto:sgennadi@hotmail.com?
 including the installed version and architecture. No message is sent
 automatically.
 
+## Embedded UniversalDiagnostics local queue (4.3.10 integration)
+
+The canonical `universal-diagnostics/v1` source is compiled **into DISM GUI**.
+In **Tools → Report error**, review the preview and use
+**Save locally (built-in)** to write a redacted report to the shared
+per-project queue. The **Saved diagnostics** window can search, copy,
+export, or open a reviewed report as a prefilled **GitHub Issue draft** after
+explicit confirmation. The sanitized JSON is copied to the clipboard;
+the operator must sign in and press **Submit** on GitHub. Opening a draft
+does not mark the local event as submitted. No background upload occurs.
+
+There is **no required collector EXE, DLL, installer or GitHub token**.
+The original DISM diagnostics, support contact and manual Issue draft remain.
+See [embedded integration details](docs/UNIVERSAL-DIAGNOSTICS.md).
+DISM GUI continues to report version **4.3.10**.
+
+## Other dialogs: 175% horizontal-scroll fixes (4.3.10 test branch)
+
+Integrated Test Center, WIM 360 Detailed Inventory and WIM 360 Snapshot
+Comparison now fit their actual viewport width at simulated 125%, 150% and
+175% font scaling. Inventory and Snapshot filters use proportional columns
+so the search field stays wide enough to type and read search terms. The test center uses four proportionally sized action
+buttons. Long row contents retain their own DataGridView horizontal scroll,
+while the surrounding forms use vertical scrolling for tall content. CI
+asserts that primary and Close actions remain reachable without scrolling
+the entire dialog horizontally.
+
+## About window high-DPI labels (4.3.10 test branch)
+
+The About dialog uses short, readable **Updates**, **Email** and
+**Report error** buttons. The report action still opens the same
+reviewed diagnostics/GitHub workflow, and the support email link remains
+visible. LayoutSmoke measures text widths at simulated font scales.
+
+## Update Center high-DPI layout (4.3.10 test branch)
+
+The **Updates** dialog keeps its installed/latest version columns and the
+Check, Update/Reinstall, Releases and Close actions within the window width
+at simulated 125%, 150% and 175% font scaling. Long changelogs scroll
+vertically; horizontal scrolling is not required.
+
 ## Error diagnostics and GitHub issue workflow (4.3.7)
 
 Use **Tools > Report error to GitHub** or **About > Report error to GitHub**.
-DISM GUI prepares a local diagnostic preview with app version, .NET/Windows
-environment, architecture and DPI. Recent DISM output is **off by default**,
+DISM GUI prepares a **multiline**, readable local diagnostic preview with
+app version, .NET/Windows environment, architecture and DPI. Windows CRLF
+line endings are normalized so the headings, log excerpts and checklist
+do not collapse into one long line in the WinForms preview. The diagnostics
+window uses a responsive width at simulated 125%, 150% and 175% font
+scaling, with vertical rather than horizontal scrolling. Recent DISM output is **off by default**,
 and including the last 60 lines requires an explicit checkbox. The preview
 redacts recognizable credentials, recovery passwords, identities, addresses,
 URLs and local/network paths. You must still inspect it yourself, check the

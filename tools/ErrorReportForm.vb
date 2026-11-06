@@ -17,6 +17,7 @@ Public NotInheritable Class ErrorReportForm
     Private ReadOnly previewBox As TextBox
     Private ReadOnly reviewed As CheckBox
     Private ReadOnly sendButton As Button
+    Private ReadOnly queueButton As Button
     Private ReadOnly status As Label
 
     Public Sub New(Optional dismOutput As String = "",
@@ -48,7 +49,7 @@ Public NotInheritable Class ErrorReportForm
             layout.RowStyles.Add(New RowStyle(SizeType.Absolute, h))
         Next
         layout.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 97))
+        layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 153))
         Me.Controls.Add(layout)
 
         Dim heading As New Label With {
@@ -125,8 +126,8 @@ Public NotInheritable Class ErrorReportForm
             .Margin = Padding.Empty
         }
         footer.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        footer.RowStyles.Add(New RowStyle(SizeType.Absolute, 27))
-        footer.RowStyles.Add(New RowStyle(SizeType.Absolute, 27))
+        footer.RowStyles.Add(New RowStyle(SizeType.Absolute, 31))
+        footer.RowStyles.Add(New RowStyle(SizeType.Absolute, 33))
         footer.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         layout.Controls.Add(footer, 0, 5)
 
@@ -140,21 +141,22 @@ Public NotInheritable Class ErrorReportForm
 
         reviewed = New CheckBox With {
             .Name = "chkSupportReviewed",
-            .Text = "I reviewed the full report and agree to open a GitHub Issue draft.",
+            .Text = "I reviewed the preview and approve the selected local save or GitHub draft.",
             .Dock = DockStyle.Fill, .AutoSize = False, .Checked = False,
             .Margin = Padding.Empty
         }
         footer.Controls.Add(reviewed, 0, 1)
 
+        ' Two equal-height action rows avoid clipped captions at 125-175% DPI.
         Dim actions As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 6, .RowCount = 1,
+            .Dock = DockStyle.Fill, .ColumnCount = 3, .RowCount = 2,
             .Margin = Padding.Empty
         }
-        actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        For Each width As Integer In {135, 125, 135, 215, 95}
-            actions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, width))
+        For i As Integer = 1 To 3
+            actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F / 3.0F))
         Next
-        actions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        actions.RowStyles.Add(New RowStyle(SizeType.Percent, 50.0F))
+        actions.RowStyles.Add(New RowStyle(SizeType.Percent, 50.0F))
         footer.Controls.Add(actions, 0, 2)
 
         Dim openHistory As New Button With {
@@ -173,7 +175,7 @@ Public NotInheritable Class ErrorReportForm
                 status.Text = "Cannot open local diagnostic folder: " & ex.GetType().Name
             End Try
         End Sub
-        actions.Controls.Add(openHistory, 1, 0)
+        actions.Controls.Add(openHistory, 0, 0)
 
         Dim clearHistory As New Button With {
             .Name = "btnSupportClearHistory",
@@ -193,7 +195,7 @@ Public NotInheritable Class ErrorReportForm
                 status.Text = ex.Message
             End Try
         End Sub
-        actions.Controls.Add(clearHistory, 2, 0)
+        actions.Controls.Add(clearHistory, 1, 0)
 
         Dim copy As New Button With {
             .Name = "btnSupportCopy", .Text = "Copy report",
@@ -201,7 +203,17 @@ Public NotInheritable Class ErrorReportForm
         }
         ModernTheme.StyleButton(copy, "browse")
         AddHandler copy.Click, Sub(sender, e) CopyReport()
-        actions.Controls.Add(copy, 3, 0)
+        actions.Controls.Add(copy, 2, 0)
+
+        queueButton = New Button With {
+            .Name = "btnSupportUniversalQueue",
+            .Text = "Save locally (built-in)",
+            .Dock = DockStyle.Fill, .Enabled = False,
+            .Margin = New Padding(3, 3, 6, 1)
+        }
+        ModernTheme.StyleButton(queueButton, "browse")
+        AddHandler queueButton.Click, AddressOf QueueReportClicked
+        actions.Controls.Add(queueButton, 0, 1)
 
         sendButton = New Button With {
             .Name = "btnSupportGitHub", .Text = "Open GitHub Issue draft",
@@ -210,7 +222,7 @@ Public NotInheritable Class ErrorReportForm
         }
         ModernTheme.StyleButton(sendButton, "primary")
         AddHandler sendButton.Click, AddressOf OpenIssueClicked
-        actions.Controls.Add(sendButton, 4, 0)
+        actions.Controls.Add(sendButton, 1, 1)
 
         Dim close As New Button With {
             .Name = "btnSupportClose", .Text = "Close",
@@ -218,11 +230,13 @@ Public NotInheritable Class ErrorReportForm
         }
         ModernTheme.StyleButton(close, "neutral")
         AddHandler close.Click, Sub(sender, e) Me.Close()
-        actions.Controls.Add(close, 5, 0)
+        actions.Controls.Add(close, 2, 1)
         Me.CancelButton = close
 
         AddHandler reviewed.CheckedChanged, Sub(sender, e)
-            sendButton.Enabled = reviewed.Checked AndAlso previewBox.TextLength > 0
+            Dim allowed = reviewed.Checked AndAlso previewBox.TextLength > 0
+            sendButton.Enabled = allowed
+            queueButton.Enabled = allowed
         End Sub
         AddHandler previewBox.TextChanged, Sub(sender, e)
             reviewed.Checked = False
@@ -240,7 +254,12 @@ Public NotInheritable Class ErrorReportForm
             reviewed.Checked = False
         End Sub
         GeneratePreview()
-        ModernTheme.MakeDialogScrollable(Me, layout, 970, 710)
+        ' Keep the diagnostics canvas within the client width at 125-175%
+        ' simulated font scaling. ScaleDialogTables still grows row heights
+        ' for readable controls, and vertical scrolling remains available.
+        Dim fontScale As Single = Math.Max(1.0F, Me.Font.Height / 17.0F)
+        ModernTheme.MakeDialogScrollable(Me, layout,
+            CInt(Math.Ceiling(780.0F / fontScale)), 710)
         WindowGeometry.Install(Me, "Software\DISMGUI\ErrorReport")
     End Sub
 
@@ -267,6 +286,43 @@ Public NotInheritable Class ErrorReportForm
             status.Text = "Sanitized report copied. It has NOT been sent."
         Catch ex As Exception
             status.Text = "Clipboard unavailable: " & ex.GetType().Name
+        End Try
+    End Sub
+
+    Private Async Sub QueueReportClicked(sender As Object, e As EventArgs)
+        If Not reviewed.Checked OrElse queueButton.Enabled = False Then Return
+        Dim version = GetType(ErrorReportForm).Assembly.GetName().Version.ToString(3)
+        Dim payload = UniversalDiagnosticsBridge.BuildCapturePayload(
+            area, version, titleBox.Text, descriptionBox.Text)
+        If MessageBox.Show(Me,
+            "Save only the redacted summary, error category and app version " &
+            "to the built-in LOCAL diagnostics queue?" & Environment.NewLine &
+            Environment.NewLine &
+            payload & Environment.NewLine & Environment.NewLine &
+            "No raw DISM log, computer identity or GitHub token is included. " &
+            "No external program is needed. Nothing is uploaded automatically.",
+            "Save local diagnostic", MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question) <> DialogResult.Yes Then Return
+
+        queueButton.Enabled = False
+        status.Text = "Saving to the local shared diagnostics queue..."
+        Try
+            Dim result = Await UniversalDiagnosticsBridge.CaptureAsync(payload)
+            If Me.IsDisposed Then Return
+            status.Text = result.Message
+            If result.Success Then
+                status.Text &= " Report ID: " & result.ReportId
+            End If
+        Catch ex As Exception
+            If Not Me.IsDisposed Then
+                status.Text = "Could not save shared local report (" &
+                              ex.GetType().Name & ")."
+            End If
+        Finally
+            If Not Me.IsDisposed Then
+                queueButton.Enabled = reviewed.Checked AndAlso
+                                      previewBox.TextLength > 0
+            End If
         End Try
     End Sub
 
