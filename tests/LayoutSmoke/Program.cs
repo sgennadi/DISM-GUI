@@ -2019,6 +2019,7 @@ internal static class LayoutSmoke
             WimMountIntegration.VerifyLargeThreeIndexWim(root);
             WimMountIntegration.Verify(image, root);
             WimMountIntegration.VerifySplit(image, root);
+            WimMountIntegration.VerifyWritableCommitDiscard(image, root);
         }
         finally
         {
