@@ -479,6 +479,9 @@ Public NotInheritable Class Wim360CrossImageForm
         End If
         exportButton.Enabled = Not busy AndAlso comparison IsNot Nothing
         modeBox.Enabled = Not busy AndAlso Not loading
+        typeBox.Enabled = Not busy AndAlso Not loading
+        stateBox.Enabled = Not busy AndAlso Not loading
+        searchBox.ReadOnly = busy OrElse loading
     End Sub
 
     Private Async Sub CompareClicked(sender As Object, e As EventArgs)
@@ -558,7 +561,7 @@ Public NotInheritable Class Wim360CrossImageForm
     End Sub
 
     Private Sub ApplyFilter()
-        If comparison Is Nothing OrElse busy Then Return
+        If comparison Is Nothing Then Return
         Dim filter = Convert.ToString(stateBox.SelectedItem)
         Select Case filter
             Case "Only in A" : filter = "Only in Index 1"
