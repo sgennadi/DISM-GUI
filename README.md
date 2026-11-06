@@ -216,7 +216,7 @@ opens a draft addressed to **[sgennadi@hotmail.com](mailto:sgennadi@hotmail.com?
 including the installed version and architecture. No message is sent
 automatically.
 
-## Unified local runtime diagnostics (4.3.12 development)
+## Unified local runtime diagnostics (4.3.12)
 
 [PR #14](https://github.com/sgennadi/DISM-GUI/pull/14) routes real
 DISM, WIM 360 and Driver Studio failures to the embedded
@@ -229,7 +229,7 @@ excluded. **No report is sent automatically.**
 Saved Diagnostics adds **Mark submitted...** and **Mark pending** for users
 who manually created an Issue in their browser. The official Issue link is
 validated and stored locally. Neither action posts to GitHub. The
-published stable 4.3.11 binary is unchanged during development.
+previous stable 4.3.11 release files remain available unchanged.
 
 ## Embedded UniversalDiagnostics local queue (4.3.10 integration)
 
@@ -245,7 +245,7 @@ does not mark the local event as submitted. No background upload occurs.
 There is **no required collector EXE, DLL, installer or GitHub token**.
 The original DISM diagnostics, support contact and manual Issue draft remain.
 See [embedded integration details](docs/UNIVERSAL-DIAGNOSTICS.md).
-Current stable version: **4.3.11**. The 4.3.12 changes are not yet released.
+Current stable version: **4.3.12**. Earlier releases remain available.
 
 ## Other dialogs: 175% horizontal-scroll fixes (4.3.10 test branch)
 

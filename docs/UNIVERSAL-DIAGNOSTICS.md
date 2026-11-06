@@ -4,9 +4,9 @@ DISM GUI includes the canonical .NET source from
 [UniversalDiagnocticsModule](https://github.com/sgennadi/UniversalDiagnocticsModule/tree/main/embedded/dotnet)
 **inside the application EXE**. There is no independent diagnostics collector
 to install, no subprocess, and no network interaction during local capture.
-Stable DISM GUI **4.3.11** is unchanged. [PR #14](https://github.com/sgennadi/DISM-GUI/pull/14)
-develops local unified runtime diagnostics for a future **4.3.12**.
-The development branch does not replace the installed stable executable.
+The integration was completed in [PR #14](https://github.com/sgennadi/DISM-GUI/pull/14)
+for stable **4.3.12**. The preceding 4.3.11 release and its files remain
+available unchanged.
 
 ## Usage
 
@@ -37,7 +37,7 @@ The saved record follows \`universal-diagnostics/v1\`:
 No \`excerpt\`, DISM output, Windows username, machine identity, local file
 paths, environment variables or GitHub tokens are included.
 
-**Nothing is uploaded automatically**. In development 4.3.12, real DISM,
+**Nothing is uploaded automatically**. As of 4.3.12, real DISM,
 WIM 360 and Driver Studio failures also enter this local queue as **coarse
 metadata only** (category, exception class, numeric HRESULT or exit code).
 Exception messages, image paths, computer identities and raw DISM output
