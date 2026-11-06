@@ -364,7 +364,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
         ModernTheme.StyleButton(compareButton, "primary")
         actions.Controls.Add(compareButton, If(stackedLayout, 0, 1), 0)
         hashButton = New Button With {
-            .Name = "btn360IndexCompareHash", .Text = "SHA-256 options",
+            .Name = "btn360IndexCompareHash", .Text = "SHA-256...",
             .Dock = DockStyle.Fill, .Margin = New Padding(4, 7, 6, 4),
             .Enabled = False
         }
@@ -553,7 +553,8 @@ Public NotInheritable Class Wim360CompareIndexesForm
             visibleRows(grid.SelectedRows(0).Index).Kind = "Files"
         hashBatchMenuItem.Enabled = available AndAlso visibleRows.Any(Function(x)
             Return x.Kind = "Files" AndAlso x.State = "Present in all" AndAlso
-                x.PresentCount = comparison.Indexes.Count
+                x.PresentCount = comparison.Indexes.Count AndAlso
+                x.At(comparison.Indexes(0)).EndsWith(" bytes", StringComparison.Ordinal)
         End Function)
         hashButton.Enabled = hashSingleMenuItem.Enabled OrElse hashBatchMenuItem.Enabled
     End Sub
@@ -686,9 +687,11 @@ Public NotInheritable Class Wim360CompareIndexesForm
                 End If
                 replacements.Add(index, checkedRow)
             Next
+            Dim completeRows = comparison.Rows.ToList()
             For Each replacement In replacements
-                comparison.Rows(replacement.Key) = replacement.Value
+                completeRows(replacement.Key) = replacement.Value
             Next
+            comparison.Rows = completeRows
             ApplyFilter()
             summaryLabel.Text = "SHA-256 checked for " & verified.Count.ToString("N0") &
                 " paths; results reflect file bytes, not merely equal sizes."
