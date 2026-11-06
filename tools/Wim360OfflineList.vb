@@ -317,10 +317,12 @@ Public NotInheritable Class Wim360OfflineList
             End Try
         End If
 
-        ' Short enough for the high-DPI status strip; the wording makes it
-        ' explicit that the WIM checksum is NOT a hash comparison of files.
-        result.Notes = "Source WIM SHA-256 verified before/after; timestamp " &
-            "preserved. Names only: file contents and per-file hashes not checked."
+        ' Keep the complete qualification in reports and tooltip. The
+        ' Compare Indexes status strip displays a short, readable version.
+        result.Notes = "Source WIM SHA-256 verified before and after offline " &
+            "comparison. Timestamp preserved. File/folder paths only; " &
+            "no per-file sizes or hashes were compared. " &
+            "Identical filenames may have different content."
         Return result
     End Function
 End Class

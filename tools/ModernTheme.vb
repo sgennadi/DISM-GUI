@@ -705,7 +705,7 @@ Public NotInheritable Class ModernTheme
         ' Mount is now a WIM 360 sub-workspace. Keep the original TabPage 0
         ' and event handlers for safe Mount/Dismount/Commit semantics.
         Dim mountNav As New Button With {
-            .Name = "navWimMount", .Text = "    Mount & Servicing",
+            .Name = "navWimMount", .Text = "   Mount",
             .Size = New Size(198, 37), .Margin = New Padding(15, 0, 2, 8),
             .FlatStyle = FlatStyle.Flat, .TextAlign = ContentAlignment.MiddleLeft,
             .Font = UiFont(9.1F), .ForeColor = TextInk, .BackColor = Color.White,
@@ -733,7 +733,7 @@ Public NotInheritable Class ModernTheme
         ' Legacy Drivers operations are now a Driver Studio sub-workspace.
         ' The original TabPage 1 remains intact for all DISM driver handlers.
         Dim driverCommandsNav As New Button With {
-            .Name = "navDriverCommands", .Text = "    Driver commands",
+            .Name = "navDriverCommands", .Text = "   Driver tools",
             .Size = New Size(198, 37), .Margin = New Padding(15, 0, 2, 10),
             .FlatStyle = FlatStyle.Flat, .TextAlign = ContentAlignment.MiddleLeft,
             .Font = UiFont(9.1F), .ForeColor = TextInk, .BackColor = Color.White,
@@ -755,6 +755,8 @@ Public NotInheritable Class ModernTheme
         Dim pageHeading = TextLabel(sectionNames(0).ToUpperInvariant(), UiFont(12.0F, True), TextInk)
         pageHeading.Dock = DockStyle.Fill
         pageHeading.TextAlign = ContentAlignment.MiddleLeft
+        Dim studioScanShortcut As Button = Nothing
+        Dim studioScanColumn As ColumnStyle = Nothing
         Dim setActive As Action(Of Integer) = Sub(index)
             For n As Integer = 0 To navButtons.Count - 1
                 Dim b = navButtons(n)
@@ -784,11 +786,16 @@ Public NotInheritable Class ModernTheme
             driverCommandsNav.ForeColor = If(index = 1, Color.FromArgb(15, 69, 150), TextInk)
             driverCommandsNav.FlatAppearance.BorderColor = If(index = 1, Blue,
                                                                 Color.FromArgb(198, 215, 234))
-            pageHeading.Text = If(index = 0, "WIM 360  /  MOUNT & SERVICING",
-                                  If(index = 1, "DRIVER STUDIO  /  DRIVER COMMANDS",
+            pageHeading.Text = If(index = 0, "WIM 360  /  MOUNT",
+                                  If(index = 1, "DRIVER STUDIO  /  DRIVERS",
                                      If(index = wimPageIndex, "WIM 360",
                                         If(index = studioPageIndex, "DRIVER STUDIO",
                                            sectionNames(Math.Min(index, 8)).ToUpperInvariant()))))
+            If studioScanShortcut IsNot Nothing Then
+                Dim showScan = index = studioPageIndex
+                studioScanColumn.Width = If(showScan, 154, 0)
+                studioScanShortcut.Visible = showScan
+            End If
         End Sub
 
         ' Original TabPages 0/1 remain for compatibility but are not numbered.
@@ -840,7 +847,37 @@ Public NotInheritable Class ModernTheme
         content.RowStyles.Add(New RowStyle(SizeType.Absolute, 44))
         content.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         workspace.Controls.Add(content, 1, 0)
-        content.Controls.Add(pageHeading, 0, 0)
+        Dim workspaceHeader As New TableLayoutPanel With {
+            .Name = "WorkspaceHeaderControls",
+            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 1,
+            .Margin = Padding.Empty, .Padding = Padding.Empty,
+            .BackColor = Backdrop
+        }
+        workspaceHeader.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+        studioScanColumn = New ColumnStyle(SizeType.Absolute, 0)
+        workspaceHeader.ColumnStyles.Add(studioScanColumn)
+        workspaceHeader.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        content.Controls.Add(workspaceHeader, 0, 0)
+        workspaceHeader.Controls.Add(pageHeading, 0, 0)
+        ' A fixed top-level shortcut stays visible on compact 175% screens
+        ' even if the Driver Studio source row needs vertical scrolling.
+        ' It delegates to the original ScanClicked handler, never clones it.
+        studioScanShortcut = New Button With {
+            .Name = "btnStudioScanQuick",
+            .Text = "Scan INF",
+            .Dock = DockStyle.Fill, .Margin = New Padding(5, 3, 0, 3),
+            .Visible = False,
+            .AccessibleDescription = "Scan INF files in the Driver Studio source folder"
+        }
+        StyleButton(studioScanShortcut, "primary")
+        AddHandler studioScanShortcut.Click, Sub(sender, e)
+            Dim originalScan = TryCast(driverStudio.Controls.Find(
+                "btnStudioScan", True).FirstOrDefault(), Button)
+            If originalScan IsNot Nothing AndAlso originalScan.Enabled Then
+                originalScan.PerformClick()
+            End If
+        End Sub
+        workspaceHeader.Controls.Add(studioScanShortcut, 1, 0)
 
         Dim tabHost As New Panel With {
             .Dock = DockStyle.Fill, .Margin = Padding.Empty,

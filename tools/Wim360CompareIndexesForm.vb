@@ -653,10 +653,16 @@ Public NotInheritable Class Wim360CompareIndexesForm
         exportButton.Enabled = True
         ApplyFilter()
         UpdateHashButton()
-        hintLabel.Text = If(String.IsNullOrWhiteSpace(result.Notes),
+        Dim fullNote = If(String.IsNullOrWhiteSpace(result.Notes),
             "Read-only. Missing means an item is absent from a complete comparison.",
             result.Notes)
-        detailsTip.SetToolTip(hintLabel, hintLabel.Text)
+        ' Show the essential assurance without a clipped, multi-line strip;
+        ' preserve the detailed caveats as a hover tooltip and in reports.
+        hintLabel.Text = If(fullNote.StartsWith("Source WIM SHA-256 verified",
+                                               StringComparison.OrdinalIgnoreCase),
+            "Source WIM SHA-256 verified before/after; timestamp kept. " &
+            "Paths only, not file contents.", fullNote)
+        detailsTip.SetToolTip(hintLabel, fullNote)
     End Sub
 
     ' Keep all three compared indexes on screen at ordinary dialog widths.

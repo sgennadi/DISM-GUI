@@ -442,8 +442,9 @@ internal static class LayoutSmoke
         Require(verificationNote is not null &&
                 !verificationNote.AutoEllipsis &&
                 verificationNote.Text.Contains("SHA-256 verified") &&
-                verificationNote.Text.Contains("not checked"),
-            "WIM source verification note must be informative without truncation");
+                verificationNote.Text.Contains("Paths only") &&
+                verificationNote.Text.EndsWith("file contents."),
+            "Source WIM note must be short enough to show essential verification");
         Require(matrix is not null && matrix.VirtualMode &&
                 matrix.Columns.Count == 6 && matrix.RowCount == 5 &&
                 action is not null && action.Enabled, "Three-index comparison UI not initialized");
@@ -1812,10 +1813,14 @@ internal static class LayoutSmoke
                     "WIM 360 entry must be visible in top navigation");
             var mountSubnav = Find(form, "navWimMount") as Button;
             var driverSubnav = Find(form, "navDriverCommands") as Button;
+            var studioScanQuick = Find(form, "btnStudioScanQuick") as Button;
             var packagesNav = Find(form, "nav2") as Button;
             var featuresNav = Find(form, "nav3") as Button;
             var applyNav = Find(form, "nav8") as Button;
             Require(mountSubnav is not null && driverSubnav is not null &&
+                    studioScanQuick is not null &&
+                    mountSubnav.Text.Trim() == "Mount" &&
+                    driverSubnav.Text.Trim() == "Driver tools" &&
                     packagesNav?.Text.TrimStart().StartsWith("01  Packages") == true &&
                     featuresNav?.Text.TrimStart().StartsWith("02  Features") == true &&
                     applyNav?.Text.TrimStart().StartsWith("07  Apply") == true &&
@@ -1830,8 +1835,21 @@ internal static class LayoutSmoke
             packagesNav!.PerformClick();
             Application.DoEvents();
             Require(tabs.SelectedIndex == 2, "Renumbered Packages must still navigate to original TabPage 2");
+            tabs.SelectedIndex = 10;
+            Application.DoEvents();
+            Require(studioScanQuick!.Visible && studioScanQuick.Enabled &&
+                    studioScanQuick.Text == "Scan INF" &&
+                    studioScanQuick.Height >= 26,
+                "Driver Studio must expose its Scan INF action in the always-visible workspace header");
+            var quickBounds = studioScanQuick.RectangleToScreen(studioScanQuick.ClientRectangle);
+            var formBounds = form.RectangleToScreen(form.ClientRectangle);
+            Require(quickBounds.Top >= formBounds.Top &&
+                    quickBounds.Bottom <= formBounds.Bottom,
+                "Driver Studio quick Scan INF must remain onscreen at high DPI");
             tabs.SelectedIndex = 9;
             Application.DoEvents();
+            Require(!studioScanQuick.Visible,
+                "Driver Studio Scan INF must not cover the WIM 360 header");
             var dashboard = Find(tabs.TabPages[9], "Wim360Dashboard") as Wim360Dashboard;
             Require(dashboard is not null &&
                     Find(dashboard, "Wim360Layout") is TableLayoutPanel &&
