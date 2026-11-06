@@ -280,6 +280,7 @@ Public NotInheritable Class Wim360CrossImageForm
             delaySearch.Dispose()
             tips.Dispose()
         End Sub
+        WindowGeometry.Install(Me, "Software\DISMGUI\Wim360CrossImage")
         If baseline IsNot Nothing AndAlso Not baseline.IsSplitSet Then
             paths(0).Text = baseline.ImageFile
             DisplaySource(0, baseline, baselineIndex)
