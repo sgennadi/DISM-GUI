@@ -212,14 +212,14 @@ Public NotInheritable Class WimMountSafety
         Dim list As New List(Of OperationRecord)()
         Dim folder = JournalFolder()
         If Not Directory.Exists(folder) Then Return list
-        For Each file In Directory.EnumerateFiles(folder, "*.json").
-                         OrderByDescending(Function(x) File.GetLastWriteTimeUtc(x)).
+        For Each journalPath As String In Directory.EnumerateFiles(folder, "*.json").
+                         OrderByDescending(Function(x) IO.File.GetLastWriteTimeUtc(x)).
                          Take(Math.Max(1, Math.Min(limit, 100)))
             Try
-                Dim info As New FileInfo(file)
+                Dim info As New FileInfo(journalPath)
                 If info.Length <= 0 OrElse info.Length > 32768 Then Continue For
                 Dim loaded = JsonSerializer.Deserialize(Of OperationRecord)(
-                    File.ReadAllText(file, Encoding.UTF8))
+                    IO.File.ReadAllText(journalPath, Encoding.UTF8))
                 If loaded IsNot Nothing AndAlso
                    Not String.IsNullOrWhiteSpace(loaded.Id) Then list.Add(loaded)
             Catch
