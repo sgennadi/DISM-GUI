@@ -296,7 +296,8 @@ Public NotInheritable Class DriverStudioPanel
             CInt(Math.Ceiling(46 * layoutScale))))
         detailsLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         rootLayout.Controls.Add(detailsLayout, 0, 6)
-        detailsLayout.Controls.Add(WriteLabel("DRIVER PACKAGE  |  DETAILS",
+        detailsLayout.Controls.Add(WriteLabel(If(stackSource,
+                                              "PACKAGE DETAILS", "DRIVER PACKAGE  |  DETAILS"),
                                               9.2F, True, ModernTheme.Blue), 0, 0)
         auditButton = New Button With {
             .Name = "btnStudioAuditSelected", .Text = "Audit selected",
