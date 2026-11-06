@@ -39,7 +39,8 @@ Public NotInheritable Class Wim360CrossImageForm
     Public Sub New(Optional baseline As Wim360Reader.WimReport = Nothing,
                    Optional baselineIndex As Integer = 0)
         Me.Name = "Wim360CrossImageForm"
-        Me.Text = "DISM GUI - WIM 360 - Compare two WIM/ESD files"
+        Me.Text = "DISM GUI " & Reflection.Assembly.GetExecutingAssembly().
+            GetName().Version.ToString(3) & " - WIM 360 - Compare 2 files"
         Me.MinimumSize = New Size(880, 620)
         Me.Size = New Size(1220, 800)
         Me.StartPosition = FormStartPosition.CenterParent
@@ -68,14 +69,14 @@ Public NotInheritable Class Wim360CrossImageForm
         }
         Controls.Add(viewport)
         Dim layout As New TableLayoutPanel With {
-            .Name = "Wim360CrossLayout", .ColumnCount = 1, .RowCount = 7,
+            .Name = "Wim360CrossLayout", .ColumnCount = 1, .RowCount = 6,
             .Padding = New Padding(14, 9, 14, 12),
             .Margin = Padding.Empty, .BackColor = Color.White,
             .Location = Point.Empty, .Dock = DockStyle.None
         }
         layout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        Dim heights = If(stack, New Integer() {75, 150, 150, 132, 0, 84, 68},
-                                New Integer() {76, 94, 94, 94, 0, 86, 65})
+        Dim heights = If(stack, New Integer() {70, 136, 136, 116, 0, 75},
+                                New Integer() {70, 88, 88, 90, 0, 75})
         For i = 0 To heights.Length - 1
             If i = 4 Then
                 layout.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
@@ -214,6 +215,7 @@ Public NotInheritable Class Wim360CrossImageForm
         table.Columns.Add(MakeColumn("B: source", 185))
         AddHandler table.CellValueNeeded, AddressOf GridValueNeeded
         AddHandler table.CellToolTipTextNeeded, AddressOf GridTooltipNeeded
+        AddHandler table.ClientSizeChanged, Sub(sender, e) FitComparisonColumns()
         layout.Controls.Add(table, 0, 4)
 
         Dim statusPanel As New TableLayoutPanel With {
@@ -233,8 +235,14 @@ Public NotInheritable Class Wim360CrossImageForm
         statusPanel.Controls.Add(hintLabel, 0, 1)
         layout.Controls.Add(statusPanel, 0, 5)
 
+        ' Keep primary actions visible while the large source/catalog
+        ' viewport scrolls at 125-175% DPI.
         Dim actions As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 3, .RowCount = 1
+            .Name = "Wim360CrossStickyActions",
+            .Dock = DockStyle.Bottom, .ColumnCount = 3, .RowCount = 1,
+            .Height = CInt(Math.Ceiling(68 * Math.Max(1.0F, Me.Font.Height / 16.0F))),
+            .Padding = New Padding(14, 3, 14, 3),
+            .BackColor = Color.White
         }
         For Each percentage In {44.0F, 32.0F, 24.0F}
             actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, percentage))
@@ -268,7 +276,7 @@ Public NotInheritable Class Wim360CrossImageForm
             End If
         End Sub
         actions.Controls.Add(closeButton, 2, 0)
-        layout.Controls.Add(actions, 0, 6)
+        Controls.Add(actions)
         AddHandler Me.FormClosing, Sub(sender, e)
             If busy Then
                 job?.Cancel()
@@ -554,6 +562,7 @@ Public NotInheritable Class Wim360CrossImageForm
         stateBox.SelectedItem = If(stateBox.Items.Contains(oldState), oldState, "All results")
         table.Columns(3).HeaderText = Wim360IndexComparer.ColumnLabel(compared, 1)
         table.Columns(4).HeaderText = Wim360IndexComparer.ColumnLabel(compared, 2)
+        FitComparisonColumns()
         tips.SetToolTip(table, "A: " & reports(0)?.ImageFile & Environment.NewLine &
                            "B: " & reports(1)?.ImageFile)
         hintLabel.Text = If(compared.Mode.Contains("offline paths"),
@@ -585,6 +594,27 @@ Public NotInheritable Class Wim360CrossImageForm
             comparison.Rows.Count.ToString("N0") & " rows  |  " &
             diffs.ToString("N0") & " differences  |  " & comparison.Mode
         exportButton.Enabled = True
+    End Sub
+
+    Private Sub FitComparisonColumns()
+        If table Is Nothing OrElse table.IsDisposed OrElse table.Columns.Count <> 5 Then Return
+        Dim available As Integer = table.ClientSize.Width -
+            SystemInformation.VerticalScrollBarWidth - 10
+        If available < 700 Then Return
+        Dim kindWidth = Math.Max(90, table.Font.Height * 4)
+        Dim resultWidth = Math.Max(132, table.Font.Height * 6)
+        Dim sourceWidth = Math.Max(175, table.Font.Height * 7)
+        Dim pathWidth = available - kindWidth - resultWidth - sourceWidth * 2
+        If pathWidth < 215 Then
+            sourceWidth = Math.Max(150, sourceWidth - CInt(Math.Ceiling((215 - pathWidth) / 2.0)))
+            pathWidth = available - kindWidth - resultWidth - sourceWidth * 2
+        End If
+        If pathWidth < 170 Then Return
+        table.Columns(0).Width = kindWidth
+        table.Columns(1).Width = pathWidth
+        table.Columns(2).Width = resultWidth
+        table.Columns(3).Width = sourceWidth
+        table.Columns(4).Width = sourceWidth
     End Sub
 
     Private Sub GridValueNeeded(sender As Object, e As DataGridViewCellValueEventArgs)
