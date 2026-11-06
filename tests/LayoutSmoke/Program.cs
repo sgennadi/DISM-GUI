@@ -281,7 +281,7 @@ internal static class LayoutSmoke
             }
             var a = Wim360CrossMounted.ListMountedTree(firstDir, 1,
                 System.Threading.CancellationToken.None);
-            Require(!a.Any(x => x.Name.EndsWith("symbolic-link.txt")),
+            Require(!a.Any(x => x.Key.EndsWith("symbolic-link.txt")),
                 "Mounted file catalog must exclude symbolic links");
             var b = Wim360CrossMounted.ListMountedTree(secondDir, 2,
                 System.Threading.CancellationToken.None);
