@@ -267,15 +267,18 @@ def main():
     if worker_begin < 0 or worker_end < 0:
         raise RuntimeError("Cannot locate DISM dismount worker for final safety guard")
     dismount_worker = data[worker_begin:worker_end]
-    process_start = "        DISM.Start()\n"
-    if dismount_worker.count(process_start) != 1:
+    # The pinned upstream has one DISM.Start in each Commit/Discard branch.
+    # Validate once BEFORE selecting either command, not only one branch.
+    branch_start = "        If blnDISMCommit = True Then\n"
+    if (dismount_worker.count(branch_start) != 1 or
+            dismount_worker.count("            DISM.Start()\n") != 2):
         raise RuntimeError(
-            "Expected exactly one DISM process launch in dismount worker")
-    dismount_worker = dismount_worker.replace(process_start,
+            "Expected one Commit/Discard decision with two DISM process launches")
+    dismount_worker = dismount_worker.replace(branch_start,
         "        ' Immediately revalidate the mount, index and access mode.\n"
         "        WimMountSafety.ValidateDismount(strWIM, strIndex, strFolderName,\n"
         "                                         blnDISMCommit)\n"
-        + process_start)
+        + branch_start)
     data = data[:worker_begin] + dismount_worker + data[worker_end:]
 
     data = replace_block(data, "    Private Sub BackgroundWorkerDisMount_RunWorkerCompleted",
