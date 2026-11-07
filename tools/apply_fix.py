@@ -136,6 +136,7 @@ def main():
         Try
             ' Machine-local, cross-instance lock. Held through DISM postflight.
             activeDismountLease = WimImageOperationLease.Acquire(
+                WimImageOperationLease.WriterResource,
                 chosen.ImageFile, chosen.MountFolder)
             ' Failure to persist the recovery journal prevents starting DISM.
             activeDismountJournal = WimMountSafety.BeginDismount(chosen)
