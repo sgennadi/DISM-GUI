@@ -35,9 +35,16 @@ driver is bundled with the repository.
 
 ## Windows setup
 
-Start an elevated Windows Terminal / PowerShell session. Clone the repository
-or use a local checkout of the tested branch. Build and run the test with
-**.NET 10 SDK** and normal Windows servicing privileges.
+Start an elevated Windows Terminal / PowerShell session. Either use a
+repository checkout with **.NET 10 SDK** or download the self-contained
+**RealOemIntegration-win-x64** ZIP from this branch's successful GitHub
+Actions build (Artifacts). The latter requires no .NET SDK and is deliberately
+not included in DISM GUI's stable release.
+
+For the portable executable, replace the dotnet-run project prefix in the
+examples below with .\\RealOemIntegration.exe and use the same arguments.
+Verify the ZIP originated from a successful run of the expected GitHub
+commit. The runner requires normal elevated Windows servicing privileges.
 
 Create a dedicated scratch directory on a **local fixed disk** with enough
 free space. A conservative minimum of 16 GiB is enforced; larger images may
