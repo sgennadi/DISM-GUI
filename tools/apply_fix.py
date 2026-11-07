@@ -236,6 +236,8 @@ def main():
                 End If
                 strDISMExitCode = dism.ExitCode.ToString(
                     Globalization.CultureInfo.InvariantCulture)
+                RuntimeDiagnostics.RecordDismExit("DISM legacy command",
+                                                  strDISMExitCode)
             End Using
         End Using
     End Sub''', "serialize generic DISM commands under writer guard")
