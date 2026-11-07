@@ -1,61 +1,61 @@
-# DISM GUI 4.3.19 — Stable
+# DISM GUI 4.3.20 — Stable
 
-Portable self-contained builds for Windows x64, x86 and ARM64
-(.NET 10 / VS2026). Version 4.3.18 remains available.
+Portable, self-contained .NET 10 / Visual Studio 2026 Windows builds for
+x86, x64 and ARM64. Previous stable release 4.3.19 remains available.
 
-## WIM 360: SWM Integrity & Export
+## Cross-instance image-operation protection
 
-- **SWM audit / export** opens a new English, high-DPI dialog.
-  Select any member of a complete split-WIM (.swm) set; inspect
-  original indexes, then click **Audit all SWM parts**.
-- The audit validates part headers, matching identity, indices, size
-  and filenames, computes a full **SHA-256 for each part**, and
-  publishes a reproducible combined SHA-256 fingerprint. Missing
-  parts, extra wildcard-matching SWM files, symlinks, changed
-  files, invalid metadata or cancellation fail closed.
-- Export one chosen source image index to a **NEW WIM file** via
-  Windows DISM `/Export-Image /SWMFile /CheckIntegrity`. Every source
-  part is rehashed before and after the export. DISM writes to an
-  application-owned temporary WIM; the requested filename is created
-  only if DISM exits successfully, source checks pass, and WIMGAPI
-  confirms a valid one-index destination image.
-- **No overwriting:** existing WIM destinations are refused.
-  No input SWM part is mounted, changed, moved or discarded.
-  Cancellation terminates the child DISM process before any
-  application-owned temporary export file is removed. If process
-  termination cannot be verified, the temporary file is retained
-  for manual examination instead of deleting files while in use.
-- Persistent SWM tool window geometry, cancellable progress,
-  readable controls and sticky bottom actions at 125/150/175% DPI.
-  The SWM source form scrolls vertically without horizontal clipping.
+- Introduce a common, cooperative, machine-local image writer lock in
+  **WIM Mount**, **Commit / Discard**, **Driver Studio selective INF import**,
+  **SWM to WIM export**, and the original **legacy DISM command worker**.
+  The latter includes legacy Packages, Features, Driver commands,
+  Capture, Append, Apply and Cleanup. It also serializes legacy
+  read-only commands in that worker, prioritizing predictable ordering.
+- Driver Studio holds its exclusive lease throughout the entire INF
+  batch, from fresh mount/inventory checks to staged-driver postflight.
+  It does not release the lock between individual INF imports.
+- Locked resources are released through Windows when an owning process
+  terminates; zero-byte lock files persist and should not be deleted.
+  Colliding DISM GUI writers fail clearly before starting a conflicting
+  operation, without an automatic rollback or DISM mount cleanup.
+- This is NOT a universal DISM lock. Manually run DISM, external software,
+  disconnected systems, remote hosts and third-party writers remain
+  outside this cooperative protocol.
 
-## Cross-instance mount safety
+## SWM export destination capacity
 
-- Legacy **WIM Mount** and **Commit/Discard** acquire machine-local
-  cooperative file-share locks for their WIM and mount directories
-  throughout the DISM operation. Colliding DISM GUI instances on
-  the same computer fail before launching conflicting commands.
-- All handles are released by Windows if the owning application
-  exits; persistent zero-byte lock filenames must not be deleted.
-- These locks do **not** control manually launched DISM, other
-  tools, remote computers, all legacy servicing commands, or
-  different paths resolving to the same image; plan operations
-  accordingly. No global DISM exclusivity or automatic rollback
-  is claimed.
+- Before exporting an index from immutable SWM parts into a **new WIM**,
+  verify disk space available **to the current account** on the selected
+  destination using Windows GetDiskFreeSpaceEx.
+- Require at least the greater of 1 GiB, 2 times all input SWM part
+  bytes, or 60% of the selected image's uncompressed size, PLUS
+  512 MiB of headroom. Reject unknown capacity, underflow/overflow,
+  missing directory and insufficient capacity without starting DISM.
+- The SWM dialog shows current available space and the required
+  estimate before confirmation. The operation rechecks again in the
+  worker and **immediately before launching DISM**.
+- This estimate is intentionally conservative, but **does not reserve
+  space**. Another process can consume capacity during export.
+  The normal output-file collision, source SHA-256, partial-file cleanup
+  and destination-verification protections continue to apply.
+- SWM sources remain read-only and a pre-existing destination WIM is
+  never overwritten.
 
 ## Verification and limitations
 
-- Verified GitHub Windows x86/x64/ARM64 builds and x64 WinForms
-  DPI 125/150/175% checks.
-- Real disposable Windows DISM test creates a multipart SWM,
-  verifies every part, exports index 1 to a new WIM, then
-  **applies the new WIM** into a temporary test folder.
-  Tests also detect missing, altered, wildcard-colliding parts,
-  cancelation, destination collision, and unchanged source hashes.
-- Split SWM is immutable per Microsoft DISM documentation.
-  The new export does not modify an existing split set.
-  Actual Windows 11/Server install-image deployments and driver
-  servicing still require testing with safe image copies.
+- GitHub Actions: Windows x86, x64 and ARM64 portable builds.
+- Elevated Windows x64 CI: disposable DISM-created WIM and split SWM;
+  full source SHA-256 audit, free-space gate, export to standalone WIM,
+  Apply-Image into scratch folder and WIM Mount/Commit/Discard tests.
+- Synthetic tests: global write-lock collisions between different
+  paths, safe lease release, low-space rejection, overflow rejection,
+  source integrity, UI controls and 125/150/175% simulated DPI layouts.
+- No test media containing a genuine Windows 11 or Windows Server
+  installation image with signed OEM drivers/packages was supplied.
+  Such end-to-end servicing and real production network shares are
+  NOT covered by these automated fixtures. Start with disposable
+  image copies and do not use first on production sources.
 
-Original DISM GUI attribution, existing updates and diagnostics
-are retained. The universal updater remains unintegrated.
+Universal updater remains unintegrated, as requested. Existing
+diagnostics, UI defaults, WIM 360 and Driver Studio behavior is retained.
+Original DISMGUI attribution and redistribution notices remain.
