@@ -127,6 +127,14 @@ internal static class WimMountIntegration
         finally { File.Delete(unexpected); }
 
         var exportFile = Path.Combine(root, "exported-swm-single-index.wim");
+        var capacity = Wim360ExportCapacity.CheckDestination(
+            Path.GetDirectoryName(exportFile)!,
+            manifest.TotalBytes, inspected.Images[0].UncompressedBytes);
+        if (capacity.AvailableBytes < capacity.RequiredBytes ||
+            capacity.RequiredBytes < 1610612736L)
+            throw new InvalidOperationException(
+                "SWM export destination capacity gate returned an invalid estimate.");
+        Console.WriteLine("PASS SWM export preflight: " + capacity.Summary);
         var converted = Wim360SwmOperations.ExportNewWimAsync(
             audit, 1, exportFile, CancellationToken.None).GetAwaiter().GetResult();
         var outputReport = Wim360Reader.Inspect(exportFile);
