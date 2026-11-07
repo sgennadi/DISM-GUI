@@ -117,10 +117,10 @@ Public NotInheritable Class DriverStudioInventory
                         "Driver import is blocked.")
                 End If
                 Dim isInbox = inboxElement.ValueKind = JsonValueKind.True
-                Dim parsedVersion As Version = Nothing
+                Dim parsedVersion As System.Version = Nothing
                 Dim parsedDate As DateTime
                 If Not infName.EndsWith(".inf", StringComparison.OrdinalIgnoreCase) OrElse
-                   Not Version.TryParse(version, parsedVersion) OrElse
+                   Not System.Version.TryParse(version, parsedVersion) OrElse
                    Not DateTime.TryParse(driverDate, Globalization.CultureInfo.InvariantCulture,
                                          Globalization.DateTimeStyles.AllowWhiteSpaces,
                                          parsedDate) OrElse
