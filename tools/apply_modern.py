@@ -74,8 +74,13 @@ if "RuntimeDiagnostics.RecordDismExit(" not in main.read_text(encoding="utf-8-si
     original_main = main.read_text(encoding="utf-8-sig")
     command_exit = "        strDISMExitCode = DISM.ExitCode\n"
     unmount_exit = "        strDISMExitCode = DISM.ExitCode.ToString()\n"
-    if original_main.count(command_exit) != 2 or original_main.count(unmount_exit) != 1:
-        raise RuntimeError("Expected three legacy DISM exit points for safe instrumentation")
+    # The modern legacy worker now logs its own exit code while holding the
+    # global writer lease. Only Mount and Dismount still need instrumentation.
+    if (original_main.count(command_exit) != 1 or
+            original_main.count(unmount_exit) != 1 or
+            original_main.count('RuntimeDiagnostics.RecordDismExit("DISM legacy command"') != 1):
+        raise RuntimeError(
+            "Expected one Mount, one Dismount, and one guarded legacy DISM exit path")
     original_main = original_main.replace(command_exit,
         command_exit + '        RuntimeDiagnostics.RecordDismExit("DISM operation", strDISMExitCode)\n')
     original_main = original_main.replace(unmount_exit,
