@@ -282,6 +282,10 @@ internal static class RealOemIntegration
         DriverStudioPackageAudit.AuditResult Audit, long RequiredBytes)
         Preflight(Options options)
     {
+        Require(Path.IsPathFullyQualified(options.Wim) &&
+                Path.IsPathFullyQualified(options.Inf) &&
+                Path.IsPathFullyQualified(options.WorkRoot),
+                "Use explicit absolute WIM, INF and working-root paths.");
         var wim = Path.GetFullPath(options.Wim);
         var inf = Path.GetFullPath(options.Inf);
         var workRoot = Path.GetFullPath(options.WorkRoot);
@@ -403,6 +407,10 @@ internal static class RealOemIntegration
             await RunDismAsync(report, "/English", "/Mount-Image",
                 "/ImageFile:" + copy, "/Index:" + options.Index,
                 "/MountDir:" + mount, "/ReadOnly", "/CheckIntegrity");
+            var verifiedMount = Wim360Reader.Inspect(copy).Images.Single(
+                x => x.Index == options.Index);
+            Require(verifiedMount.MountStatus == "Mounted (read-only)",
+                "Reopened test WIM was not mounted read-only as required.");
             var afterCommit = await DriverStudioInventory.ReadMountedAsync(
                 copy, options.Index, mount, CancellationToken.None);
             report.DriverCountAfterCommit = afterCommit.Count;
@@ -411,16 +419,14 @@ internal static class RealOemIntegration
             Require(report.CommittedConfirmed,
                 "Staged OEM INF was not found after committing and remounting the test COPY.");
             await DiscardOursAsync(report, copy, mount);
-            report.Result = "PASS - staged and committed test copy; original unchanged";
             successful = true;
-            return 0;
         }
         catch (Exception ex)
         {
+            successful = false;
             report.Result = "FAIL - see events and retained isolated copy";
             report.Warnings.Add(ex.GetType().Name + ": " + ex.Message);
             Console.Error.WriteLine("OEM TEST FAILED: " + ex.Message);
-            return 1;
         }
         finally
         {
@@ -456,11 +462,22 @@ internal static class RealOemIntegration
                 report.Result = "FAIL - could not verify original WIM after test";
                 report.Warnings.Add("Final original hash: " + ex.Message);
             }
-            SaveReport(report, reportFile);
-            Console.WriteLine("Report: " + reportFile);
+            if (successful)
+                report.Result = "PASS - staged and committed test copy; original unchanged";
+            try
+            {
+                SaveReport(report, reportFile);
+                Console.WriteLine("Report: " + reportFile);
+            }
+            catch (Exception ex)
+            {
+                successful = false;
+                Console.Error.WriteLine("Unable to write local validation report: " + ex.Message);
+            }
             Console.WriteLine("Isolated copy: " + copy +
                               (successful ? " (verified)" : " (investigate before reuse)"));
         }
+        return successful ? 0 : 1;
     }
 
     private static async Task<int> Main(string[] args)
