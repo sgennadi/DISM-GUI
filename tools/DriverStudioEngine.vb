@@ -349,11 +349,41 @@ Public NotInheritable Class DriverStudioEngine
         Dim existing = installed.ToList()
         Dim decisions As New List(Of Decision)()
         Dim seen As New Dictionary(Of String, DriverPackage)(StringComparer.OrdinalIgnoreCase)
+
+        ' Resolve source ambiguity BEFORE evaluating any candidate. The first
+        ' member of a family must not be silently approved just because a
+        ' conflicting second INF has not been encountered yet.
+        ' Multiple versions of the same INF identity may both look "Newer",
+        ' and a same-version INF with different bytes is not a duplicate.
+        Dim firstVariant As New Dictionary(Of String, String)(StringComparer.OrdinalIgnoreCase)
+        Dim ambiguousSourceKeys As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        For Each p In list
+            Dim key = PackageKey(p)
+            Dim variant = Simplify(p.Version) & ChrW(0) &
+                          Simplify(p.DriverDate) & ChrW(0) & Simplify(p.Sha256)
+            Dim existingVariant As String = Nothing
+            If firstVariant.TryGetValue(key, existingVariant) Then
+                If Not String.Equals(existingVariant, variant,
+                                     StringComparison.Ordinal) Then
+                    ambiguousSourceKeys.Add(key)
+                End If
+            Else
+                firstVariant(key) = variant
+            End If
+        Next
+
         For Each p In list
             Dim d As New Decision With {.Candidate = p}
             If p.ValidationError.Length > 0 Then
                 d.Status = "Review"
                 d.Detail = "Invalid or incomplete INF metadata: " & p.ValidationError
+            ElseIf ambiguousSourceKeys.Contains(PackageKey(p)) Then
+                d.Status = "Review"
+                d.Selected = False
+                d.Detail = "Several source INF files have the same INF/provider/class " &
+                           "identity but differ in version, date or INF contents. " &
+                           "Choose a single package/version and compare again; " &
+                           "none will be imported automatically."
             Else
                 Dim key = PackageKey(p)
                 Dim earlier As DriverPackage = Nothing
