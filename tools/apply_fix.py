@@ -203,6 +203,55 @@ def main():
     data = replace_once(data, "    Private Sub btnOpenWIM_Click",
                         helpers + "    Private Sub btnOpenWIM_Click", "helper insertion")
 
+    # Apply a single cooperative lock to ALL legacy DISM commands, including
+    # Package/Feature/Driver writes and Capture/Append/Apply. A generic worker
+    # cannot safely infer every command's image resource, so serialize all of
+    # its commands, including reads, rather than leaving unknown writes open.
+    data = replace_block(data, "    Private Sub BackgroundWorkerDISMCommand_DoWork",
+                         "    Private Sub BackgroundWorkerDISMCommand_RunWorkerCompleted",
+                         '''    Private Sub BackgroundWorkerDISMCommand_DoWork(ByVal sender As System.Object, ByVal e As System.ComponentModel.DoWorkEventArgs) Handles BackgroundWorkerDISMCommand.DoWork
+        Dim commandLine As String = Convert.ToString(e.Argument)
+        strDISMExitCode = ""
+        strOutput = "Command line that ran is dism.exe " & commandLine
+        ' Every DISM GUI writer uses the SAME cross-process global guard.
+        ' This legacy worker is serialized even for read-only commands.
+        Using lease = WimImageOperationLease.Acquire(WimImageOperationLease.WriterResource)
+            Using dism As New Process()
+                dism.StartInfo.FileName = "dism.exe"
+                dism.StartInfo.Arguments = commandLine
+                dism.StartInfo.UseShellExecute = False
+                dism.StartInfo.CreateNoWindow = True
+                dism.StartInfo.RedirectStandardOutput = True
+                dism.StartInfo.RedirectStandardError = True
+                If Not dism.Start() Then
+                    Throw New System.IO.IOException("DISM process could not be launched.")
+                End If
+                Dim stdoutTask = dism.StandardOutput.ReadToEndAsync()
+                Dim stderrTask = dism.StandardError.ReadToEndAsync()
+                dism.WaitForExit()
+                strOutput &= Environment.NewLine & stdoutTask.GetAwaiter().GetResult()
+                Dim stderr = stderrTask.GetAwaiter().GetResult()
+                If Not String.IsNullOrWhiteSpace(stderr) Then
+                    strOutput &= Environment.NewLine & stderr
+                End If
+                strDISMExitCode = dism.ExitCode.ToString(
+                    Globalization.CultureInfo.InvariantCulture)
+            End Using
+        End Using
+    End Sub''', "serialize generic DISM commands under writer guard")
+    data = replace_block(data, "    Private Sub BackgroundWorkerDISMCommand_RunWorkerCompleted",
+                         "    Private Sub CleanupWIMToolStripMenuItem_Click",
+                         '''    Private Sub BackgroundWorkerDISMCommand_RunWorkerCompleted(ByVal sender As Object, ByVal e As System.ComponentModel.RunWorkerCompletedEventArgs) Handles BackgroundWorkerDISMCommand.RunWorkerCompleted
+        If e.Error IsNot Nothing Then
+            RuntimeDiagnostics.RecordException("Legacy DISM command", e.Error)
+            strOutput &= Environment.NewLine &
+                "DISM was stopped or blocked: " & e.Error.Message
+        End If
+        strDISMArguments = ""
+        txtOutput.Text = strOutput
+        frmProgress.Close()
+    End Sub''', "show legacy worker lock and DISM errors")
+
     data = replace_block(data, "    Private Sub btnOpenWIM_Click",
                          "    Private Sub btnOpenMount_Click", '''    Private Sub btnOpenWIM_Click(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles btnOpenWIM.Click
         Dim fileName = ChooseWIM("WIM")
