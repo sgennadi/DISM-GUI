@@ -42,6 +42,8 @@ def main():
     Private closeAfterUnmount As Boolean = False
     Private activeDismountTarget As WimMountSafety.Target = Nothing
     Private activeDismountJournal As WimMountSafety.OperationRecord = Nothing
+    Private activeMountLease As WimImageOperationLease = Nothing
+    Private activeDismountLease As WimImageOperationLease = Nothing
 
     Private Function RecentDirectory(ByVal category As String) As String
         Try
@@ -132,11 +134,16 @@ def main():
             Return
         End Try
         Try
+            ' Machine-local, cross-instance lock. Held through DISM postflight.
+            activeDismountLease = WimImageOperationLease.Acquire(
+                chosen.ImageFile, chosen.MountFolder)
             ' Failure to persist the recovery journal prevents starting DISM.
             activeDismountJournal = WimMountSafety.BeginDismount(chosen)
         Catch ex As Exception
             RuntimeDiagnostics.RecordException("DISM dismount journal", ex)
-            MessageBox.Show(Me, "DISM was NOT started because the local safety " &
+            activeDismountLease?.Dispose()
+            activeDismountLease = Nothing
+            MessageBox.Show(Me, "DISM was NOT started because the image is locked or local safety " &
                 "journal could not be written." & Environment.NewLine & ex.Message,
                 "Dismount safety check", MessageBoxButtons.OK, MessageBoxIcon.Error)
             Return
@@ -161,6 +168,8 @@ def main():
             End Try
             activeDismountTarget = Nothing
             activeDismountJournal = Nothing
+            activeDismountLease?.Dispose()
+            activeDismountLease = Nothing
             MessageBox.Show(Me, "DISM was NOT started: " & ex.Message,
                             "Dismount failed", MessageBoxButtons.OK, MessageBoxIcon.Error)
             Return
@@ -214,6 +223,68 @@ def main():
                 MessageBoxButtons.OK, MessageBoxIcon.Error)
         End Try
     End Sub''', "mount folder browser")
+
+    # Serialise Mount as well as Commit/Discard. The OS releases held lock
+    # handles after a crash; no stale lock file removal is ever necessary.
+    data = replace_block(data, "    Private Sub btnMount_Click",
+                         "    Private Sub AboutToolStripMenuItem_Click", '''    Private Sub btnMount_Click(ByVal sender As System.Object, ByVal e As System.EventArgs) Handles btnMount.Click
+        If BackgroundWorkerMount.IsBusy OrElse BackgroundWorkerDisMount.IsBusy OrElse
+           BackgroundWorkerDISMCommand.IsBusy Then Return
+        If String.IsNullOrWhiteSpace(txtWIM.Text) OrElse
+           String.IsNullOrWhiteSpace(txtMount.Text) OrElse
+           String.IsNullOrWhiteSpace(cmbIndex.Text) Then
+            MessageBox.Show(Me, "Choose a WIM, index and mount directory.",
+                            "DISM GUI", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return
+        End If
+        strWIM = txtWIM.Text.Trim().Trim(""""c)
+        strFolderName = txtMount.Text.Trim().Trim(""""c)
+        strIndex = cmbIndex.Text.Trim()
+        If Not System.IO.File.Exists(strWIM) OrElse
+           Not System.IO.Directory.Exists(strFolderName) Then
+            MessageBox.Show(Me, "WIM or mount directory is unavailable.",
+                            "DISM GUI", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return
+        End If
+        Try
+            activeMountLease = WimImageOperationLease.Acquire(
+                strWIM, strFolderName)
+            strOutput = ""
+            strDISMExitCode = ""
+            txtOutput.Clear()
+            BackgroundWorkerMount.RunWorkerAsync()
+        Catch ex As Exception
+            activeMountLease?.Dispose()
+            activeMountLease = Nothing
+            RuntimeDiagnostics.RecordException("DISM mount preflight/lock", ex)
+            MessageBox.Show(Me, "Mount was NOT started: " & ex.Message,
+                            "WIM busy or invalid", MessageBoxButtons.OK,
+                            MessageBoxIcon.Warning)
+            Return
+        End Try
+        frmProgress.ShowDialog(Me)
+        txtOutput.Text = strOutput
+    End Sub''', "WIM mount with cross-process lease")
+    data = replace_block(data, "    Private Sub BackgroundWorkerMount_RunWorkerCompleted",
+                         "    Private Sub BackgroundWorkerDisMount_DoWork", '''    Private Sub BackgroundWorkerMount_RunWorkerCompleted(ByVal sender As Object, ByVal e As System.ComponentModel.RunWorkerCompletedEventArgs) Handles BackgroundWorkerMount.RunWorkerCompleted
+        Try
+            Dim success = e.Error Is Nothing AndAlso Not e.Cancelled AndAlso
+                          strDISMExitCode = "0"
+            If success Then
+                btnMount.Enabled = False
+                btnDismount.Enabled = True
+                WIMMounted = True
+                strMountedImageLocation = strFolderName
+            ElseIf e.Error IsNot Nothing Then
+                RuntimeDiagnostics.RecordException("DISM WIM mount", e.Error)
+                strOutput &= Environment.NewLine & e.Error.Message
+            End If
+        Finally
+            activeMountLease?.Dispose()
+            activeMountLease = Nothing
+            frmProgress.Close()
+        End Try
+    End Sub''', "WIM mount result releases lease")
 
     data = replace_block(data, "    Private Sub frmMain_FormClosing",
                          "    Private Sub btnDismount_Click", '''    Private Sub frmMain_FormClosing(ByVal sender As Object, ByVal e As System.Windows.Forms.FormClosingEventArgs) Handles Me.FormClosing
@@ -320,6 +391,8 @@ def main():
         End Try
         activeDismountTarget = Nothing
         activeDismountJournal = Nothing
+        activeDismountLease?.Dispose()
+        activeDismountLease = Nothing
         ' The UI must reflect the ACTUAL WIMGAPI state even when journaling
         ' fails after a verified dismount. Never leave a false mounted flag.
         If dismounted Then

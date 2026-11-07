@@ -6,7 +6,7 @@ import re
 ROOT = Path(__file__).resolve().parents[1]
 modules = (
     "ErrorDiagnostics.vb", "ErrorReportForm.vb", "RuntimeDiagnostics.vb", "UniversalDiagnosticsBridge.vb", "UniversalDiagnosticsEmbedded.vb", "UniversalDiagnosticsRuntime.vb", "UniversalDiagnosticsDelivery.vb", "UniversalDiagnosticsQueueForm.vb",
-    "Wim360SplitSet.vb", "Wim360InspectOverview.vb", "IntegratedTestChecks.vb", "IntegratedTestCenterForm.vb",
+    "Wim360SplitSet.vb", "Wim360SwmOperations.vb", "Wim360SwmToolsForm.vb", "WimImageOperationLease.vb", "Wim360InspectOverview.vb", "IntegratedTestChecks.vb", "IntegratedTestCenterForm.vb",
     "Wim360Servicing.vb", "Wim360MetadataExport.vb", "WimMountSafety.vb", "WimMountHealthForm.vb",
     "Wim360IndexComparer.vb", "Wim360OfflineList.vb", "Wim360CompareIndexesForm.vb", "Wim360CrossImage.vb", "Wim360CrossImageForm.vb", "Wim360CrossMounted.vb", "Wim360ReparseSafety.vb",
     "DriverStudioInstaller.vb",

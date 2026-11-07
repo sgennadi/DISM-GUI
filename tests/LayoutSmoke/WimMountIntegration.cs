@@ -102,6 +102,112 @@ internal static class WimMountIntegration
         if (!before.SequenceEqual(manifest.Parts.Select(Digest)) ||
             sourceHash != Digest(image))
             throw new InvalidOperationException("SWM inspection modified a split or source image.");
+        // Real Windows DISM SWM export: each part must be SHA-256 verified,
+        // then source hashes must still match after creating a NEW WIM.
+        var audit = Wim360SwmOperations.Audit(first, CancellationToken.None);
+        if (!audit.Verified || audit.Images.Count != 1 || audit.Images[0] != 1 ||
+            audit.Parts.Count != manifest.PartCount ||
+            audit.Parts.Any(x => x.Sha256.Length != 64) ||
+            audit.CombinedSha256.Length != 64)
+            throw new InvalidOperationException("Complete SWM audit did not include all parts.");
+
+        // The export wildcard is intentionally fail-closed if an unrelated
+        // SWM filename in the directory could be captured accidentally.
+        var unexpected = Path.Combine(output, "tiny-unrelated.swm");
+        File.Copy(first, unexpected);
+        try
+        {
+            bool rejected = false;
+            try { Wim360SwmOperations.Audit(first, CancellationToken.None); }
+            catch (InvalidDataException) { rejected = true; }
+            if (!rejected)
+                throw new InvalidOperationException(
+                    "Unexpected wildcard-matching SWM part was accepted.");
+        }
+        finally { File.Delete(unexpected); }
+
+        var exportFile = Path.Combine(root, "exported-swm-single-index.wim");
+        var converted = Wim360SwmOperations.ExportNewWimAsync(
+            audit, 1, exportFile, CancellationToken.None).GetAwaiter().GetResult();
+        var outputReport = Wim360Reader.Inspect(exportFile);
+        if (converted.OutputIndex != 1 || !converted.SourceFilesUnchanged ||
+            converted.SourceIndex != 1 || outputReport.IsSplitSet ||
+            outputReport.ImageCount != 1 || outputReport.Images[0].Name != "WIM360 CI" ||
+            !before.SequenceEqual(manifest.Parts.Select(Digest)) ||
+            sourceHash != Digest(image))
+            throw new InvalidOperationException(
+                "Exported WIM metadata or source SWM SHA-256 preservation failed.");
+
+        // DISM must actually be able to APPLY the exported standalone image.
+        // This is a disposable scratch directory, never a Windows installation.
+        var applied = Path.Combine(root, "exported-swm-applied");
+        Directory.CreateDirectory(applied);
+        CheckDism(new[] {
+            "/English", "/Apply-Image", "/ImageFile:" + exportFile,
+            "/Index:1", "/ApplyDir:" + applied, "/CheckIntegrity"
+        }, 180000);
+        if (!File.Exists(Path.Combine(applied, "smoke.txt")) ||
+            !File.ReadAllText(Path.Combine(applied, "smoke.txt"))
+                .Contains("read-only catalog smoke test"))
+            throw new InvalidOperationException(
+                "New WIM cannot reproduce the fixture content through DISM Apply-Image.");
+
+        // Existing output is never replaced, even after a valid audit.
+        var exportHash = Digest(exportFile);
+        bool collisionRejected = false;
+        try {
+            Wim360SwmOperations.ExportNewWimAsync(
+                audit, 1, exportFile, CancellationToken.None)
+                .GetAwaiter().GetResult();
+        } catch (IOException) { collisionRejected = true; }
+        if (!collisionRejected || Digest(exportFile) != exportHash)
+            throw new InvalidOperationException(
+                "SWM export overwrote a pre-existing destination or did not reject it.");
+
+        // Content tamper after audit must block conversion before DISM starts.
+        var tamper = manifest.Parts[^1];
+        byte originalByte;
+        using (var stream = new FileStream(tamper, FileMode.Open, FileAccess.ReadWrite,
+                                           FileShare.None))
+        {
+            stream.Seek(-1, SeekOrigin.End);
+            originalByte = (byte)stream.ReadByte();
+            stream.Seek(-1, SeekOrigin.End);
+            stream.WriteByte((byte)(originalByte ^ 0xFF));
+        }
+        var tamperOutput = Path.Combine(root, "must-never-export.wim");
+        bool tamperedRejected = false;
+        try
+        {
+            try {
+                Wim360SwmOperations.ExportNewWimAsync(
+                    audit, 1, tamperOutput, CancellationToken.None)
+                    .GetAwaiter().GetResult();
+            } catch (IOException) { tamperedRejected = true; }
+        }
+        finally
+        {
+            using var stream = new FileStream(tamper, FileMode.Open, FileAccess.ReadWrite,
+                                              FileShare.None);
+            stream.Seek(-1, SeekOrigin.End);
+            stream.WriteByte(originalByte);
+        }
+        if (!tamperedRejected || File.Exists(tamperOutput) ||
+            !before.SequenceEqual(manifest.Parts.Select(Digest)))
+            throw new InvalidOperationException(
+                "SWM source tampering was not rejected or not safely restored.");
+
+        using var cancel = new CancellationTokenSource();
+        cancel.Cancel();
+        bool cancelled = false;
+        try { Wim360SwmOperations.Audit(first, cancel.Token); }
+        catch (OperationCanceledException) { cancelled = true; }
+        if (!cancelled)
+            throw new InvalidOperationException("SWM hashing did not honor cancellation.");
+
+        Console.WriteLine("PASS real DISM SWM: full multipart SHA-256, wildcard collision, " +
+                          "new WIM Export-Image, Apply-Image payload, no overwrite, " +
+                          "tamper rejection, cancellation and unchanged source hashes.");
         Console.WriteLine("PASS real DISM SWM split: metadata, all parts, part #2, " +
                           "missing part rejected and SHA-256 unchanged.");
     }

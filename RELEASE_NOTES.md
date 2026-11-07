@@ -1,60 +1,61 @@
-# DISM GUI 4.3.18 — Stable
+# DISM GUI 4.3.19 — Stable
 
-Portable, self-contained Windows builds for x64, x86 and ARM64
-(Visual Studio 2026 / .NET 10). Previous stable 4.3.17 is retained.
+Portable self-contained builds for Windows x64, x86 and ARM64
+(.NET 10 / VS2026). Version 4.3.18 remains available.
 
-## WIM 360 — safe Commit/Discard and Mount health
+## WIM 360: SWM Integrity & Export
 
-- Legacy **Dismount WIM** now performs a fresh read-only WIMGAPI
-  verification of the exact WIM/ESD source, numeric image index, registered
-  mount directory and access mode **before starting DISM**.
-- **Commit** requires an active `Mounted (R/W)` registration. **Discard**
-  requires a valid active R/W or read-only mount. Missing files, stale
-  mount selection, linked mount roots, changed registration or an
-  incorrect index reject the operation without calling DISM.
-- A second validation occurs immediately inside the background worker,
-  before either of the legacy Commit or Discard DISM launch branches.
-  It guards against an external mount change after the user confirms.
-- **Atomic local recovery journal:** a `Pending` JSON entry is persisted
-  before DISM starts. The operation is blocked if the entry cannot be
-  written. After execution, the application checks both the DISM exit
-  status and WIMGAPI registration to distinguish `Verified` from
-  `Review required`. A process/power interruption leaves the pending
-  record for review instead of assuming success.
-- If DISM successfully dismounts the image but the journal cannot be
-  finalized, the Mount UI still reflects the verified dismount, while
-  the user sees an explicit journal warning rather than a false success.
-- **Mount health** in WIM 360 shows the selected source's registration,
-  local recent operation history, and safe recovery guidance. Actions
-  are limited to Refresh, Copy report, Close. The dialog is English,
-  DPI-aware, and retains its size/position.
-- No automatic retry, cleanup-mountpoints, remount, rollback, Commit or
-  Discard. Existing Driver Studio, WIM 360 comparisons and Universal
-  Diagnostics remain unchanged.
+- **SWM audit / export** opens a new English, high-DPI dialog.
+  Select any member of a complete split-WIM (.swm) set; inspect
+  original indexes, then click **Audit all SWM parts**.
+- The audit validates part headers, matching identity, indices, size
+  and filenames, computes a full **SHA-256 for each part**, and
+  publishes a reproducible combined SHA-256 fingerprint. Missing
+  parts, extra wildcard-matching SWM files, symlinks, changed
+  files, invalid metadata or cancellation fail closed.
+- Export one chosen source image index to a **NEW WIM file** via
+  Windows DISM `/Export-Image /SWMFile /CheckIntegrity`. Every source
+  part is rehashed before and after the export. DISM writes to an
+  application-owned temporary WIM; the requested filename is created
+  only if DISM exits successfully, source checks pass, and WIMGAPI
+  confirms a valid one-index destination image.
+- **No overwriting:** existing WIM destinations are refused.
+  No input SWM part is mounted, changed, moved or discarded.
+  Cancellation terminates the child DISM process before any
+  application-owned temporary export file is removed. If process
+  termination cannot be verified, the temporary file is retained
+  for manual examination instead of deleting files while in use.
+- Persistent SWM tool window geometry, cancellable progress,
+  readable controls and sticky bottom actions at 125/150/175% DPI.
+  The SWM source form scrolls vertically without horizontal clipping.
 
-## Automated verification
+## Cross-instance mount safety
 
-- Windows x86 / x64 / ARM64 compilation and packaging.
-- Synthetic tests: mismatched WIM index/root, read-only Commit blocked,
-  invalid mount state, pending/failed/verified local journal and
-  DPI-aware Mount health window at simulated 125%, 150%, 175%.
-- Elevated Windows x64 CI creates a disposable WIM, copies it to an
-  isolated file, mounts it **read/write**, adds a test file, commits and
-  verifies persistence; then mounts it again, adds a second test file
-  and discards, confirming that the second file did NOT persist and
-  that the post-Commit WIM hash stayed unchanged. A final read-only
-  mount verifies content and dismount cleanup. No production image
-  or actual Windows servicing installation is altered.
+- Legacy **WIM Mount** and **Commit/Discard** acquire machine-local
+  cooperative file-share locks for their WIM and mount directories
+  throughout the DISM operation. Colliding DISM GUI instances on
+  the same computer fail before launching conflicting commands.
+- All handles are released by Windows if the owning application
+  exits; persistent zero-byte lock filenames must not be deleted.
+- These locks do **not** control manually launched DISM, other
+  tools, remote computers, all legacy servicing commands, or
+  different paths resolving to the same image; plan operations
+  accordingly. No global DISM exclusivity or automatic rollback
+  is claimed.
 
-## Safety limitation
+## Verification and limitations
 
-DISM Commit is not an atomic, reversible transaction. Sudden power loss
-or process termination may leave partially persisted content even if
-the local journal says Pending. The program does NOT automatically
-retry, clean or discard an uncertain mount. Inspect DISM logs and
-registered mount state, and use only disposable image copies for
-initial testing. These tests do not validate real Windows 11/Server
-driver/package servicing or every storage/permission configuration.
+- Verified GitHub Windows x86/x64/ARM64 builds and x64 WinForms
+  DPI 125/150/175% checks.
+- Real disposable Windows DISM test creates a multipart SWM,
+  verifies every part, exports index 1 to a new WIM, then
+  **applies the new WIM** into a temporary test folder.
+  Tests also detect missing, altered, wildcard-colliding parts,
+  cancelation, destination collision, and unchanged source hashes.
+- Split SWM is immutable per Microsoft DISM documentation.
+  The new export does not modify an existing split set.
+  Actual Windows 11/Server install-image deployments and driver
+  servicing still require testing with safe image copies.
 
-Original DISMGUI by Mike Celone (mikecel79/DISMGUI); original attribution
-and existing distribution notices retained.
+Original DISM GUI attribution, existing updates and diagnostics
+are retained. The universal updater remains unintegrated.
