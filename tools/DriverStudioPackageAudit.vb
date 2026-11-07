@@ -102,52 +102,71 @@ Public NotInheritable Class DriverStudioPackageAudit
         Return choice
     End Function
 
-    ' No PowerShell invocation is made by tests or read-only metadata display.
-    ' Windows validates the CAT signature in-process when an operator explicitly
-    ' requests an audit. The actual driver package is checked again by DISM.
+    ' CAT status is checked only on explicit audit, using a native installed
+    ' PowerShell executable. On some Windows Server images the legacy Windows
+    ' PowerShell Security module cannot load even though PowerShell 7 verifies
+    ' the exact same CAT correctly. Prefer PS7 if installed, then legacy.
+    ' A non-Valid signature is NEVER promoted to Valid by a fallback.
     Private Shared Function CatalogSignature(catalogPath As String) As String
-        Dim ps As String = Path.Combine(
+        Dim programFiles = Environment.GetEnvironmentVariable("ProgramW6432")
+        If String.IsNullOrWhiteSpace(programFiles) Then
+            programFiles = Environment.GetFolderPath(
+                Environment.SpecialFolder.ProgramFiles)
+        End If
+        Dim core = Path.Combine(programFiles, "PowerShell", "7", "pwsh.exe")
+        Dim legacy = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.Windows),
             If(Environment.Is64BitOperatingSystem AndAlso Not Environment.Is64BitProcess,
                "Sysnative", "System32"),
             "WindowsPowerShell", "v1.0", "powershell.exe")
-        If Not File.Exists(ps) Then Return "Unavailable (PowerShell not installed)"
+        Dim executables As New List(Of String)()
+        If File.Exists(core) Then executables.Add(core)
+        If File.Exists(legacy) Then executables.Add(legacy)
+        If executables.Count = 0 Then Return "Unavailable (PowerShell not installed)"
+
         Dim script = "$ErrorActionPreference='Stop'; " &
                      "(Get-AuthenticodeSignature -LiteralPath '" &
                      catalogPath.Replace("'", "''") & "').Status.ToString()"
-        Dim psi As New ProcessStartInfo With {
-            .FileName = ps, .CreateNoWindow = True,
-            .UseShellExecute = False,
-            .RedirectStandardOutput = True,
-            .RedirectStandardError = True
-        }
-        For Each arg As String In {"-NoProfile", "-NonInteractive", "-EncodedCommand",
-                                   Convert.ToBase64String(Encoding.Unicode.GetBytes(script))}
-            psi.ArgumentList.Add(arg)
+        Dim encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script))
+        For Each executable In executables
+            Dim psi As New ProcessStartInfo With {
+                .FileName = executable, .CreateNoWindow = True,
+                .UseShellExecute = False,
+                .RedirectStandardOutput = True,
+                .RedirectStandardError = True
+            }
+            For Each arg As String In {"-NoProfile", "-NonInteractive",
+                                      "-EncodedCommand", encoded}
+                psi.ArgumentList.Add(arg)
+            Next
+            Try
+                Using process As New Process With {.StartInfo = psi}
+                    If Not process.Start() Then Continue For
+                    Dim output = process.StandardOutput.ReadToEndAsync()
+                    Dim errorTask = process.StandardError.ReadToEndAsync()
+                    If Not process.WaitForExit(20000) Then
+                        process.Kill(True)
+                        process.WaitForExit(5000)
+                        Continue For
+                    End If
+                    Dim value = output.GetAwaiter().GetResult().Trim()
+                    Dim ignoredError = errorTask.GetAwaiter().GetResult()
+                    If process.ExitCode <> 0 OrElse value.Length = 0 Then Continue For
+                    If String.Equals(value, "Valid", StringComparison.OrdinalIgnoreCase) Then
+                        Return "Valid"
+                    End If
+                    ' Return a real failure status without asking another
+                    ' PowerShell engine to override a cryptographic rejection.
+                    Return value.Substring(0, Math.Min(100, value.Length))
+                End Using
+            Catch ex As Exception When TypeOf ex Is IOException OrElse
+                                       TypeOf ex Is InvalidOperationException OrElse
+                                       TypeOf ex Is System.ComponentModel.Win32Exception
+                ' A missing/broken PowerShell module is not an invalid CAT.
+                ' Try the next installed engine; fail closed if none work.
+            End Try
         Next
-        Try
-            Using process As New Process With {.StartInfo = psi}
-                If Not process.Start() Then Return "Unavailable (cannot start PowerShell)"
-                Dim output = process.StandardOutput.ReadToEndAsync()
-                Dim errorTask = process.StandardError.ReadToEndAsync()
-                If Not process.WaitForExit(20000) Then
-                    process.Kill(True)
-                    Return "Unavailable (signature check timed out)"
-                End If
-                Dim value = output.GetAwaiter().GetResult().Trim()
-                Dim err = errorTask.GetAwaiter().GetResult()
-                If process.ExitCode <> 0 Then Return "Unavailable (signature check failed)"
-                If String.Equals(value, "Valid", StringComparison.OrdinalIgnoreCase) Then
-                    Return "Valid"
-                End If
-                If value.Length = 0 Then Return "Unavailable (no signature result)"
-                Return value.Substring(0, Math.Min(100, value.Length))
-            End Using
-        Catch ex As Exception When TypeOf ex Is IOException OrElse
-                                   TypeOf ex Is InvalidOperationException OrElse
-                                   TypeOf ex Is System.ComponentModel.Win32Exception
-            Return "Unavailable (signature check error)"
-        End Try
+        Return "Unavailable (signature check failed in installed PowerShell engines)"
     End Function
 
     Public Shared Function Audit(package As DriverStudioEngine.DriverPackage,
