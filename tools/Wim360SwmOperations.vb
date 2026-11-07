@@ -247,11 +247,25 @@ Public NotInheritable Class Wim360SwmOperations
         If Path.GetFullPath(workingImage).Equals(dest, StringComparison.OrdinalIgnoreCase) Then
             Throw New InvalidOperationException("Temporary destination conflicts with output.")
         End If
-        Dim resources = manifest.Parts.Concat(New String() {dest}).ToArray()
+        Dim resources = manifest.Parts.Concat(New String() {
+            dest, WimImageOperationLease.WriterResource
+        }).ToArray()
         Using lease = WimImageOperationLease.Acquire(resources)
             Revalidate(audit)
             If File.Exists(dest) Then Throw New IOException("Destination appeared during preflight.")
             VerifyAuditUnchanged(audit, token, progress)
+            ' Fail closed when the destination's actual available capacity
+            ' cannot be verified. Estimate is conservative, not a reservation.
+            Dim imageReport = Wim360Reader.Inspect(manifest.MainFile)
+            Dim selectedImage = imageReport.Images.FirstOrDefault(
+                Function(x) x.Index = sourceIndex)
+            If selectedImage Is Nothing Then Throw New InvalidDataException(
+                "Selected SWM index disappeared after verification.")
+            Dim requiredPartBytes = manifest.TotalBytes
+            Dim capacity = Wim360ExportCapacity.CheckDestination(
+                destinationDirectory, requiredPartBytes,
+                selectedImage.UncompressedBytes)
+            If progress IsNot Nothing Then progress.Report(capacity.Summary)
             Dim start As New ProcessStartInfo("dism.exe") With {
                 .UseShellExecute = False,
                 .CreateNoWindow = True,
@@ -272,6 +286,10 @@ Public NotInheritable Class Wim360SwmOperations
             Try
                 If progress IsNot Nothing Then progress.Report("DISM exporting into a new temporary WIM...")
                 Using process As New Process With {.StartInfo = start}
+                    ' Last-moment check before DISM launches, after all hashes.
+                    Wim360ExportCapacity.CheckDestination(destinationDirectory,
+                        requiredPartBytes, selectedImage.UncompressedBytes)
+                    token.ThrowIfCancellationRequested()
                     If Not process.Start() Then
                         Throw New IOException("DISM export could not be started.")
                     End If
