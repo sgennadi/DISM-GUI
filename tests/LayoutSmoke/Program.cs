@@ -914,6 +914,97 @@ internal static class LayoutSmoke
         Console.WriteLine("PASS WIM 360 Inspect automatic metadata overview and compare guidance");
     }
 
+    private static void VerifySwmOperationsUiAndLeases(Form owner)
+    {
+        var scratch = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+            "DISMGUI-SWM-GUARD-" + Guid.NewGuid().ToString("N"));
+        var lockDir = System.IO.Path.Combine(scratch, "locks");
+        System.IO.Directory.CreateDirectory(lockDir);
+        try
+        {
+            var first = System.IO.Path.Combine(scratch, "install.wim");
+            var second = System.IO.Path.Combine(scratch, "mount");
+            var independent = System.IO.Path.Combine(scratch, "other.wim");
+            using (var held = WimImageOperationLease.AcquireAt(lockDir, first, second))
+            {
+                bool blocked = false;
+                try { using var duplicate = WimImageOperationLease.AcquireAt(lockDir,
+                    first.ToUpperInvariant()); }
+                catch (InvalidOperationException) { blocked = true; }
+                Require(blocked,
+                    "Concurrent WIM operations must reject case-aliased matching images");
+                blocked = false;
+                try { using var duplicate = WimImageOperationLease.AcquireAt(lockDir,
+                    second, first); }
+                catch (InvalidOperationException) { blocked = true; }
+                Require(blocked,
+                    "Cross-process lease must lock mount paths even with reverse order");
+                using var other = WimImageOperationLease.AcquireAt(lockDir, independent);
+            }
+            using (var released = WimImageOperationLease.AcquireAt(lockDir, first, second))
+            {
+                Require(released is not null,
+                    "Image operation lock must release after completion");
+            }
+            Require(System.IO.Directory.GetFiles(lockDir, "*.lock").Length >= 3,
+                "Cross-process OS locks must keep stable lock filenames instead of deleting them");
+
+            using var dialog = new Wim360SwmToolsForm();
+            dialog.Show(owner);
+            Application.DoEvents();
+            VerifyScrollableDialog(dialog, "SWM integrity and export");
+            var source = Find(dialog, "txtSwmSource") as TextBox;
+            var indices = Find(dialog, "cmbSwmImageIndex") as ComboBox;
+            var destination = Find(dialog, "txtSwmDestination") as TextBox;
+            var auditButton = Find(dialog, "btnSwmAudit") as Button;
+            var exportButton = Find(dialog, "btnSwmExport") as Button;
+            var closeButton = Find(dialog, "btnSwmCancelClose") as Button;
+            var preview = Find(dialog, "txtSwmAuditSummary") as TextBox;
+            var footer = Find(dialog, "Wim360SwmStickyActions") as TableLayoutPanel;
+            Require(source is not null && indices is not null &&
+                    destination is not null && preview is not null &&
+                    preview.ReadOnly && auditButton is not null &&
+                    exportButton is not null && closeButton is not null &&
+                    footer is not null && footer.Dock == DockStyle.Bottom,
+                    "SWM tool must contain separate source/index/output fields and sticky actions");
+            Require(!exportButton!.Enabled && !auditButton!.Enabled,
+                    "No SWM export or audit should start before selecting a valid source");
+            var synthetic = new Wim360SwmOperations.AuditResult {
+                MainFile = @"C:\Images\install.swm",
+                Verified = true,
+                CombinedSha256 = new string('A', 64),
+                Parts = new System.Collections.Generic.List<Wim360SwmOperations.PartDigest> {
+                    new() { FullPath=@"C:\Images\install.swm", Length=1024,
+                            Sha256=new string('1', 64) },
+                    new() { FullPath=@"C:\Images\install2.swm", Length=512,
+                            Sha256=new string('2', 64) }
+                }
+            };
+            dialog.PreviewAuditForTest(synthetic);
+            Require(preview.Text.Contains("VERIFIED: 2 SWM parts") &&
+                    preview.Text.Contains("Set SHA-256"),
+                    "SWM audit preview should explain verified hashes and part count");
+            foreach (var button in new[] { auditButton!, exportButton!, closeButton! })
+            {
+                VerifyReadableButton(button, "SWM high-DPI footer");
+                var bounds = button.RectangleToScreen(button.ClientRectangle);
+                var client = dialog.RectangleToScreen(dialog.ClientRectangle);
+                Require(System.Drawing.Rectangle.Intersect(bounds, client).Width >= button.Width - 6 &&
+                        System.Drawing.Rectangle.Intersect(bounds, client).Height >= button.Height - 6,
+                        "SWM tool sticky footer is clipped at high DPI: " + button.Text);
+            }
+            Snapshot(dialog, "DISM-GUI-WIM360-SWM-Integrity-Export");
+            dialog.Close();
+            Console.WriteLine("PASS machine-wide WIM lock contention, lock release, " +
+                "SWM audit/export GUI controls and simulated high-DPI layout");
+        }
+        finally
+        {
+            try { System.IO.Directory.Delete(scratch, recursive: true); }
+            catch { /* Test-only scratch directory. */ }
+        }
+    }
+
     private static void VerifyWimMountSafety(Form owner)
     {
         var temp = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
@@ -2298,6 +2389,7 @@ internal static class LayoutSmoke
             Application.DoEvents();
             VerifyWimMetadata();
             VerifyWimMountSafety(form);
+            VerifySwmOperationsUiAndLeases(form);
             VerifyThreeIndexComparison(form);
             VerifyCrossImageComparison(form);
             VerifyMountedAudit();
@@ -2387,6 +2479,11 @@ internal static class LayoutSmoke
             var auditWimButton = Find(dashboard, "btn360AuditMounted") as Button;
             Require(auditWimButton is not null && !auditWimButton.Enabled,
                     "Mounted audit must be disabled for an unmounted WIM index");
+            var swmTools = Find(dashboard, "btn360SwmTools") as Button;
+            Require(swmTools is not null && swmTools.Enabled &&
+                    swmTools.Text == "SWM audit / export",
+                    "WIM 360 dashboard must expose SWM operations without mounting");
+            VerifyReadableButton(swmTools!, "WIM 360 SWM Tools");
             var mountHealth = Find(dashboard, "btn360MountHealth") as Button;
             Require(mountHealth is not null && mountHealth.Enabled &&
                     mountHealth.Text == "Mount health",
