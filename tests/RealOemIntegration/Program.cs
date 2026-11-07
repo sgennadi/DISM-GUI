@@ -528,6 +528,11 @@ internal static partial class RealOemIntegration
     {
         try
         {
+            // Media Probe is deliberately separate from plan/execute: it does
+            // not require DISM, a scratch directory or servicing privileges.
+            if (args.Length > 0 &&
+                string.Equals(args[0], "--probe", StringComparison.OrdinalIgnoreCase))
+                return ProbeMatrixAvailability(args);
             if (args.Any(x => string.Equals(x, "--matrix", StringComparison.OrdinalIgnoreCase)))
                 return await ExecuteMatrixAsync(args);
             var options = Parse(args);
@@ -541,7 +546,8 @@ internal static partial class RealOemIntegration
                 "--index <N> --inf <signed.inf> --work-root <local-folder> " +
                 "[--confirm TEST_COPY_ONLY]\nOr: --plan|--execute --matrix " +
                 "<manifest.json> --work-root <local-folder> " +
-                "[--confirm TEST_COPY_ONLY]\nOr: --self-test");
+                "[--confirm TEST_COPY_ONLY]\nOr: --probe --matrix " +
+                "<absolute-manifest.json> (read-only file availability)\nOr: --self-test");
             return 2;
         }
     }

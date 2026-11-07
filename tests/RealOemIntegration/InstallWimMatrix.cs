@@ -124,10 +124,69 @@ internal static partial class RealOemIntegration
         return targets;
     }
 
+    // Cheap file-access check only: no DISM, signature verification, mounts or writes.
+    // Report all entries, rather than stopping on the first missing WIM/INF.
+    private sealed record MatrixMediaStatus(
+        string Name, bool WimReadable, bool InfReadable);
+
+    private static bool CanReadMediaFile(string file)
+    {
+        // File.Exists alone is not proof of read permission on a local or UNC path.
+        try
+        {
+            if (!File.Exists(file)) return false;
+            using var source = new FileStream(file, FileMode.Open, FileAccess.Read,
+                                              FileShare.ReadWrite | FileShare.Delete);
+            if (source.Length == 0) return false;
+            return source.ReadByte() >= 0;
+        }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
+        catch (System.Security.SecurityException) { return false; }
+    }
+
+    private static List<MatrixMediaStatus> CheckMatrixMedia(List<MatrixTarget> targets)
+    {
+        return targets.Select(t => new MatrixMediaStatus(
+            t.Name, CanReadMediaFile(t.Wim), CanReadMediaFile(t.Inf))).ToList();
+    }
+
+    private static bool PrintMatrixMedia(List<MatrixMediaStatus> statuses)
+    {
+        Console.WriteLine("MEDIA PROBE: file readability only; WIM contents and CAT signatures NOT validated.");
+        foreach (var target in statuses)
+            Console.WriteLine("  " + target.Name + " | WIM " +
+                (target.WimReadable ? "READABLE" : "MISSING_OR_UNREADABLE") +
+                " | INF " + (target.InfReadable ? "READABLE" : "MISSING_OR_UNREADABLE"));
+        bool all = statuses.All(x => x.WimReadable && x.InfReadable);
+        Console.WriteLine(all
+            ? "MEDIA READABLE: run --plan for index, architecture, CAT and scratch validation."
+            : "MEDIA INCOMPLETE: correct the paths and permissions before --plan.");
+        return all;
+    }
+
+    private static int ProbeMatrixAvailability(string[] arguments)
+    {
+        if (arguments.Length != 3 ||
+            !string.Equals(arguments[0], "--probe", StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(arguments[1], "--matrix", StringComparison.OrdinalIgnoreCase) ||
+            !Path.IsPathFullyQualified(arguments[2]))
+            throw new ArgumentException(
+                "Media probe usage: --probe --matrix <absolute-manifest.json>. " +
+                "No --execute, credentials or working folder are accepted.");
+
+        var manifest = Path.GetFullPath(arguments[2]);
+        var targets = ReadMatrix(manifest);
+        return PrintMatrixMedia(CheckMatrixMedia(targets)) ? 0 : 1;
+    }
+
     private static async Task<int> ExecuteMatrixAsync(string[] arguments)
     {
         var input = ParseMatrixArguments(arguments);
         var targets = ReadMatrix(input.Manifest);
+        // Explain all missing or unreadable inputs before preflighting any WIM.
+        // Never copy or mount a WIM if the matrix is incomplete.
+        if (!PrintMatrixMedia(CheckMatrixMedia(targets))) return 1;
         var options = targets.Select(t =>
             new Options(false, input.Execute, t.Wim, t.Index,
                         t.Inf, input.WorkRoot, input.Execute ? ConfirmValue : "")).ToList();
@@ -139,8 +198,9 @@ internal static partial class RealOemIntegration
         foreach (var candidate in plans)
             totalScratch = checked(totalScratch + candidate.RequiredBytes);
         var available = new DriveInfo(Path.GetPathRoot(input.WorkRoot)!).AvailableFreeSpace;
-        if (input.Execute)
-            Require(available >= totalScratch,
+        // Even --plan must verify aggregate capacity, so the operator is not
+        // given a false READY result if every individual WIM would fit alone.
+        Require(available >= totalScratch,
                 "Matrix scratch disk needs at least " +
                 (totalScratch / (1024 * 1024 * 1024)) +
                 " GiB before executing disposable copies; available " +
@@ -216,6 +276,25 @@ internal static partial class RealOemIntegration
         var parsed = ReadMatrix(manifest);
         Require(parsed.Count == 3 && parsed[2].Index == 4,
                 "Three-family OEM matrix parser did not preserve image index order.");
+        var media = CheckMatrixMedia(parsed);
+        Require(media.Count == 3 && media[0].WimReadable &&
+                media.All(x => x.InfReadable) &&
+                !media[1].WimReadable && !media[2].WimReadable,
+                "Media probe must report all absent WIM files.");
+        Require(ProbeMatrixAvailability(new[] { "--probe", "--matrix", manifest }) == 1,
+                "Read-only probe must return nonzero when any image is inaccessible.");
+        File.WriteAllText(images[1], "DUMMY WIM: access fixture only");
+        File.WriteAllText(images[2], "DUMMY WIM: access fixture only");
+        Require(ProbeMatrixAvailability(new[] { "--probe", "--matrix", manifest }) == 0,
+                "Read-only probe must succeed when every source is readable.");
+        bool probeRejected = false;
+        try
+        {
+            ProbeMatrixAvailability(new[] { "--probe", "--matrix", manifest, "--execute" });
+        }
+        catch (ArgumentException) { probeRejected = true; }
+        Require(probeRejected,
+                "Probe mode must reject any write flag or extra arguments.");
         var plan = ParseMatrixArguments(new[] {
             "--plan", "--matrix", manifest, "--work-root", work
         });
