@@ -290,7 +290,7 @@ suppressed when the related inventory returned a warning. Duplicate identities
 are reported as ambiguous, rather than silently treated as a change. Always
 export with cleared Type/State/Search filters to get a complete comparison.
 
-### SWM integrity audit and safe export to a NEW WIM (4.3.19 candidate)
+### SWM integrity audit and safe export to a NEW WIM (4.3.19)
 
 **WIM 360 → SWM audit / export** inspects a complete split SWM set,
 verifies every header and computes SHA-256 for the **entire byte stream
@@ -469,7 +469,7 @@ does not mark the local event as submitted. No background upload occurs.
 There is **no required collector EXE, DLL, installer or GitHub token**.
 The original DISM diagnostics, support contact and manual Issue draft remain.
 See [embedded integration details](docs/UNIVERSAL-DIAGNOSTICS.md).
-Current stable version: **4.3.18**. Earlier releases remain available.
+Current stable version: **4.3.19**. Earlier releases remain available.
 
 ## Other dialogs: 175% horizontal-scroll fixes (4.3.10 test branch)
 
