@@ -165,42 +165,20 @@ try {
                 $report.Result = 'FAIL_COPY_ONLY_IMPORT'
                 $exitCode = 1
             } else {
-                # Record verifiable details from the REAL integration tool, not
-                # a successful process exit code alone. Do not upload full
-                # local paths or driver package manifests to GitHub.
+                # Only report success when the actual integration report proves
+                # signed driver staging, commit and unmodified original WIM.
+                # Upload aggregate checks, never full source paths/manifests.
                 $files = @(Get-ChildItem -LiteralPath $work -Filter 'oem-validation-report.json' -File -Recurse)
                 if ($files.Count -ne 1) {
                     throw 'Expected precisely one signed-OEM integration report from the VM.'
                 }
                 $detail = Get-Content -LiteralPath $files[0].FullName -Raw | ConvertFrom-Json
-                $sourceMatch = ($detail.SourceSha256Before -match '^[0-9A-Fa-f]{64}
-        $report.Plan = 'SKIP_MISSING_VM_FIXTURES'
-        $report.CopyOnlyImport = 'SKIP_MISSING_VM_FIXTURES'
-        $report.Result = 'PASS_SAFETY_CHECKS_REAL_MEDIA_UNAVAILABLE'
-    }
-} catch {
-    $report.Result = 'FAIL_RUNNER_OR_INFRASTRUCTURE'
-    $report.Notes += $_.Exception.Message
-    Write-Error $_.Exception.Message -ErrorAction Continue
-    $exitCode = 1
-} finally {
-    try {
-        $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $reportFile -Encoding UTF8
-        Write-Host "VM validation result: $($report.Result)"
-        Write-Host "Diagnostic report: $reportFile"
-    } catch {
-        Write-Error "Unable to save VM report: $($_.Exception.Message)" -ErrorAction Continue
-        $exitCode = 1
-    }
-}
-exit $exitCode
-) -and
-                               ($detail.SourceSha256Before -eq $detail.SourceSha256After)
+                $sourceMatch = ($detail.SourceSha256Before -match '^[0-9A-Fa-f]{64}$') -and ($detail.SourceSha256Before -eq $detail.SourceSha256After)
                 if (-not $detail.StagedConfirmed -or
                     -not $detail.CommittedConfirmed -or
                     -not $sourceMatch -or
                     $detail.Result -notlike 'PASS*') {
-                    throw 'The OEM integration report did not confirm staging, commit and unchanged original WIM.'
+                    throw 'The OEM report did not confirm staging, commit and unchanged source.'
                 }
                 $report.DriverCountBefore = [int]$detail.DriverCountBefore
                 $report.DriverCountAfterStage = [int]$detail.DriverCountAfterStage
