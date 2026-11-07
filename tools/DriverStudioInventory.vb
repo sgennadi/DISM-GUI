@@ -105,16 +105,27 @@ Public NotInheritable Class DriverStudioInventory
     End Function
 
     Private Shared Function PowershellPath() As String
+        ' Prefer installed PowerShell 7 when available: some Windows Server
+        ' hosts have a broken/disabled Windows PowerShell 5.1 module loader.
+        ' Windows PowerShell remains the no-extra-dependency fallback.
+        Dim programFiles = Environment.GetEnvironmentVariable("ProgramW6432")
+        If String.IsNullOrWhiteSpace(programFiles) Then
+            programFiles = Environment.GetFolderPath(
+                Environment.SpecialFolder.ProgramFiles)
+        End If
+        Dim core = Path.Combine(programFiles, "PowerShell", "7", "pwsh.exe")
+        If File.Exists(core) Then Return core
+
         Dim windowsDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows)
         Dim systemDirectory = If(Environment.Is64BitOperatingSystem AndAlso
                                  Not Environment.Is64BitProcess, "Sysnative", "System32")
-        Dim command = Path.Combine(windowsDir, systemDirectory,
-                                   "WindowsPowerShell", "v1.0", "powershell.exe")
-        If Not File.Exists(command) Then
+        Dim legacy = Path.Combine(windowsDir, systemDirectory,
+                                  "WindowsPowerShell", "v1.0", "powershell.exe")
+        If Not File.Exists(legacy) Then
             Throw New FileNotFoundException(
-                "Windows PowerShell with the DISM module is required.", command)
+                "PowerShell 7 or Windows PowerShell with DISM module required.", legacy)
         End If
-        Return command
+        Return legacy
     End Function
 
     Private Shared Function MakePowershellScript(mountFolder As String) As String
