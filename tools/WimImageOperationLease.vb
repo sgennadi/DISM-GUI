@@ -7,7 +7,7 @@ Imports System.Text
 
 ' Cooperative, machine-local cross-process lock for DISM GUI operations
 ' on a given image path or mounted directory. Locks are Windows file-share
-' locks: the zero-byte files persist, while the OS releases the held handles
+' locks: the zero-byte files persist, while the OS releases the held heldStreams
 ' automatically when a process dies. Never delete the lock files on exit;
 ' deleting a live lock inode would permit independent overlapping locks.
 '
@@ -16,7 +16,7 @@ Imports System.Text
 Public NotInheritable Class WimImageOperationLease
     Implements IDisposable
 
-    Private ReadOnly handles As New List(Of FileStream)()
+    Private ReadOnly heldStreams As New List(Of FileStream)()
     Private disposed As Boolean
 
     Private Sub New()
@@ -69,7 +69,7 @@ Public NotInheritable Class WimImageOperationLease
                 Try
                     Dim held = New FileStream(lockFileName, FileMode.OpenOrCreate,
                         FileAccess.ReadWrite, FileShare.None, 1, FileOptions.None)
-                    lease.handles.Add(held)
+                    lease.heldStreams.Add(held)
                 Catch ex As IOException
                     Throw New InvalidOperationException(
                         "An image operation is already active, or the lock file " &
@@ -86,9 +86,9 @@ Public NotInheritable Class WimImageOperationLease
     Public Sub Dispose() Implements IDisposable.Dispose
         If disposed Then Return
         disposed = True
-        For i As Integer = handles.Count - 1 To 0 Step -1
-            handles(i).Dispose()
+        For i As Integer = heldStreams.Count - 1 To 0 Step -1
+            heldStreams(i).Dispose()
         Next
-        handles.Clear()
+        heldStreams.Clear()
     End Sub
 End Class
