@@ -18,6 +18,16 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
+      - name: Validate PowerShell VM script syntax
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile('tests/RealOemIntegration/Invoke-VirtualMachineValidation.ps1', [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count -ne 0) {
+            $parseErrors | ForEach-Object { Write-Error $_.Message }
+            throw 'Invalid PowerShell VM validation script'
+          }
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
