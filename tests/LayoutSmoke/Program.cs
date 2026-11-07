@@ -2348,6 +2348,59 @@ internal static class LayoutSmoke
             Require(safePlan.Count == 1 && safePlan[0].Sha256 == source.Sha256,
                     "Selected single-INF import plan did not retain the reviewed hash");
 
+            // Freeze the entire inventory, not only matching INF versions:
+            // adding an unrelated staged driver can affect Windows ranking
+            // while selected INF is STILL classified as New.
+            var emptyInventorySnapshot = DriverStudioInstaller.SnapshotInstalledInventory(
+                Array.Empty<DriverStudioEngine.DriverPackage>());
+            var snapshotPlan = DriverStudioInstaller.ValidatePlan(
+                newDecision, new[] { source },
+                Array.Empty<DriverStudioEngine.DriverPackage>(),
+                "AMD64", emptyInventorySnapshot);
+            Require(snapshotPlan.Count == 1,
+                    "Identical inventory fingerprint should allow a reviewed plan.");
+            var unrelatedDriver = new DriverStudioEngine.DriverPackage {
+                InfName="extra.inf", PublishedName="oem99.inf",
+                Provider="Another vendor", ClassName="Display",
+                Version="1.0.0.0", DriverDate="2026-10-30"
+            };
+            Require(DriverStudioEngine.CompareCandidates(
+                new[] { source }, new[] { unrelatedDriver }, true, "AMD64")[0].Status == "New",
+                "Regression fixture must keep the selected INF classified New.");
+            bool unrelatedStaleBlocked = false;
+            try {
+                DriverStudioInstaller.ValidatePlan(
+                    newDecision, new[] { source }, new[] { unrelatedDriver },
+                    "AMD64", emptyInventorySnapshot);
+            } catch (InvalidOperationException) { unrelatedStaleBlocked = true; }
+            Require(unrelatedStaleBlocked,
+                    "Adding an unrelated installed driver must invalidate the previous import plan.");
+
+            var originalInventory = new[] { inventory[0], unrelatedDriver };
+            var reversedInventory = new[] { unrelatedDriver, inventory[0] };
+            var orderedSnapshot = DriverStudioInstaller.SnapshotInstalledInventory(originalInventory);
+            Require(orderedSnapshot ==
+                        DriverStudioInstaller.SnapshotInstalledInventory(reversedInventory),
+                    "Driver inventory fingerprint must not depend on enumeration order.");
+            DriverStudioInstaller.RequireInventorySnapshot(
+                orderedSnapshot, reversedInventory);
+
+            bool removedDriverBlocked = false;
+            try {
+                DriverStudioInstaller.RequireInventorySnapshot(
+                    orderedSnapshot, new[] { inventory[0] });
+            } catch (InvalidOperationException) { removedDriverBlocked = true; }
+            Require(removedDriverBlocked,
+                    "Removing any installed driver must invalidate inventory approval.");
+            bool duplicatedDriverBlocked = false;
+            try {
+                DriverStudioInstaller.RequireInventorySnapshot(
+                    orderedSnapshot, new[] { inventory[0], unrelatedDriver, unrelatedDriver });
+            } catch (InvalidOperationException) { duplicatedDriverBlocked = true; }
+            Require(duplicatedDriverBlocked,
+                    "Inventory fingerprints must preserve duplicate-driver counts.");
+            Console.WriteLine("PASS Driver Studio complete installed-driver inventory snapshot guards");
+
             bool staleBlocked = false;
             try {
                 DriverStudioInstaller.ValidatePlan(newDecision, new[] { source }, inventory);

@@ -4,6 +4,7 @@ Imports System.ComponentModel
 Imports System.Diagnostics
 Imports System.IO
 Imports System.Linq
+Imports System.Security.Cryptography
 Imports System.Security.Principal
 Imports System.Text
 Imports System.Threading.Tasks
@@ -28,6 +29,47 @@ Public NotInheritable Class DriverStudioInstaller
             (String.Equals(d.Status, "New", StringComparison.Ordinal) OrElse
              String.Equals(d.Status, "Newer", StringComparison.Ordinal))
     End Function
+
+    ' Capture the ENTIRE mounted driver inventory as a stable, order-independent
+    ' fingerprint. Per-INF status alone cannot detect a second driver being
+    ' staged by another administrator between Compare and Install. Include
+    ' duplicate entries; do not confuse matching count with matching content.
+    Private Shared Function SnapshotField(value As String) As String
+        Dim normalized = If(value, "").Trim().ToUpperInvariant()
+        Return normalized.Length.ToString(Globalization.CultureInfo.InvariantCulture) &
+            ":" & normalized
+    End Function
+
+    Public Shared Function SnapshotInstalledInventory(
+        installed As IEnumerable(Of DriverStudioEngine.DriverPackage)) As String
+        If installed Is Nothing Then Throw New ArgumentNullException(NameOf(installed))
+        Dim entries As New List(Of String)()
+        For Each p As DriverStudioEngine.DriverPackage In installed
+            If p Is Nothing Then
+                Throw New InvalidDataException("The installed-driver inventory contains an invalid entry.")
+            End If
+            entries.Add(String.Join("|", New String() {
+                SnapshotField(p.InfName), SnapshotField(p.PublishedName),
+                SnapshotField(p.Provider), SnapshotField(p.ClassName),
+                SnapshotField(p.Version), SnapshotField(p.DriverDate),
+                If(p.IsInbox, "1", "0")
+            }))
+        Next
+        entries.Sort(StringComparer.Ordinal)
+        Return Convert.ToHexString(SHA256.HashData(
+            Encoding.UTF8.GetBytes(String.Join(vbLf, entries))))
+    End Function
+
+    Public Shared Sub RequireInventorySnapshot(expected As String,
+        fresh As IEnumerable(Of DriverStudioEngine.DriverPackage))
+        If String.IsNullOrWhiteSpace(expected) OrElse expected.Length <> 64 OrElse
+           Not String.Equals(expected, SnapshotInstalledInventory(fresh),
+                             StringComparison.OrdinalIgnoreCase) Then
+            Throw New InvalidOperationException(
+                "The mounted image driver inventory changed since comparison. " &
+                "No drivers were imported. Compare and audit again before installing.")
+        End If
+    End Sub
 
     ' A rechecked decision can remain "Newer" even if the mounted image's
     ' existing driver has changed in the meantime (e.g. 1.0 -> 1.5 while
@@ -60,7 +102,8 @@ Public NotInheritable Class DriverStudioInstaller
         reviewed As IEnumerable(Of DriverStudioEngine.Decision),
         freshSource As IEnumerable(Of DriverStudioEngine.DriverPackage),
         freshInstalled As IEnumerable(Of DriverStudioEngine.DriverPackage),
-        Optional targetArchitecture As String = ""
+        Optional targetArchitecture As String = "",
+        Optional expectedInventorySnapshot As String = Nothing
     ) As List(Of DriverStudioEngine.DriverPackage)
         If reviewed Is Nothing OrElse freshSource Is Nothing OrElse
            freshInstalled Is Nothing Then
@@ -76,8 +119,12 @@ Public NotInheritable Class DriverStudioInstaller
                 "Only verified New / Newer drivers are eligible. Deselect Same, Older and Review entries.")
         End If
 
+        Dim installedList = freshInstalled.ToList()
+        If expectedInventorySnapshot IsNot Nothing Then
+            RequireInventorySnapshot(expectedInventorySnapshot, installedList)
+        End If
         Dim current = DriverStudioEngine.CompareCandidates(freshSource,
-                                                            freshInstalled, True,
+                                                            installedList, True,
                                                             targetArchitecture)
         Dim approved As New List(Of DriverStudioEngine.DriverPackage)()
         Dim seen As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
