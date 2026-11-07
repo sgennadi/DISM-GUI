@@ -249,7 +249,7 @@ def main():
         End If
         Try
             activeMountLease = WimImageOperationLease.Acquire(
-                strWIM, strFolderName)
+                WimImageOperationLease.WriterResource, strWIM, strFolderName)
             strOutput = ""
             strDISMExitCode = ""
             txtOutput.Clear()
