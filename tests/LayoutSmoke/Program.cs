@@ -2273,15 +2273,15 @@ internal static class LayoutSmoke
             // A broken or partial Get-WindowsDriver response is NOT an empty
             // installed-driver inventory. Never classify it as New and write.
             var malformedInventories = new[] {
-                "{\\"Unexpected\\":\\"not a driver record\\"}",
-                json.Replace("\\"Provider\\":\\"Contoso Corporation\\",", ""),
-                json.Replace("\\"ClassName\\":\\"Net\\",", ""),
-                json.Replace("\\"InfName\\":\\"contoso.inf\\"", "\\"InfName\\":\\"contoso.txt\\""),
-                json.Replace("\\"Version\\":\\"2.1.4.0\\"", "\\"Version\\":\\"invalid\\""),
-                json.Replace("\\"Date\\":\\"2026-11-03\\"", "\\"Date\\":\\"invalid\\""),
-                json.Replace("\\"PublishedName\\":\\"oem8.inf\\"", "\\"PublishedName\\":\\"\\""),
-                json.Replace("\\"Inbox\\":false", "\\"Inbox\\":\\"false\\""),
-                json.Replace(",\\"Inbox\\":false", "")
+                "{\"Unexpected\":\"not a driver record\"}",
+                json.Replace("\"Provider\":\"Contoso Corporation\",", ""),
+                json.Replace("\"ClassName\":\"Net\",", ""),
+                json.Replace("\"InfName\":\"contoso.inf\"", "\"InfName\":\"contoso.txt\""),
+                json.Replace("\"Version\":\"2.1.4.0\"", "\"Version\":\"invalid\""),
+                json.Replace("\"Date\":\"2026-11-03\"", "\"Date\":\"invalid\""),
+                json.Replace("\"PublishedName\":\"oem8.inf\"", "\"PublishedName\":\"\""),
+                json.Replace("\"Inbox\":false", "\"Inbox\":\"false\""),
+                json.Replace(",\"Inbox\":false", "")
             };
             foreach (var malformed in malformedInventories) {
                 bool rejected = false;
