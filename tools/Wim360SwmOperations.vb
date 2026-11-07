@@ -241,10 +241,10 @@ Public NotInheritable Class Wim360SwmOperations
         If File.Exists(dest) Then
             Throw New IOException("Destination already exists; refusing to overwrite a WIM.")
         End If
-        Dim partial = Path.Combine(directory,
+        Dim workingImage = Path.Combine(directory,
             "." & Path.GetFileNameWithoutExtension(dest) & "." &
-            Guid.NewGuid().ToString("N") & ".partial.wim")
-        If Path.GetFullPath(partial).Equals(dest, StringComparison.OrdinalIgnoreCase) Then
+            Guid.NewGuid().ToString("N") & ".workingImage.wim")
+        If Path.GetFullPath(workingImage).Equals(dest, StringComparison.OrdinalIgnoreCase) Then
             Throw New InvalidOperationException("Temporary destination conflicts with output.")
         End If
         Dim resources = manifest.Parts.Concat(New String() {dest}).ToArray()
@@ -266,7 +266,7 @@ Public NotInheritable Class Wim360SwmOperations
                 Path.GetFileNameWithoutExtension(manifest.MainFile) & "*.swm"))
             start.ArgumentList.Add("/SourceIndex:" &
                 sourceIndex.ToString(CultureInfo.InvariantCulture))
-            start.ArgumentList.Add("/DestinationImageFile:" & partial)
+            start.ArgumentList.Add("/DestinationImageFile:" & workingImage)
             start.ArgumentList.Add("/CheckIntegrity")
             Dim processExited As Boolean = False
             Try
@@ -287,7 +287,7 @@ Public NotInheritable Class Wim360SwmOperations
                                 Await process.WaitForExitAsync().ConfigureAwait(False)
                                 processExited = True
                             Catch
-                                ' Keep the partial file when DISM termination was not confirmed.
+                                ' Keep the workingImage file when DISM termination was not confirmed.
                             End Try
                         Else
                             processExited = True
@@ -306,7 +306,7 @@ Public NotInheritable Class Wim360SwmOperations
                 End Using
                 token.ThrowIfCancellationRequested()
                 VerifyAuditUnchanged(audit, token, progress)
-                Dim exported = Wim360Reader.Inspect(partial)
+                Dim exported = Wim360Reader.Inspect(workingImage)
                 If exported.IsSplitSet OrElse exported.ImageCount <> 1 OrElse
                    Not exported.Images.Any(Function(x) x.Index = 1) Then
                     Throw New InvalidDataException("DISM output is not a valid one-index WIM.")
@@ -314,7 +314,7 @@ Public NotInheritable Class Wim360SwmOperations
                 If File.Exists(dest) Then
                     Throw New IOException("Output filename was taken during export.")
                 End If
-                File.Move(partial, dest, False)
+                File.Move(workingImage, dest, False)
                 Return New ExportResult With {
                     .OutputFile = dest, .OutputIndex = 1,
                     .OutputBytes = New FileInfo(dest).Length,
@@ -323,10 +323,10 @@ Public NotInheritable Class Wim360SwmOperations
                 }
             Finally
                 ' Delete ONLY a uniquely named file created by this invocation.
-                ' Never remove an uncertain partial while DISM may still own it.
-                If processExited AndAlso File.Exists(partial) Then
+                ' Never remove an uncertain workingImage while DISM may still own it.
+                If processExited AndAlso File.Exists(workingImage) Then
                     Try
-                        File.Delete(partial)
+                        File.Delete(workingImage)
                     Catch
                     End Try
                 End If
