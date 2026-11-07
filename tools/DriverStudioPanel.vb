@@ -817,6 +817,8 @@ Public NotInheritable Class DriverStudioPanel
             Dim plan = DriverStudioInstaller.ValidatePlan(
                 selected, sourceItems, installed, refreshedArchitecture,
                 comparedInventoryFingerprint)
+            Dim expectedInventoryFingerprint =
+                DriverStudioInstaller.SnapshotInstalledInventory(installed)
 
             For Each package As DriverStudioEngine.DriverPackage In plan
                 If stopAfterCurrent Then Exit For
@@ -826,6 +828,13 @@ Public NotInheritable Class DriverStudioPanel
                     Return DriverStudioInstaller.RequireWritableTarget(
                         comparedWim, comparedIndex, comparedMount)
                 End Function)
+                ' Even while we hold the cooperative writer lease, an external
+                ' DISM or administrator can change the mount. Do not trust
+                ' the batch's initial inventory after the previous INF.
+                Dim beforeStep = Await DriverStudioInventory.ReadMountedAsync(
+                    comparedWim, comparedIndex, comparedMount, CancellationToken.None)
+                DriverStudioInstaller.RequireInventorySnapshot(
+                    expectedInventoryFingerprint, beforeStep)
 
                 statusLabel.Text = "Installing " & (completed + 1).ToString() & "/" &
                     plan.Count.ToString() & ": " & package.InfName &
@@ -855,6 +864,19 @@ Public NotInheritable Class DriverStudioPanel
                 If Not outcome.Succeeded Then
                     RuntimeDiagnostics.RecordDismExit(
                         "Driver Studio install", outcome.ExitCode.ToString())
+                Else
+                    ' One checkpoint per successful DISM call. A missing staged
+                    ' INF or any unrelated inventory change blocks the NEXT INF
+                    ' even when DISM returned exit 0 or reboot-required 3010.
+                    statusLabel.Text = "Verifying driver " & completed.ToString() &
+                        "/" & plan.Count.ToString() & " in mounted inventory..."
+                    Dim afterStep = Await DriverStudioInventory.ReadMountedAsync(
+                        comparedWim, comparedIndex, comparedMount, CancellationToken.None)
+                    expectedInventoryFingerprint =
+                        DriverStudioInstaller.ValidateStagedBatchCheckpoint(
+                            beforeStep, afterStep, package)
+                    importHistory.Add("Checkpoint confirmed: " & package.InfName &
+                        " staged; unrelated driver inventory unchanged.")
                 End If
                 If Not outcome.Succeeded OrElse outcome.RebootRequired Then
                     detailBox.Text = If(outcome.Succeeded,
