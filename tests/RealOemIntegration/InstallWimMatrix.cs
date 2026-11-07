@@ -36,10 +36,11 @@ internal static partial class RealOemIntegration
             i++;
         }
         Require(plan != execute, "Specify exactly one matrix mode: --plan or --execute.");
-        Require(values.TryGetValue("--matrix", out var manifest) &&
-                !string.IsNullOrWhiteSpace(manifest) &&
-                values.TryGetValue("--work-root", out var workRoot) &&
-                !string.IsNullOrWhiteSpace(workRoot),
+        if (!values.TryGetValue("--matrix", out var manifest) ||
+            string.IsNullOrWhiteSpace(manifest) ||
+            !values.TryGetValue("--work-root", out var workRoot) ||
+            string.IsNullOrWhiteSpace(workRoot))
+            throw new ArgumentException(
                 "Specify --matrix <manifest.json> and --work-root <local-folder>.");
         bool confirmed = values.TryGetValue("--confirm", out var confirmation);
         Require(!confirmed || execute, "--confirm is valid only with --execute.");
@@ -101,10 +102,10 @@ internal static partial class RealOemIntegration
             string name = RequiredString(entry, "name");
             string wim = RequiredString(entry, "wim");
             string inf = RequiredString(entry, "inf");
-            Require(entry.TryGetProperty("index", out var indexProperty) &&
-                    indexProperty.ValueKind == JsonValueKind.Number &&
-                    indexProperty.TryGetInt32(out int index) && index > 0,
-                    "Matrix index must be a positive integer.");
+            if (!entry.TryGetProperty("index", out var indexProperty) ||
+                indexProperty.ValueKind != JsonValueKind.Number ||
+                !indexProperty.TryGetInt32(out int index) || index <= 0)
+                throw new ArgumentException("Matrix index must be a positive integer.");
             Require(name.Length <= 72 && name.IndexOfAny(new[] { '\r', '\n', '\0' }) < 0 &&
                     names.Add(name),
                     "Matrix target names must be unique, short and single-line.");
