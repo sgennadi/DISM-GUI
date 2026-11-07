@@ -427,6 +427,27 @@ Public NotInheritable Class Wim360Dashboard
         healthHint.Margin = New Padding(2, 2, 0, 2)
         actions.Controls.Add(healthHint, 1, 5)
 
+        Dim swmTools As New Button With {
+            .Name = "btn360SwmTools", .Text = "SWM audit / export",
+            .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 9, 4)
+        }
+        ModernTheme.StyleButton(swmTools, "secondary")
+        AddHandler swmTools.Click, Sub(sender, e)
+            Dim chosen = If(report IsNot Nothing AndAlso report.IsSplitSet,
+                report.SplitSet.MainFile, fileBox.Text.Trim())
+            If Not chosen.EndsWith(".swm", StringComparison.OrdinalIgnoreCase) Then
+                chosen = ""
+            End If
+            Using viewer As New Wim360SwmToolsForm(chosen)
+                viewer.ShowDialog(Me.FindForm())
+            End Using
+        End Sub
+        actions.Controls.Add(swmTools, 0, 6)
+        Dim swmInfo = MakeText("Full SHA-256 verification of split WIM parts",
+                                9.0F, False, ModernTheme.Muted)
+        swmInfo.Name = "lbl360SwmToolsHint"
+        actions.Controls.Add(swmInfo, 1, 6)
+
         AddHandler fileBox.TextChanged, Sub(sender, e)
             overviewText.Text = "File selection changed. Click Inspect to refresh the metadata overview."
             suggestedPair = Nothing
