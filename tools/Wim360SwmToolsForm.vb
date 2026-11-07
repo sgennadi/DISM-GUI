@@ -118,13 +118,13 @@ Public NotInheritable Class Wim360SwmToolsForm
             .Margin = New Padding(0, 8, 7, 6)
         }
         targetRow.Controls.Add(targetBox, 0, 0)
-        Dim browseTarget As New Button With {
+        Dim chooseTargetButton As New Button With {
             .Name = "btnSwmDestination", .Text = "Choose WIM...",
             .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 0, 4)
         }
-        ModernTheme.StyleButton(browseTarget, "browse")
-        AddHandler browseTarget.Click, Sub(sender, e) BrowseTarget()
-        targetRow.Controls.Add(browseTarget, 1, 0)
+        ModernTheme.StyleButton(chooseTargetButton, "browse")
+        AddHandler chooseTargetButton.Click, Sub(sender, e) BrowseTarget()
+        targetRow.Controls.Add(chooseTargetButton, 1, 0)
         formLayout.Controls.Add(targetRow, 0, 3)
 
         summary = New TextBox With {
