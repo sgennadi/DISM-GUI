@@ -407,7 +407,7 @@ internal static class RealOemIntegration
             Require(report.StagedConfirmed,
                 "DISM succeeded but staged-driver inventory did not confirm the INF.");
             await RunDismAsync(report, "/English", "/Unmount-Image",
-                               "/MountDir:" + mount, "/Commit");
+                               "/MountDir:" + mount, "/Commit", "/CheckIntegrity");
             Require(!MountedHere(copy, mount), "Mounted test copy remained after Commit.");
 
             // Remount the committed COPY read-only to verify that staging really
