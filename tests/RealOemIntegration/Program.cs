@@ -37,7 +37,9 @@ internal static class RealOemIntegration
         public int DriverCountAfterStage { get; set; }
         public int DriverCountAfterCommit { get; set; }
         public bool StagedConfirmed { get; set; }
+        public bool StagedCheckpointVerified { get; set; }
         public bool CommittedConfirmed { get; set; }
+        public bool CommittedInventoryMatchesStage { get; set; }
         public List<string> Events { get; set; } = new();
         public List<string> Warnings { get; set; } = new();
     }
@@ -406,6 +408,15 @@ internal static class RealOemIntegration
                 DriverStudioInstaller.IsPresentInInventory(plan.Package, afterStage);
             Require(report.StagedConfirmed,
                 "DISM succeeded but staged-driver inventory did not confirm the INF.");
+            // Check that the selected INF was genuinely new to this mount and
+            // that servicing did not change any unrelated driver's identity.
+            // A zero DISM exit code or a simple presence check is insufficient.
+            var stagedInventoryFingerprint =
+                DriverStudioInstaller.ValidateStagedBatchCheckpoint(
+                    before, afterStage, approved.Single());
+            report.StagedCheckpointVerified = true;
+            report.Events.Add("Stage checkpoint verified: selected INF newly staged; " +
+                              "all unrelated driver records unchanged.");
             await RunDismAsync(report, "/English", "/Unmount-Image",
                                "/MountDir:" + mount, "/Commit", "/CheckIntegrity");
             Require(!MountedHere(copy, mount), "Mounted test copy remained after Commit.");
@@ -426,6 +437,18 @@ internal static class RealOemIntegration
                 DriverStudioInstaller.IsPresentInInventory(plan.Package, afterCommit);
             Require(report.CommittedConfirmed,
                 "Staged OEM INF was not found after committing and remounting the test COPY.");
+            // The whole inventory must survive commit/reopen unchanged, not
+            // merely contain the selected INF. The fingerprint is order
+            // independent and includes duplicate entries and published names.
+            report.CommittedInventoryMatchesStage = string.Equals(
+                stagedInventoryFingerprint,
+                DriverStudioInstaller.SnapshotInstalledInventory(afterCommit),
+                StringComparison.Ordinal);
+            Require(report.CommittedInventoryMatchesStage,
+                "Committed test copy has a different driver inventory from the " +
+                "verified staged checkpoint. Inspect the isolated WIM.");
+            report.Events.Add("Commit checkpoint verified: complete driver " +
+                              "inventory fingerprint unchanged after read-only remount.");
             await DiscardOursAsync(report, copy, mount);
             successful = true;
         }
@@ -482,7 +505,8 @@ internal static class RealOemIntegration
                 report.Warnings.Add("Writer lease: " + ex.Message);
             }
             if (successful)
-                report.Result = "PASS - staged and committed test copy; original unchanged";
+                report.Result = "PASS - staged and committed test copy; complete " +
+                                "inventory unchanged after commit; original unchanged";
             try
             {
                 SaveReport(report, reportFile);

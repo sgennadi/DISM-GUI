@@ -81,8 +81,10 @@ D:\DismOemTest\OEM-<unique-id>\oem-validation-report.json
 
 The test does not rewrite or replace the original WIM. A successful
 report states the selected WIM index, target architecture, valid CAT,
-baseline inventory fingerprint, successful staged-driver presence,
-presence after committed-copy remount, and original source hashes.
+baseline inventory fingerprint, successful staged-driver presence, a
+full-inventory checkpoint with no unrelated additions/removals/changes,
+an identical full-inventory fingerprint after the committed-copy read-only
+remount, and unchanged original source hashes.
 A failure report marks the copy as requiring investigation; check
 DISM /Get-MountedImageInfo before manually cleaning up any mount.
 
@@ -108,10 +110,11 @@ A genuine OEM scenario passes only if all of these are verified:
 3. The live mounted inventory's New/Newer decision and baseline snapshot
    agree with the reviewed values.
 4. The selective INF import returned DISM success.
-5. The original INF identity/version is present in the mounted image
-   inventory **after staging**.
+5. The original INF identity/version is newly present in the mounted image
+   inventory **after staging**; unrelated inventory entries remain unchanged.
 6. After committing **only the test copy**, the INF is still present in the
-   read-only remounted image.
+   read-only remounted image, and the **entire driver inventory** exactly matches
+   the verified staged checkpoint (including duplicates and published names).
 7. All owned test mounts are unmounted without automatic modifications to
    any production image.
 
