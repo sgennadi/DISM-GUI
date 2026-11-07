@@ -34,12 +34,25 @@ Public NotInheritable Class Wim360SwmToolsForm
         Me.Font = ModernTheme.UiFont(9.5F)
         Me.BackColor = Color.White
 
+        Dim factor As Single = Math.Max(1.0F, Me.Font.Height / 16.0F)
+        ' Two fixed rows keep the footer onscreen when the body scrolls.
+        ' Docking a Bottom panel directly on the Form could hide it behind
+        ' the Fill viewport at simulated 175% font scale.
+        Dim rootFrame As New TableLayoutPanel With {
+            .Name = "Wim360SwmRootFrame", .Dock = DockStyle.Fill,
+            .ColumnCount = 1, .RowCount = 2,
+            .Padding = Padding.Empty, .Margin = Padding.Empty
+        }
+        rootFrame.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+        rootFrame.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        rootFrame.RowStyles.Add(New RowStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(71 * factor))))
+        Controls.Add(rootFrame)
         Dim scroll As New Panel With {
             .Name = "Wim360SwmViewport", .Dock = DockStyle.Fill,
             .AutoScroll = True, .BackColor = Color.White
         }
-        Controls.Add(scroll)
-        Dim factor As Single = Math.Max(1.0F, Me.Font.Height / 16.0F)
+        rootFrame.Controls.Add(scroll, 0, 0)
         Dim formLayout As New TableLayoutPanel With {
             .Name = "Wim360SwmLayout", .ColumnCount = 1, .RowCount = 7,
             .Padding = New Padding(16, 9, 16, 12),
@@ -57,7 +70,9 @@ Public NotInheritable Class Wim360SwmToolsForm
         Dim fit As Action = Sub()
             If scroll.IsDisposed OrElse formLayout.IsDisposed Then Return
             Dim minHeight = CInt(Math.Ceiling(690 * factor))
-            formLayout.Size = New Size(Math.Max(CInt(710 * factor),
+            Dim minWidth As Integer = If(factor > 1.15F, 690,
+                                         CInt(Math.Ceiling(710 * factor)))
+            formLayout.Size = New Size(Math.Max(minWidth,
                                                scroll.ClientSize.Width - 1),
                                       Math.Max(minHeight, scroll.ClientSize.Height - 1))
         End Sub
@@ -147,7 +162,7 @@ Public NotInheritable Class Wim360SwmToolsForm
         formLayout.Controls.Add(statusLabel, 0, 5)
 
         Dim footer As New TableLayoutPanel With {
-            .Name = "Wim360SwmStickyActions", .Dock = DockStyle.Bottom,
+            .Name = "Wim360SwmStickyActions", .Dock = DockStyle.Fill,
             .ColumnCount = 3, .RowCount = 1,
             .Height = CInt(Math.Ceiling(71 * factor)),
             .Padding = New Padding(16, 4, 16, 4), .BackColor = Color.White
@@ -183,8 +198,7 @@ Public NotInheritable Class Wim360SwmToolsForm
             End If
         End Sub
         footer.Controls.Add(closeButton, 2, 0)
-        Controls.Add(footer)
-        footer.BringToFront()
+        rootFrame.Controls.Add(footer, 0, 1)
         AddHandler sourceBox.TextChanged, Sub(sender, e)
             InvalidateAudit()
             indexBox.Items.Clear()
