@@ -64,8 +64,8 @@ Public NotInheritable Class WimImageOperationLease
         Directory.CreateDirectory(root)
         Dim lease As New WimImageOperationLease()
         Try
-            For Each lockName In names
-                Dim lockFileName = IO.Path.Combine(root, lockName)
+            For Each lockEntryName In names
+                Dim lockFileName = IO.Path.Combine(root, lockEntryName)
                 Try
                     Dim held = New FileStream(lockFileName, FileMode.OpenOrCreate,
                         FileAccess.ReadWrite, FileShare.None, 1, FileOptions.None)
