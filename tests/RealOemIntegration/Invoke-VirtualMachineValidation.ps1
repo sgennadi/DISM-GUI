@@ -25,7 +25,9 @@ $report = [ordered]@{
     DriverCountAfterStage = $null
     DriverCountAfterCommit = $null
     StagedConfirmed = $false
+    StagedCheckpointVerified = $false
     CommittedConfirmed = $false
+    CommittedInventoryMatchesStage = $false
     OriginalWimSha256Unchanged = $false
     Result = 'INCOMPLETE'
     Notes = @()
@@ -175,7 +177,9 @@ try {
                 $detail = Get-Content -LiteralPath $files[0].FullName -Raw | ConvertFrom-Json
                 $sourceMatch = ($detail.SourceSha256Before -match '^[0-9A-Fa-f]{64}$') -and ($detail.SourceSha256Before -eq $detail.SourceSha256After)
                 if (-not $detail.StagedConfirmed -or
+                    -not $detail.StagedCheckpointVerified -or
                     -not $detail.CommittedConfirmed -or
+                    -not $detail.CommittedInventoryMatchesStage -or
                     -not $sourceMatch -or
                     $detail.Result -notlike 'PASS*') {
                     throw 'The OEM report did not confirm staging, commit and unchanged source.'
@@ -184,11 +188,13 @@ try {
                 $report.DriverCountAfterStage = [int]$detail.DriverCountAfterStage
                 $report.DriverCountAfterCommit = [int]$detail.DriverCountAfterCommit
                 $report.StagedConfirmed = [bool]$detail.StagedConfirmed
+                $report.StagedCheckpointVerified = [bool]$detail.StagedCheckpointVerified
                 $report.CommittedConfirmed = [bool]$detail.CommittedConfirmed
+                $report.CommittedInventoryMatchesStage = [bool]$detail.CommittedInventoryMatchesStage
                 $report.OriginalWimSha256Unchanged = [bool]$sourceMatch
                 $report.CopyOnlyImport = 'PASS'
                 $report.Result = 'PASS_REAL_WINDOWS_SERVICING'
-                Write-Host ("VM evidence: staged={0}, committed={1}, original WIM unchanged={2}" -f $report.StagedConfirmed, $report.CommittedConfirmed, $report.OriginalWimSha256Unchanged)
+                Write-Host ("VM evidence: staged={0}, stage checkpoint={1}, committed={2}, full inventory preserved={3}, original WIM unchanged={4}" -f $report.StagedConfirmed, $report.StagedCheckpointVerified, $report.CommittedConfirmed, $report.CommittedInventoryMatchesStage, $report.OriginalWimSha256Unchanged)
                 Write-Host ("VM drivers: before={0}, staged={1}, committed={2}" -f $report.DriverCountBefore, $report.DriverCountAfterStage, $report.DriverCountAfterCommit)
             }
         }
