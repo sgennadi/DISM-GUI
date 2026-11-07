@@ -373,11 +373,30 @@ Public NotInheritable Class Wim360SwmToolsForm
                 "SWM export", MessageBoxButtons.OK, MessageBoxIcon.Warning)
             Return
         End If
+        Dim capacity As Wim360ExportCapacity.CapacityResult
+        Try
+            Dim fresh = Wim360Reader.Inspect(currentAudit.MainFile)
+            Dim actual = fresh.Images.FirstOrDefault(Function(x) x.Index = selected.Index)
+            If Not fresh.IsSplitSet OrElse actual Is Nothing Then
+                Throw New InvalidDataException("SWM index metadata changed. Audit it again.")
+            End If
+            Dim fullOutput = Path.GetFullPath(target)
+            capacity = Wim360ExportCapacity.CheckDestination(
+                Path.GetDirectoryName(fullOutput),
+                fresh.SplitSet.TotalBytes, actual.UncompressedBytes)
+        Catch ex As Exception
+            ErrorDiagnostics.RememberFailure("SWM export destination capacity", ex)
+            MessageBox.Show(Me, "Export was NOT started." & Environment.NewLine &
+                ex.Message, "SWM export - capacity check",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            Return
+        End Try
         If MessageBox.Show(Me, "Export verified SWM index " &
             selected.Index.ToString() & " to a NEW WIM?" &
             Environment.NewLine & target & Environment.NewLine &
-            "Both the audit and DISM export recheck all SWM bytes. " &
-            "This may take significant disk space and processing time.",
+            "All SWM bytes are rechecked before/after export." &
+            Environment.NewLine & capacity.Summary & Environment.NewLine &
+            "Free space is not reserved. Other processes can consume it.",
             "SWM export - confirm", MessageBoxButtons.YesNo,
             MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) <>
             DialogResult.Yes Then Return
