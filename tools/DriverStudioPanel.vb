@@ -47,6 +47,7 @@ Public NotInheritable Class DriverStudioPanel
     Private comparedSource As String = ""
     Private comparedRecurse As Boolean
     Private comparedArchitecture As String = ""
+    Private comparedInventoryFingerprint As String = ""
     Private ReadOnly packageAudits As New Dictionary(Of String,
         DriverStudioPackageAudit.AuditResult)(StringComparer.OrdinalIgnoreCase)
     Private ReadOnly importHistory As New List(Of String)()
@@ -521,6 +522,7 @@ Public NotInheritable Class DriverStudioPanel
         Dim index = currentIndex()
         Dim mount = currentMount()
         comparisonVerified = False
+        comparedInventoryFingerprint = ""
         WorkState(True)
         statusLabel.Text = "Checking selected WIM index and reading driver versions..."
         Dim sourceItems As New List(Of DriverStudioEngine.DriverPackage)()
@@ -540,6 +542,9 @@ Public NotInheritable Class DriverStudioPanel
             End Function)
             Dim results = DriverStudioEngine.CompareCandidates(
                 sourceItems, installed, True, architecture)
+            Dim inventoryFingerprint =
+                DriverStudioInstaller.SnapshotInstalledInventory(installed)
+            comparedInventoryFingerprint = inventoryFingerprint
             comparedArchitecture = architecture
             comparedWim = imagePath
             comparedIndex = index
@@ -574,6 +579,7 @@ Public NotInheritable Class DriverStudioPanel
                               comparisonTarget As String,
                               Optional verified As Boolean = False)
         comparisonVerified = verified
+        If Not verified Then comparedInventoryFingerprint = ""
         packageAudits.Clear()
         lastTarget = comparisonTarget
         decisions = results
@@ -809,7 +815,8 @@ Public NotInheritable Class DriverStudioPanel
                 Return indexInfo.Architecture
             End Function)
             Dim plan = DriverStudioInstaller.ValidatePlan(
-                selected, sourceItems, installed, refreshedArchitecture)
+                selected, sourceItems, installed, refreshedArchitecture,
+                comparedInventoryFingerprint)
 
             For Each package As DriverStudioEngine.DriverPackage In plan
                 If stopAfterCurrent Then Exit For
@@ -902,6 +909,7 @@ Public NotInheritable Class DriverStudioPanel
         Finally
             imageLease?.Dispose()
             comparisonVerified = False
+            comparedInventoryFingerprint = ""
             isInstalling = False
             stopAfterCurrent = False
             If Not IsDisposed Then
