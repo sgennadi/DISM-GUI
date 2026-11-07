@@ -101,6 +101,87 @@ Actions does **not** have actual Microsoft install.wim or the licensed,
 signed vendor driver package and must not claim that a real OEM import
 has been validated.
 
+## Windows 11 / Server 2022 / Server 2025: multi-image matrix (opt-in)
+
+The **same portable RealOemIntegration.exe** supports sequential matrix
+validation across real Windows 11, Server 2022 and Server 2025
+install.wim images/selected indexes with independently supplied, signed
+OEM drivers. It does not modify original WIMs or the running host.
+
+Create a local JSON manifest, for example C:\OEMTests\matrix.json:
+
+~~~json
+{
+  "schema": 1,
+  "targets": [
+    {
+      "name": "Windows 11",
+      "wim": "C:\\Images\\Win11\\install.wim",
+      "index": 1,
+      "inf": "C:\\OEM\\Win11\\netadapter.inf"
+    },
+    {
+      "name": "Server 2022",
+      "wim": "C:\\Images\\Server2022\\install.wim",
+      "index": 2,
+      "inf": "C:\\OEM\\Server2022\\netadapter.inf"
+    },
+    {
+      "name": "Server 2025",
+      "wim": "C:\\Images\\Server2025\\install.wim",
+      "index": 4,
+      "inf": "C:\\OEM\\Server2025\\netadapter.inf"
+    }
+  ]
+}
+~~~
+
+All paths and index numbers above are **examples**, not detected media.
+First check indexes with DISM /Get-WimInfo. Use real vendor-signed
+OEM packages with their .inf, .cat, .sys and required files intact,
+and match the driver and architecture to each image. Do not target
+an image that another process is actively servicing.
+
+Create an empty D:\DismOemTest on a local fixed drive.
+Run an elevated Windows terminal for the copy-only execute mode.
+
+### 1. Validate every source without mounting or changing any WIM
+
+~~~powershell
+.\RealOemIntegration.exe --plan --matrix "C:\OEMTests\matrix.json" --work-root "D:\DismOemTest"
+~~~
+
+The preflight verifies all selected WIM indexes, mount state,
+architecture, signed CAT, source-package manifest and scratch-space
+availability before servicing any image. No WIM is copied or mounted.
+
+### 2. Explicitly service only isolated, disposable copies
+
+~~~powershell
+.\RealOemIntegration.exe --execute --confirm TEST_COPY_ONLY --matrix "C:\OEMTests\matrix.json" --work-root "D:\DismOemTest"
+~~~
+
+The matrix requires a conservative combined scratch-space budget
+(minimum 16 GiB per target), executes one target at a time and
+stops at the first failure. For each image it repeats preflight,
+creates a unique disposable WIM copy, audits source and catalog,
+verifies newly staged OEM INF and unchanged unrelated driver
+inventory, commits the copy, checks the complete committed inventory
+after read-only remount and confirms the original WIM SHA-256 is unchanged.
+
+Individual OEM-*/oem-validation-report.json files and a local
+oem-matrix-*.json summary are retained under the work root.
+No data is uploaded. Matrix manifests have schema version 1, at most
+12 targets, unique target names and unique image/index pairs.
+Nothing forces unsigned drivers or commits a production WIM.
+
+**Important:** GitHub-hosted runners do not supply Windows 11 / Server
+2022 / Server 2025 install.wim sources or vendor OEM packages. Green CI
+builds prove the matrix arguments and safety checks, not real servicing
+of these three OS families. To certify them, run this matrix on an
+authorized disposable Windows test machine with the actual signed
+media and review each saved report.
+
 ## Test acceptance
 
 A genuine OEM scenario passes only if all of these are verified:
