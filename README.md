@@ -290,6 +290,42 @@ suppressed when the related inventory returned a warning. Duplicate identities
 are reported as ambiguous, rather than silently treated as a change. Always
 export with cleared Type/State/Search filters to get a complete comparison.
 
+### Image-write serialization and SWM export capacity (4.3.20 candidate)
+
+DISM GUI now uses a **single cooperative machine-local writer lock** for
+legacy DISM commands (Packages, Features, Drivers, Capture, Append, Apply,
+Cleanup, and metadata commands using that same legacy worker), WIM Mount,
+Commit/Discard, Driver Studio selective import, and SWM-to-WIM export.
+Driver Studio acquires the lock **before inventory preflight** and holds
+it through every INF import and postflight check, instead of unlocking
+between individual drivers. Two DISM GUI instances cannot concurrently
+perform these conflicting writes on the same computer. The legacy worker
+also serializes read-only DISM calls, prioritizing predictability.
+
+This lock is cooperative, NOT a system-wide DISM mutex: manually launched
+DISM, third-party software, disconnected hosts, and remote systems can
+still change images. The Windows OS releases the held lock when the owner
+exits. Do not manually remove persistent zero-byte lock files.
+
+For SWM export, the selected image's uncompressed size and complete
+source-part size produce a deliberately conservative destination estimate:
+at least the greater of **1 GiB**, **2x all SWM part bytes** or **60% of
+uncompressed image bytes**, **plus 512 MiB headroom**. Windows reports
+free bytes available to the current account, including supported network
+shares, via GetDiskFreeSpaceEx. Unknown or insufficient capacity blocks
+DISM before export; both the confirmation dialog and the export worker
+check space, with a last check immediately before launching the process.
+This is a **preflight check, not a disk-space reservation**: another
+application can still consume available space during the export.
+
+CI regression tests cover writer-lock contention and release, low-space
+refusal, capacity arithmetic overflow, and an actual disposable SWM
+export after the disk availability gate. These checks do **not** replace
+real Windows 11 / Windows Server servicing tests with signed OEM
+drivers or production-sized Windows images, which require safe source
+images supplied by the operator. Stable 4.3.19 is unaffected until
+this candidate is tested and published.
+
 ### SWM integrity audit and safe export to a NEW WIM (4.3.19)
 
 **WIM 360 → SWM audit / export** inspects a complete split SWM set,
