@@ -2322,7 +2322,18 @@ internal static class LayoutSmoke
                 new[] { source, changedSameVersionInf }, inventory, true);
             Require(sourceContentConflict.All(d => d.Status == "Review" && !d.Selected),
                     "Same-version INF identity with different SHA-256 must block automatic selection.");
-            Console.WriteLine("PASS Driver Studio conflicting source INF version/content review guards");
+            var sameInfOtherFolder = new DriverStudioEngine.DriverPackage {
+                InfName=source.InfName,
+                FilePath=System.IO.Path.Combine(temp, "alternate", source.InfName),
+                Provider=source.Provider, ClassName=source.ClassName,
+                Version=source.Version, DriverDate=source.DriverDate,
+                Sha256=source.Sha256
+            };
+            var sourceFolderConflict = DriverStudioEngine.CompareCandidates(
+                new[] { source, sameInfOtherFolder }, inventory, true);
+            Require(sourceFolderConflict.All(d => d.Status == "Review" && !d.Selected),
+                    "Identical INF bytes from two folders cannot prove identical CAT/SYS package contents.");
+            Console.WriteLine("PASS Driver Studio conflicting source INF version/content/folder review guards");
             var newerWithOlderDate = new DriverStudioEngine.DriverPackage {
                 InfName=source.InfName, FilePath=source.FilePath,
                 Provider=source.Provider, ClassName=source.ClassName,
