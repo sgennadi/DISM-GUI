@@ -362,17 +362,17 @@ Public NotInheritable Class DriverStudioEngine
             ' Identical INF bytes in different folders do not prove the CAT
             ' or SYS payloads are identical. Treat distinct sources as an
             ' ambiguous family instead of trusting the first directory.
-            Dim variant = Simplify(p.Version) & ChrW(0) &
-                          Simplify(p.DriverDate) & ChrW(0) &
-                          Simplify(p.Sha256) & ChrW(0) & Simplify(p.FilePath)
+            Dim sourceVariantKey = Simplify(p.Version) & ChrW(0) &
+                                   Simplify(p.DriverDate) & ChrW(0) &
+                                   Simplify(p.Sha256) & ChrW(0) & Simplify(p.FilePath)
             Dim existingVariant As String = Nothing
             If firstVariant.TryGetValue(key, existingVariant) Then
-                If Not String.Equals(existingVariant, variant,
+                If Not String.Equals(existingVariant, sourceVariantKey,
                                      StringComparison.Ordinal) Then
                     ambiguousSourceKeys.Add(key)
                 End If
             Else
-                firstVariant(key) = variant
+                firstVariant(key) = sourceVariantKey
             End If
         Next
 
