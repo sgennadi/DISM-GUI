@@ -884,6 +884,7 @@ Public NotInheritable Class DriverStudioPanel
             detailBox.Text = "No automatic rollback or Discard was performed." &
                 Environment.NewLine & ex.Message
         Finally
+            imageLease?.Dispose()
             comparisonVerified = False
             isInstalling = False
             stopAfterCurrent = False
