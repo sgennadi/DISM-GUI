@@ -965,7 +965,9 @@ internal static class LayoutSmoke
                     destination is not null && preview is not null &&
                     preview.ReadOnly && auditButton is not null &&
                     exportButton is not null && closeButton is not null &&
-                    footer is not null && footer.Dock == DockStyle.Bottom,
+                    footer is not null && footer.Dock == DockStyle.Fill &&
+                    footer.Parent is TableLayoutPanel &&
+                    ((TableLayoutPanel)footer.Parent).GetRow(footer) == 1,
                     "SWM tool must contain separate source/index/output fields and sticky actions");
             Require(!exportButton!.Enabled && !auditButton!.Enabled,
                     "No SWM export or audit should start before selecting a valid source");
