@@ -300,8 +300,8 @@ Public NotInheritable Class Wim360Dashboard
             .Margin = New Padding(0, 5, 0, 0),
             .BackColor = Color.White
         }
-        For i As Integer = 1 To 6
-            actions.RowStyles.Add(New RowStyle(SizeType.Percent, CSng(100.0 / 6.0)))
+        For i As Integer = 1 To 7
+            actions.RowStyles.Add(New RowStyle(SizeType.Percent, CSng(100.0 / 7.0)))
         Next
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
         actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
