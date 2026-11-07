@@ -12,7 +12,7 @@ using DISM_GUI;
 // Opt-in Windows-only end-to-end fixture for a REAL Windows install.wim and a
 // legitimately signed OEM driver. It NEVER services the original WIM.
 // It is intentionally separate from the regular CI synthetic-WIM smoke suite.
-internal static class RealOemIntegration
+internal static partial class RealOemIntegration
 {
     private const string ConfirmValue = "TEST_COPY_ONLY";
 
@@ -276,7 +276,8 @@ internal static class RealOemIntegration
             Require(blocked, "Conflicting plan/execute flags were accepted.");
             Require(RequiredFreeBytes(wim, 1) >= 16L * 1024 * 1024 * 1024,
                     "Scratch capacity estimate must fail conservatively.");
-            Console.WriteLine("PASS OEM test runner argument, path, opt-in and space guards.");
+            VerifyMatrixSelfTest(root, wim, inf, work);
+            Console.WriteLine("PASS OEM test runner argument, path, matrix, opt-in and space guards.");
             return 0;
         }
         finally
@@ -527,6 +528,8 @@ internal static class RealOemIntegration
     {
         try
         {
+            if (args.Any(x => string.Equals(x, "--matrix", StringComparison.OrdinalIgnoreCase)))
+                return await ExecuteMatrixAsync(args);
             var options = Parse(args);
             if (options.SelfTest) return SelfTest();
             return await ExecuteAsync(options);
@@ -536,6 +539,8 @@ internal static class RealOemIntegration
             Console.Error.WriteLine(ex.GetType().Name + ": " + ex.Message);
             Console.Error.WriteLine("Usage: --plan|--execute --wim <install.wim> " +
                 "--index <N> --inf <signed.inf> --work-root <local-folder> " +
+                "[--confirm TEST_COPY_ONLY]\nOr: --plan|--execute --matrix " +
+                "<manifest.json> --work-root <local-folder> " +
                 "[--confirm TEST_COPY_ONLY]\nOr: --self-test");
             return 2;
         }
