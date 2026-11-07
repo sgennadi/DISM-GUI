@@ -63,6 +63,21 @@ Public NotInheritable Class DriverStudioInventory
         End Select
     End Function
 
+    ' Fail closed when structured DISM output loses an identity field.
+    ' Blank/default metadata could otherwise turn an installed driver into "New".
+    Private Shared Function RequiredInventoryText(parent As JsonElement,
+                                                   name As String) As String
+        Dim item As JsonElement
+        If Not parent.TryGetProperty(name, item) OrElse
+           item.ValueKind <> JsonValueKind.String OrElse
+           String.IsNullOrWhiteSpace(item.GetString()) Then
+            Throw New InvalidDataException(
+                "Incomplete Get-WindowsDriver inventory (" & name &
+                "). Driver import is blocked; inspect the mounted image and retry.")
+        End If
+        Return item.GetString().Trim()
+    End Function
+
     Public Shared Function ParseInventoryJson(json As String) As List(Of DriverStudioEngine.DriverPackage)
         If String.IsNullOrWhiteSpace(json) OrElse json.Length > 8 * 1024 * 1024 Then
             Throw New InvalidDataException("Driver inventory is empty or exceeds 8 MB.")
@@ -87,17 +102,41 @@ Public NotInheritable Class DriverStudioInventory
                 If entry.ValueKind <> JsonValueKind.Object Then
                     Throw New InvalidDataException("Invalid driver-inventory item.")
                 End If
-                Dim infName = PropertyText(entry, "InfName")
-                If infName.Length > 0 Then infName = Path.GetFileName(infName)
+                Dim infName = Path.GetFileName(RequiredInventoryText(entry, "InfName"))
+                Dim provider = RequiredInventoryText(entry, "Provider")
+                Dim driverClass = RequiredInventoryText(entry, "ClassName")
+                Dim version = RequiredInventoryText(entry, "Version")
+                Dim driverDate = RequiredInventoryText(entry, "Date")
+                Dim publishedName = PropertyText(entry, "PublishedName")
+                Dim inboxElement As JsonElement
+                If Not entry.TryGetProperty("Inbox", inboxElement) OrElse
+                   (inboxElement.ValueKind <> JsonValueKind.True AndAlso
+                    inboxElement.ValueKind <> JsonValueKind.False) Then
+                    Throw New InvalidDataException(
+                        "Incomplete Get-WindowsDriver inventory (Inbox must be Boolean). " &
+                        "Driver import is blocked.")
+                End If
+                Dim isInbox = inboxElement.ValueKind = JsonValueKind.True
+                Dim parsedVersion As System.Version = Nothing
+                Dim parsedDate As DateTime
+                If Not infName.EndsWith(".inf", StringComparison.OrdinalIgnoreCase) OrElse
+                   Not System.Version.TryParse(version, parsedVersion) OrElse
+                   Not DateTime.TryParse(driverDate, Globalization.CultureInfo.InvariantCulture,
+                                         Globalization.DateTimeStyles.AllowWhiteSpaces,
+                                         parsedDate) OrElse
+                   (Not isInbox AndAlso String.IsNullOrWhiteSpace(publishedName)) Then
+                    Throw New InvalidDataException(
+                        "Invalid Get-WindowsDriver INF identity, version, date or published name. " &
+                        "Driver import is blocked until the full inventory is available.")
+                End If
                 results.Add(New DriverStudioEngine.DriverPackage With {
                     .InfName = infName,
-                    .PublishedName = PropertyText(entry, "PublishedName"),
-                    .Provider = PropertyText(entry, "Provider"),
-                    .ClassName = PropertyText(entry, "ClassName"),
-                    .Version = PropertyText(entry, "Version"),
-                    .DriverDate = PropertyText(entry, "Date"),
-                    .IsInbox = String.Equals(PropertyText(entry, "Inbox"), "True",
-                                             StringComparison.OrdinalIgnoreCase)
+                    .PublishedName = publishedName,
+                    .Provider = provider,
+                    .ClassName = driverClass,
+                    .Version = version,
+                    .DriverDate = driverDate,
+                    .IsInbox = isInbox
                 })
             Next
         End Using

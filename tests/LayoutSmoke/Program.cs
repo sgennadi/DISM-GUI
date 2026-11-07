@@ -2269,6 +2269,32 @@ internal static class LayoutSmoke
                     inventory[0].PublishedName == "oem8.inf" &&
                     !inventory[0].IsInbox,
                     "Driver Studio structured installed-driver inventory parse failed");
+
+            // A broken or partial Get-WindowsDriver response is NOT an empty
+            // installed-driver inventory. Never classify it as New and write.
+            var malformedInventories = new[] {
+                "{\"Unexpected\":\"not a driver record\"}",
+                json.Replace("\"Provider\":\"Contoso Corporation\",", ""),
+                json.Replace("\"ClassName\":\"Net\",", ""),
+                json.Replace("\"InfName\":\"contoso.inf\"", "\"InfName\":\"contoso.txt\""),
+                json.Replace("\"Version\":\"2.1.4.0\"", "\"Version\":\"invalid\""),
+                json.Replace("\"Date\":\"2026-11-03\"", "\"Date\":\"invalid\""),
+                json.Replace("\"PublishedName\":\"oem8.inf\"", "\"PublishedName\":\"\""),
+                json.Replace("\"Inbox\":false", "\"Inbox\":\"false\""),
+                json.Replace(",\"Inbox\":false", "")
+            };
+            foreach (var malformed in malformedInventories) {
+                bool rejected = false;
+                try {
+                    DriverStudioInventory.ParseInventoryJson(malformed);
+                } catch (System.IO.InvalidDataException) { rejected = true; }
+                Require(rejected,
+                    "Driver Studio must refuse missing, invalid or mistyped inventory fields.");
+            }
+            Require(DriverStudioInventory.ParseInventoryJson("[]").Count == 0,
+                "A real empty inventory array remains a valid structured response.");
+            Console.WriteLine("PASS Driver Studio rejects incomplete Get-WindowsDriver inventory");
+
             Require(DriverStudioInstaller.IsPresentInInventory(source, inventory) &&
                     !DriverStudioInstaller.IsPresentInInventory(armOnly, new[] {
                         new DriverStudioEngine.DriverPackage {
