@@ -22,6 +22,18 @@ Public NotInheritable Class WimImageOperationLease
     Private Sub New()
     End Sub
 
+    ' One cooperative machine-local lock shared by every DISM GUI writer.
+    ' Serializes Mount/Commit/Discard, Driver Studio and legacy DISM commands,
+    ' even when another instance uses a different source path alias.
+    ' This does not block external DISM tools or remote computers.
+    Public Shared ReadOnly Property WriterResource As String
+        Get
+            Return IO.Path.Combine(Environment.GetFolderPath(
+                Environment.SpecialFolder.CommonApplicationData),
+                "DISMGUI", "WRITER-GLOBAL")
+        End Get
+    End Property
+
     Private Shared Function LockRoot(Optional overrideDirectory As String = Nothing) As String
         Dim baseDirectory = If(String.IsNullOrWhiteSpace(overrideDirectory),
             IO.Path.Combine(Environment.GetFolderPath(

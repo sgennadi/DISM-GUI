@@ -27,7 +27,7 @@ def edit_once(path, old, new, label):
     print("Patched:", label)
 
 for name in ("ModernTheme.vb", "ResponsiveSectionLayout.vb", "ResponsiveForms.vb", "WindowGeometry.vb", "UpdateManager.vb", "SupportContact.vb", "ErrorDiagnostics.vb", "ErrorReportForm.vb", "RuntimeDiagnostics.vb", "UniversalDiagnosticsBridge.vb", "UniversalDiagnosticsEmbedded.vb", "UniversalDiagnosticsRuntime.vb", "UniversalDiagnosticsDelivery.vb", "UniversalDiagnosticsQueueForm.vb",
-             "Wim360Reader.vb", "Wim360SplitSet.vb", "Wim360SwmOperations.vb", "Wim360SwmToolsForm.vb", "WimImageOperationLease.vb", "Wim360Dashboard.vb", "Wim360InspectOverview.vb",
+             "Wim360Reader.vb", "Wim360SplitSet.vb", "Wim360SwmOperations.vb", "Wim360ExportCapacity.vb", "Wim360SwmToolsForm.vb", "WimImageOperationLease.vb", "Wim360Dashboard.vb", "Wim360InspectOverview.vb",
              "IntegratedTestChecks.vb", "IntegratedTestCenterForm.vb", "Wim360Servicing.vb",
              "Wim360Catalog.vb", "Wim360MetadataExport.vb", "Wim360IndexComparer.vb", "Wim360OfflineList.vb",
              "Wim360CompareIndexesForm.vb", "Wim360CrossImage.vb", "Wim360CrossImageForm.vb", "Wim360CrossMounted.vb", "Wim360ReparseSafety.vb", "Wim360InventoryForm.vb",
@@ -74,8 +74,13 @@ if "RuntimeDiagnostics.RecordDismExit(" not in main.read_text(encoding="utf-8-si
     original_main = main.read_text(encoding="utf-8-sig")
     command_exit = "        strDISMExitCode = DISM.ExitCode\n"
     unmount_exit = "        strDISMExitCode = DISM.ExitCode.ToString()\n"
-    if original_main.count(command_exit) != 2 or original_main.count(unmount_exit) != 1:
-        raise RuntimeError("Expected three legacy DISM exit points for safe instrumentation")
+    # The modern legacy worker now logs its own exit code while holding the
+    # global writer lease. Only Mount and Dismount still need instrumentation.
+    if (original_main.count(command_exit) != 1 or
+            original_main.count(unmount_exit) != 1 or
+            original_main.count('RuntimeDiagnostics.RecordDismExit("DISM legacy command"') != 1):
+        raise RuntimeError(
+            "Expected one Mount, one Dismount, and one guarded legacy DISM exit path")
     original_main = original_main.replace(command_exit,
         command_exit + '        RuntimeDiagnostics.RecordDismExit("DISM operation", strDISMExitCode)\n')
     original_main = original_main.replace(unmount_exit,

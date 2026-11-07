@@ -777,7 +777,12 @@ Public NotInheritable Class DriverStudioPanel
         Dim succeeded As Integer = 0
         Dim completed As Integer = 0
         Dim appliedPackages As New List(Of DriverStudioEngine.DriverPackage)()
+        Dim imageLease As WimImageOperationLease = Nothing
         Try
+            ' Hold one cross-process write lease for the COMPLETE batch,
+            ' including inventory preflight and postflight, not per INF.
+            imageLease = WimImageOperationLease.Acquire(
+                WimImageOperationLease.WriterResource, comparedWim, comparedMount)
             statusLabel.Text = "Preflight: verifying read/write mount and fresh driver inventory..."
             Dim mountRoot = Await Task.Run(Function()
                 Return DriverStudioInstaller.RequireWritableTarget(
@@ -879,6 +884,7 @@ Public NotInheritable Class DriverStudioPanel
             detailBox.Text = "No automatic rollback or Discard was performed." &
                 Environment.NewLine & ex.Message
         Finally
+            imageLease?.Dispose()
             comparisonVerified = False
             isInstalling = False
             stopAfterCurrent = False

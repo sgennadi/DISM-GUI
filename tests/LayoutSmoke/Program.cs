@@ -941,11 +941,44 @@ internal static class LayoutSmoke
                     "Cross-process lease must lock mount paths even with reverse order");
                 using var other = WimImageOperationLease.AcquireAt(lockDir, independent);
             }
-            using (var released = WimImageOperationLease.AcquireAt(lockDir, first, second))
+            // The global writer key is shared by Mount, Commit, legacy
+            // Package/Feature/Driver commands, Driver Studio and SWM export.
+            using (var activeWriter = WimImageOperationLease.AcquireAt(lockDir,
+                WimImageOperationLease.WriterResource, first))
+            {
+                bool blocked = false;
+                try {
+                    using var otherWriter = WimImageOperationLease.AcquireAt(lockDir,
+                        WimImageOperationLease.WriterResource, independent);
+                } catch (InvalidOperationException) { blocked = true; }
+                Require(blocked,
+                    "Different images must still be serialized by the global writer guard");
+            }
+            using (var released = WimImageOperationLease.AcquireAt(lockDir,
+                WimImageOperationLease.WriterResource, first, second))
             {
                 Require(released is not null,
-                    "Image operation lock must release after completion");
+                    "Global writer guard must release after the operation");
             }
+            const long GiB = 1073741824L;
+            var minimum = Wim360ExportCapacity.RequiredBytes(200 * 1048576L,
+                0L);
+            Require(minimum >= GiB + GiB / 2 &&
+                    Wim360ExportCapacity.RequiredBytes(4 * GiB, 2 * GiB) >
+                    8 * GiB,
+                    "SWM export capacity must reserve a conservative buffer");
+            bool lowSpaceRejected = false;
+            try { Wim360ExportCapacity.RequireAvailable(100L, minimum); }
+            catch (IOException) { lowSpaceRejected = true; }
+            Require(lowSpaceRejected,
+                "SWM low-space preflight must abort BEFORE running DISM");
+            Wim360ExportCapacity.RequireAvailable(minimum, minimum);
+            bool overflowRejected = false;
+            try { Wim360ExportCapacity.RequiredBytes(long.MaxValue, long.MaxValue); }
+            catch (IOException) { overflowRejected = true; }
+            Require(overflowRejected,
+                "SWM space estimation must reject integer-overflow estimates");
+            Console.WriteLine("PASS shared image writer lock, free-space safety and overflow gates");
             Require(System.IO.Directory.GetFiles(lockDir, "*.lock").Length >= 3,
                 "Cross-process OS locks must keep stable lock filenames instead of deleting them");
 
