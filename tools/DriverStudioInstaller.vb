@@ -239,6 +239,70 @@ Public NotInheritable Class DriverStudioInstaller
         End Function)
     End Function
 
+    ' A successful DISM exit is only the first step of a batch checkpoint.
+    ' Verify the staged INF and fail closed when ANY unrelated driver record
+    ' was added, removed, or modified while DISM serviced the image. An upgrade
+    ' may legitimately add or replace records of the selected INF family.
+    ' Return the expected complete-inventory fingerprint for the next INF.
+    Private Shared Function IsSelectedFamily(
+        installed As DriverStudioEngine.DriverPackage,
+        selected As DriverStudioEngine.DriverPackage) As Boolean
+        Return String.Equals(Path.GetFileName(If(installed.InfName, "")),
+                             Path.GetFileName(If(selected.InfName, "")),
+                             StringComparison.OrdinalIgnoreCase) AndAlso
+               String.Equals(installed.Provider, selected.Provider,
+                             StringComparison.OrdinalIgnoreCase) AndAlso
+               String.Equals(installed.ClassName, selected.ClassName,
+                             StringComparison.OrdinalIgnoreCase)
+    End Function
+
+    Public Shared Function ValidateStagedBatchCheckpoint(
+        beforeInventory As IEnumerable(Of DriverStudioEngine.DriverPackage),
+        afterInventory As IEnumerable(Of DriverStudioEngine.DriverPackage),
+        installedPackage As DriverStudioEngine.DriverPackage) As String
+        If beforeInventory Is Nothing Then
+            Throw New ArgumentNullException(NameOf(beforeInventory))
+        End If
+        If afterInventory Is Nothing Then
+            Throw New ArgumentNullException(NameOf(afterInventory))
+        End If
+        If installedPackage Is Nothing OrElse
+           String.IsNullOrWhiteSpace(installedPackage.InfName) OrElse
+           String.IsNullOrWhiteSpace(installedPackage.Provider) OrElse
+           String.IsNullOrWhiteSpace(installedPackage.ClassName) Then
+            Throw New InvalidOperationException(
+                "Invalid driver identity for post-install batch verification.")
+        End If
+
+        Dim before = beforeInventory.ToList()
+        Dim after = afterInventory.ToList()
+        Dim beforeFingerprint = SnapshotInstalledInventory(before)
+        Dim afterFingerprint = SnapshotInstalledInventory(after)
+        If beforeFingerprint = afterFingerprint OrElse
+           IsPresentInInventory(installedPackage, before) OrElse
+           Not IsPresentInInventory(installedPackage, after) Then
+            Throw New InvalidOperationException(
+                "DISM returned success but the newly staged INF was not confirmed " &
+                "in the mounted driver inventory. Stop the batch and inspect the image.")
+        End If
+
+        Dim beforeUnrelated = before.Where(Function(p)
+            Return Not IsSelectedFamily(p, installedPackage)
+        End Function)
+        Dim afterUnrelated = after.Where(Function(p)
+            Return Not IsSelectedFamily(p, installedPackage)
+        End Function)
+        If Not String.Equals(SnapshotInstalledInventory(beforeUnrelated),
+                             SnapshotInstalledInventory(afterUnrelated),
+                             StringComparison.Ordinal) Then
+            Throw New InvalidOperationException(
+                "Other driver entries changed during this INF import. " &
+                "The remaining batch is blocked until the mounted image is reviewed.")
+        End If
+
+        Return afterFingerprint
+    End Function
+
     Private Shared Function SameDate(a As String, b As String) As Boolean
         Dim parsedA As DateTime
         Dim parsedB As DateTime
