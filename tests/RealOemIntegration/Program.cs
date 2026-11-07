@@ -202,15 +202,21 @@ internal static class RealOemIntegration
 
     private static bool MountedHere(string copy, string mount)
     {
-        try
-        {
-            var inspected = Wim360Reader.Inspect(copy);
-            return inspected.Images.Any(x =>
-                x.MountStatus.StartsWith("Mounted", StringComparison.OrdinalIgnoreCase) &&
+        if (!File.Exists(copy)) return false;
+        var inspected = Wim360Reader.Inspect(copy);
+        Require(string.IsNullOrWhiteSpace(inspected.MountScanWarning),
+                "Unable to verify test-copy mount status: " + inspected.MountScanWarning);
+        var mounted = inspected.Images.Where(x =>
+            x.MountStatus.StartsWith("Mounted", StringComparison.OrdinalIgnoreCase)).ToList();
+        Require(!inspected.Images.Any(x =>
+                x.MountStatus != "Not mounted" &&
+                !x.MountStatus.StartsWith("Mounted", StringComparison.OrdinalIgnoreCase)),
+                "The test WIM has an ambiguous/invalid mount state; manual review required.");
+        Require(mounted.All(x =>
                 string.Equals(Path.GetFullPath(x.MountFolder).TrimEnd('\\', '/'),
-                              mount.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase));
-        }
-        catch { return false; }
+                              mount.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase)),
+                "Test copy is mounted in an unexpected folder; refusing automatic dismount.");
+        return mounted.Count > 0;
     }
 
     private static async Task DiscardOursAsync(Report report, string copy, string mount)
@@ -447,8 +453,10 @@ internal static class RealOemIntegration
             }
             try
             {
-                if (File.Exists(plan.Wim) && report.SourceSha256Before.Length == 64)
+                if (report.SourceSha256Before.Length == 64)
                 {
+                    Require(File.Exists(plan.Wim),
+                        "Original WIM disappeared during the test.");
                     report.SourceSha256After = HashFile(plan.Wim);
                     if (report.SourceSha256After != report.SourceSha256Before)
                     {
