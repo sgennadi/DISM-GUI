@@ -42,7 +42,7 @@ Actions build (Artifacts). The latter requires no .NET SDK and is deliberately
 not included in DISM GUI's stable release.
 
 For the portable executable, replace the dotnet-run project prefix in the
-examples below with .\\RealOemIntegration.exe and use the same arguments.
+examples below with .\RealOemIntegration.exe and use the same arguments.
 Verify the ZIP originated from a successful run of the expected GitHub
 commit. The runner requires normal elevated Windows servicing privileges.
 
