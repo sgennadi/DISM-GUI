@@ -297,9 +297,10 @@ internal static class RealOemIntegration
         Require(!info.IsSplitSet, "Split WIM/SWM is not supported by this test.");
         var image = info.Images.SingleOrDefault(x => x.Index == options.Index);
         Require(image is not null, "Selected WIM index does not exist.");
-        Require(!info.Images.Any(x =>
-                    x.MountStatus.StartsWith("Mounted", StringComparison.OrdinalIgnoreCase)),
-                "Source WIM is mounted. Unmount it before testing a copy.");
+        Require(string.IsNullOrWhiteSpace(info.MountScanWarning) &&
+                info.Images.All(x => x.MountStatus == "Not mounted"),
+                "Source WIM mount state is unknown or already mounted. " +
+                "Resolve mounted-image status before creating a test copy.");
         var arch = image!.Architecture;
         Require(arch.Contains("64", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(arch, "x86", StringComparison.OrdinalIgnoreCase),
@@ -350,9 +351,10 @@ internal static class RealOemIntegration
         Directory.CreateDirectory(job);
         Directory.CreateDirectory(mount);
         bool successful = false;
+        WimImageOperationLease? writerLease = null;
         try
         {
-            using var writerLease = WimImageOperationLease.Acquire(
+            writerLease = WimImageOperationLease.Acquire(
                 WimImageOperationLease.WriterResource, plan.Wim, copy, mount);
             report.SourceSha256Before = HashFile(plan.Wim);
             report.Events.Add("Copying original WIM to isolated test WIM");
@@ -461,6 +463,15 @@ internal static class RealOemIntegration
                 successful = false;
                 report.Result = "FAIL - could not verify original WIM after test";
                 report.Warnings.Add("Final original hash: " + ex.Message);
+            }
+            // Retain the cooperative DISM GUI write lock through final
+            // unmount and source hash verification, not just the install step.
+            try { writerLease?.Dispose(); }
+            catch (Exception ex)
+            {
+                successful = false;
+                report.Result = "FAIL - unable to release servicing lease";
+                report.Warnings.Add("Writer lease: " + ex.Message);
             }
             if (successful)
                 report.Result = "PASS - staged and committed test copy; original unchanged";
