@@ -30,6 +30,17 @@ for vb_path in sorted((ROOT / "tools").glob("*.vb")):
         issues.append("VB.NET List.Count(predicate) compilation regression in " + vb_path.name)
 if "repair_dism_image_commands(" not in prepared:
     issues.append("DISM mount/apply index quoting guard missing")
+legacy = (ROOT / "tools" / "apply_fix.py").read_text(encoding="utf-8")
+if "serialize generic DISM commands under writer guard" not in legacy:
+    issues.append("Legacy package/feature/capture DISM lock guard missing")
+if "WimImageOperationLease.WriterResource" not in legacy:
+    issues.append("Shared writer resource missing from legacy DISM worker")
+driver = (ROOT / "tools" / "DriverStudioPanel.vb").read_text(encoding="utf-8")
+if "imageLease = WimImageOperationLease.Acquire(" not in driver:
+    issues.append("Driver Studio batch write lease missing")
+swm = (ROOT / "tools" / "Wim360SwmOperations.vb").read_text(encoding="utf-8")
+if "Wim360ExportCapacity.CheckDestination(" not in swm:
+    issues.append("SWM export free-space gate missing")
 if issues:
     for item in issues:
         print("PRE-BUILD ERROR:", item)
