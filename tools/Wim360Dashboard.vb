@@ -74,7 +74,7 @@ Public NotInheritable Class Wim360Dashboard
         ' Scroll rather than truncate content on high-DPI or short viewports.
         Dim factor As Single = Math.Max(1.0F, Me.Font.Height / 16.0F)
         Dim stackSource As Boolean = factor > 1.15F
-        For Each height As Integer In {62, 66, 85, 36, 190, 205, 163, 374}
+        For Each height As Integer In {62, 66, 85, 36, 190, 205, 163, 434}
             dashboardLayout.RowStyles.Add(New RowStyle(SizeType.Absolute,
                 CInt(Math.Ceiling(height * factor))))
         Next
