@@ -44,6 +44,10 @@ jobs:
         shell: pwsh
         run: |
           python -c "from pathlib import Path; s=Path('DISM GUI/frmMain.vb').read_text(encoding='utf-8-sig'); assert 'ChooseFolderModern(' in s and 'ShowUnmountResult(' in s; assert s.count(' /Index:') >= 4; assert '/index:' + chr(34)*3 not in s; print('Patched source OK')"
+      - name: Self-test opt-in signed OEM driver runner safety (x64)
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: dotnet run --project tests/RealOemIntegration/RealOemIntegration.csproj --configuration Release -p:Platform=AnyCPU -- --self-test
       - name: Smoke-test WinForms and real read-only WIM mount (x64)
         if: matrix.rid == 'win-x64'
         shell: pwsh
