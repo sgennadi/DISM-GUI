@@ -2302,6 +2302,27 @@ internal static class LayoutSmoke
                 new[] { newer }, inventory, true);
             Require(comparisonNewer[0].Status == "Newer" && comparisonNewer[0].Selected,
                     "Newer driver should be selected by default");
+            // Conflict detection must run for the whole source folder, not
+            // only for later entries. Neither conflicting INF may be auto-added.
+            var sourceVersionConflict = DriverStudioEngine.CompareCandidates(
+                new[] { source, newer }, inventory, true);
+            var reversedSourceConflict = DriverStudioEngine.CompareCandidates(
+                new[] { newer, source }, inventory, true);
+            Require(sourceVersionConflict.Count == 2 &&
+                    sourceVersionConflict.All(d => d.Status == "Review" && !d.Selected) &&
+                    reversedSourceConflict.All(d => d.Status == "Review" && !d.Selected),
+                    "Multiple versions of one incoming INF identity must block both selections, regardless of scan order.");
+            var changedSameVersionInf = new DriverStudioEngine.DriverPackage {
+                InfName=source.InfName, FilePath=source.FilePath,
+                Provider=source.Provider, ClassName=source.ClassName,
+                Version=source.Version, DriverDate=source.DriverDate,
+                Sha256=new string('A', 64)
+            };
+            var sourceContentConflict = DriverStudioEngine.CompareCandidates(
+                new[] { source, changedSameVersionInf }, inventory, true);
+            Require(sourceContentConflict.All(d => d.Status == "Review" && !d.Selected),
+                    "Same-version INF identity with different SHA-256 must block automatic selection.");
+            Console.WriteLine("PASS Driver Studio conflicting source INF version/content review guards");
             var newerWithOlderDate = new DriverStudioEngine.DriverPackage {
                 InfName=source.InfName, FilePath=source.FilePath,
                 Provider=source.Provider, ClassName=source.ClassName,
