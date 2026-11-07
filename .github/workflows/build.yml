@@ -44,6 +44,30 @@ jobs:
         shell: pwsh
         run: |
           python -c "from pathlib import Path; s=Path('DISM GUI/frmMain.vb').read_text(encoding='utf-8-sig'); assert 'ChooseFolderModern(' in s and 'ShowUnmountResult(' in s; assert s.count(' /Index:') >= 4; assert '/index:' + chr(34)*3 not in s; print('Patched source OK')"
+      - name: Self-test opt-in signed OEM driver runner safety (x64)
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: dotnet run --project tests/RealOemIntegration/RealOemIntegration.csproj --configuration Release -p:Platform=AnyCPU -- --self-test
+      - name: Publish portable opt-in OEM integration runner (x64)
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: |
+          dotnet publish tests/RealOemIntegration/RealOemIntegration.csproj -c Release -r win-x64 --self-contained true '-p:PublishSingleFile=true' '-p:PublishReadyToRun=false' '-p:Platform=AnyCPU' -o artifacts/oem-runner
+          if ($LASTEXITCODE -ne 0) { throw 'OEM integration runner publish failed' }
+          if (-not (Test-Path -LiteralPath 'artifacts/oem-runner/RealOemIntegration.exe')) {
+            throw 'OEM integration runner executable missing'
+          }
+          Get-ChildItem -LiteralPath 'artifacts/oem-runner' -File |
+            Where-Object { $_.Extension -ieq '.pdb' } | Remove-Item -Force
+          Copy-Item -LiteralPath docs/REAL-WIM-OEM-INTEGRATION.md -Destination artifacts/oem-runner/README-REAL-OEM.md
+          Compress-Archive -Path 'artifacts/oem-runner/*' -DestinationPath 'artifacts/RealOemIntegration-win-x64.zip' -Force
+      - name: Upload opt-in OEM validation runner (x64, NOT a release)
+        if: matrix.rid == 'win-x64'
+        uses: actions/upload-artifact@v7
+        with:
+          name: RealOemIntegration-win-x64
+          path: artifacts/RealOemIntegration-win-x64.zip
+          if-no-files-found: error
       - name: Smoke-test WinForms and real read-only WIM mount (x64)
         if: matrix.rid == 'win-x64'
         shell: pwsh
