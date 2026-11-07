@@ -2354,6 +2354,66 @@ internal static class LayoutSmoke
             } catch (InvalidOperationException) { staleBlocked = true; }
             Require(staleBlocked,
                 "The installer must block a stale comparison after inventory changed");
+
+            // A different installed version can still leave the incoming driver
+            // classified as Newer. That must NOT silently authorize an old plan.
+            var previousBaseline = new DriverStudioEngine.DriverPackage {
+                InfName=source.InfName, PublishedName="oem7.inf",
+                Provider=source.Provider, ClassName=source.ClassName,
+                Version="1.0.0.0", DriverDate="2026-10-01"
+            };
+            var approvedUpgrade = DriverStudioEngine.CompareCandidates(
+                new[] { source }, new[] { previousBaseline }, true, "AMD64");
+            Require(approvedUpgrade.Count == 1 &&
+                    approvedUpgrade[0].Status == "Newer" &&
+                    approvedUpgrade[0].Selected,
+                    "The initial comparison should identify a newer incoming INF.");
+            var unchangedUpgrade = DriverStudioInstaller.ValidatePlan(
+                approvedUpgrade, new[] { source }, new[] { previousBaseline }, "AMD64");
+            Require(unchangedUpgrade.Count == 1,
+                    "Unchanged installed-driver baseline should retain approval.");
+
+            var changedBaseline = new DriverStudioEngine.DriverPackage {
+                InfName=source.InfName, PublishedName="oem7.inf",
+                Provider=source.Provider, ClassName=source.ClassName,
+                Version="1.5.0.0", DriverDate="2026-10-02"
+            };
+            Require(DriverStudioEngine.CompareCandidates(
+                        new[] { source }, new[] { changedBaseline },
+                        true, "AMD64")[0].Status == "Newer",
+                    "Regression fixture must keep the same Newer decision.");
+            bool baselineVersionBlocked = false;
+            try {
+                DriverStudioInstaller.ValidatePlan(
+                    approvedUpgrade, new[] { source }, new[] { changedBaseline }, "AMD64");
+            } catch (InvalidOperationException) { baselineVersionBlocked = true; }
+            Require(baselineVersionBlocked,
+                    "Driver import must reject changed installed versions even if status stays Newer.");
+
+            var republishedBaseline = new DriverStudioEngine.DriverPackage {
+                InfName=source.InfName, PublishedName="oem99.inf",
+                Provider=source.Provider, ClassName=source.ClassName,
+                Version="1.0.0.0", DriverDate="2026-10-01"
+            };
+            bool publishedNameBlocked = false;
+            try {
+                DriverStudioInstaller.ValidatePlan(
+                    approvedUpgrade, new[] { source },
+                    new[] { republishedBaseline }, "AMD64");
+            } catch (InvalidOperationException) { publishedNameBlocked = true; }
+            Require(publishedNameBlocked,
+                    "Replaced OEM published driver identity must invalidate approval.");
+
+            bool differentArchitectureBlocked = false;
+            try {
+                DriverStudioInstaller.ValidatePlan(
+                    approvedUpgrade, new[] { source },
+                    new[] { previousBaseline }, "ARM64");
+            } catch (InvalidOperationException) { differentArchitectureBlocked = true; }
+            Require(differentArchitectureBlocked,
+                    "Fresh architecture mismatch must invalidate a previously allowed driver.");
+            Console.WriteLine("PASS Driver Studio stale installed-driver baseline and image architecture guards");
+
             var tampered = new DriverStudioEngine.DriverPackage {
                 FilePath=source.FilePath, InfName=source.InfName, Provider=source.Provider,
                 ClassName=source.ClassName, Version=source.Version,

@@ -29,13 +29,38 @@ Public NotInheritable Class DriverStudioInstaller
              String.Equals(d.Status, "Newer", StringComparison.Ordinal))
     End Function
 
+    ' A rechecked decision can remain "Newer" even if the mounted image's
+    ' existing driver has changed in the meantime (e.g. 1.0 -> 1.5 while
+    ' incoming is 2.0). Compare the precise reviewed baseline as well.
+    Private Shared Function SameInstalledSnapshot(
+        reviewed As DriverStudioEngine.DriverPackage,
+        refreshed As DriverStudioEngine.DriverPackage) As Boolean
+        If reviewed Is Nothing OrElse refreshed Is Nothing Then
+            Return reviewed Is Nothing AndAlso refreshed Is Nothing
+        End If
+        Return String.Equals(reviewed.InfName, refreshed.InfName,
+                             StringComparison.OrdinalIgnoreCase) AndAlso
+            String.Equals(reviewed.PublishedName, refreshed.PublishedName,
+                          StringComparison.OrdinalIgnoreCase) AndAlso
+            String.Equals(reviewed.Provider, refreshed.Provider,
+                          StringComparison.OrdinalIgnoreCase) AndAlso
+            String.Equals(reviewed.ClassName, refreshed.ClassName,
+                          StringComparison.OrdinalIgnoreCase) AndAlso
+            String.Equals(reviewed.Version, refreshed.Version,
+                          StringComparison.OrdinalIgnoreCase) AndAlso
+            String.Equals(reviewed.DriverDate, refreshed.DriverDate,
+                          StringComparison.OrdinalIgnoreCase) AndAlso
+            reviewed.IsInbox = refreshed.IsInbox
+    End Function
+
     ' Pure preflight: the candidate list and inventory are freshly re-read by
-    ' the caller. Source INF SHA-256, identity, date, version and the decision
-    ' must still match the previous user-reviewed selection.
+    ' the caller. Source INF SHA-256, identity, date, version, installed-driver
+    ' snapshot, target architecture and decision must all match the selection.
     Public Shared Function ValidatePlan(
         reviewed As IEnumerable(Of DriverStudioEngine.Decision),
         freshSource As IEnumerable(Of DriverStudioEngine.DriverPackage),
-        freshInstalled As IEnumerable(Of DriverStudioEngine.DriverPackage)
+        freshInstalled As IEnumerable(Of DriverStudioEngine.DriverPackage),
+        Optional targetArchitecture As String = ""
     ) As List(Of DriverStudioEngine.DriverPackage)
         If reviewed Is Nothing OrElse freshSource Is Nothing OrElse
            freshInstalled Is Nothing Then
@@ -52,7 +77,8 @@ Public NotInheritable Class DriverStudioInstaller
         End If
 
         Dim current = DriverStudioEngine.CompareCandidates(freshSource,
-                                                            freshInstalled, True)
+                                                            freshInstalled, True,
+                                                            targetArchitecture)
         Dim approved As New List(Of DriverStudioEngine.DriverPackage)()
         Dim seen As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
         For Each reviewedDecision In selected
@@ -74,6 +100,12 @@ Public NotInheritable Class DriverStudioInstaller
                                  StringComparison.Ordinal) Then
                 Throw New InvalidOperationException(
                     "Image inventory or driver decision changed for " &
+                    oldPkg.InfName & ". Compare again before importing.")
+            End If
+            If Not SameInstalledSnapshot(reviewedDecision.Existing,
+                                         matching(0).Existing) Then
+                Throw New InvalidOperationException(
+                    "The installed driver baseline changed since comparison: " &
                     oldPkg.InfName & ". Compare again before importing.")
             End If
             Dim freshPkg = matching(0).Candidate

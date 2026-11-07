@@ -793,7 +793,23 @@ Public NotInheritable Class DriverStudioPanel
             End Function)
             Dim installed = Await DriverStudioInventory.ReadMountedAsync(
                 comparedWim, comparedIndex, comparedMount, CancellationToken.None)
-            Dim plan = DriverStudioInstaller.ValidatePlan(selected, sourceItems, installed)
+            ' Re-inspect the image architecture before servicing. An image
+            ' replaced in-place since comparison must not retain old approvals.
+            Dim refreshedArchitecture = Await Task.Run(Function()
+                Dim image = Wim360Reader.Inspect(comparedWim)
+                Dim indexInfo = image.Images.FirstOrDefault(
+                    Function(x) x.Index = comparedIndex)
+                If indexInfo Is Nothing OrElse
+                   Not String.Equals(indexInfo.Architecture, comparedArchitecture,
+                                     StringComparison.OrdinalIgnoreCase) Then
+                    Throw New InvalidOperationException(
+                        "The image architecture changed since driver comparison. " &
+                        "Compare again before importing.")
+                End If
+                Return indexInfo.Architecture
+            End Function)
+            Dim plan = DriverStudioInstaller.ValidatePlan(
+                selected, sourceItems, installed, refreshedArchitecture)
 
             For Each package As DriverStudioEngine.DriverPackage In plan
                 If stopAfterCurrent Then Exit For
