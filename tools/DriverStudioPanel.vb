@@ -817,6 +817,8 @@ Public NotInheritable Class DriverStudioPanel
             Dim plan = DriverStudioInstaller.ValidatePlan(
                 selected, sourceItems, installed, refreshedArchitecture,
                 comparedInventoryFingerprint)
+            Dim expectedInventoryFingerprint =
+                DriverStudioInstaller.SnapshotInstalledInventory(installed)
 
             For Each package As DriverStudioEngine.DriverPackage In plan
                 If stopAfterCurrent Then Exit For
@@ -826,6 +828,13 @@ Public NotInheritable Class DriverStudioPanel
                     Return DriverStudioInstaller.RequireWritableTarget(
                         comparedWim, comparedIndex, comparedMount)
                 End Function)
+                ' Even while we hold the cooperative writer lease, an external
+                ' DISM or administrator can change the mount. Do not trust
+                ' the batch's initial inventory after the previous INF.
+                Dim beforeStep = Await DriverStudioInventory.ReadMountedAsync(
+                    comparedWim, comparedIndex, comparedMount, CancellationToken.None)
+                DriverStudioInstaller.RequireInventorySnapshot(
+                    expectedInventoryFingerprint, beforeStep)
 
                 statusLabel.Text = "Installing " & (completed + 1).ToString() & "/" &
                     plan.Count.ToString() & ": " & package.InfName &
@@ -833,12 +842,37 @@ Public NotInheritable Class DriverStudioPanel
                 Dim outcome = Await DriverStudioInstaller.AddOneAsync(
                     mountRoot, package, packageAudits(package.FilePath), comparedArchitecture)
                 completed += 1
-                If outcome.Succeeded Then
-                    succeeded += 1
-                    appliedPackages.Add(package)
+                Dim checkpointError As Exception = Nothing
+
+                If Not outcome.Succeeded Then
+                    RuntimeDiagnostics.RecordDismExit(
+                        "Driver Studio install", outcome.ExitCode.ToString())
+                Else
+                    ' A successful DISM process exit is NOT an inventory
+                    ' confirmation. Do not label the item as installed, or
+                    ' include it in successful counts, until the checkpoint
+                    ' verifies the mounted image after this specific INF.
+                    Try
+                        statusLabel.Text = "Verifying driver " & completed.ToString() &
+                            "/" & plan.Count.ToString() & " in mounted inventory..."
+                        Dim afterStep = Await DriverStudioInventory.ReadMountedAsync(
+                            comparedWim, comparedIndex, comparedMount,
+                            CancellationToken.None)
+                        expectedInventoryFingerprint =
+                            DriverStudioInstaller.ValidateStagedBatchCheckpoint(
+                                beforeStep, afterStep, package)
+                        succeeded += 1
+                        appliedPackages.Add(package)
+                        importHistory.Add("Checkpoint confirmed: " & package.InfName &
+                            " staged; unrelated driver inventory unchanged.")
+                    Catch verificationError As Exception
+                        checkpointError = verificationError
+                    End Try
                 End If
-                importHistory.Add(package.InfName & " | " &
-                    If(outcome.Succeeded, "Installed", "FAILED") &
+
+                Dim stageStatus = If(Not outcome.Succeeded, "FAILED",
+                    If(checkpointError Is Nothing, "Installed (verified)", "UNVERIFIED"))
+                importHistory.Add(package.InfName & " | " & stageStatus &
                     " | DISM exit: " & outcome.ExitCode.ToString() &
                     If(outcome.RebootRequired, " | Restart required", "") &
                     Environment.NewLine & outcome.Details)
@@ -846,15 +880,20 @@ Public NotInheritable Class DriverStudioPanel
                 For Each row As DataGridViewRow In grid.Rows
                     If String.Equals(Convert.ToString(row.Cells(1).Value),
                                      package.InfName, StringComparison.OrdinalIgnoreCase) Then
-                        row.Cells(4).Value = If(outcome.Succeeded,
-                                                "Installed", "FAILED")
+                        row.Cells(4).Value = stageStatus
                         row.Cells(0).Value = False
                         Exit For
                     End If
                 Next
-                If Not outcome.Succeeded Then
-                    RuntimeDiagnostics.RecordDismExit(
-                        "Driver Studio install", outcome.ExitCode.ToString())
+
+                If checkpointError IsNot Nothing Then
+                    importHistory.Add("UNVERIFIED: " & checkpointError.Message &
+                        " Remaining drivers were not installed.")
+                    Throw New InvalidOperationException(
+                        "DISM returned success for " & package.InfName &
+                        " but the mounted inventory checkpoint failed. " &
+                        "Remaining drivers were blocked. Review the image before " &
+                        "any Commit or Discard.", checkpointError)
                 End If
                 If Not outcome.Succeeded OrElse outcome.RebootRequired Then
                     detailBox.Text = If(outcome.Succeeded,

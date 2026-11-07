@@ -2433,6 +2433,78 @@ internal static class LayoutSmoke
                     "Inventory fingerprints must preserve duplicate-driver counts.");
             Console.WriteLine("PASS Driver Studio complete installed-driver inventory snapshot guards");
 
+            // A batch must verify each staged driver before continuing to the
+            // next INF. DISM exit 0 alone is not proof of an intact driver store.
+            var stagedDriver = new DriverStudioEngine.DriverPackage {
+                InfName=source.InfName, PublishedName="oem97.inf",
+                Provider=source.Provider, ClassName=source.ClassName,
+                Version=source.Version, DriverDate="2026-11-03"
+            };
+            var checkpointBaseline = new[] { unrelatedDriver };
+            var checkpointAfter = new[] { stagedDriver, unrelatedDriver };
+            var additionalUnrelatedDriver = new DriverStudioEngine.DriverPackage {
+                InfName="third-party-extra.inf", PublishedName="oem501.inf",
+                Provider="Additional Vendor", ClassName="Net",
+                Version="3.0.0.0", DriverDate="2026-11-03"
+            };
+            var checkpointHash = DriverStudioInstaller.ValidateStagedBatchCheckpoint(
+                checkpointBaseline, checkpointAfter, source);
+            Require(checkpointHash ==
+                    DriverStudioInstaller.SnapshotInstalledInventory(checkpointAfter),
+                    "A staged INF with unchanged unrelated inventory must become the new checkpoint.");
+            DriverStudioInstaller.RequireInventorySnapshot(
+                checkpointHash, new[] { unrelatedDriver, stagedDriver });
+
+            bool absentStageBlocked = false;
+            try {
+                DriverStudioInstaller.ValidateStagedBatchCheckpoint(
+                    checkpointBaseline, checkpointBaseline, source);
+            } catch (InvalidOperationException) { absentStageBlocked = true; }
+            Require(absentStageBlocked,
+                    "DISM success with no newly staged INF must stop the batch.");
+
+            bool unrelatedAdditionBlocked = false;
+            try {
+                DriverStudioInstaller.ValidateStagedBatchCheckpoint(
+                    checkpointBaseline, new[] { stagedDriver, unrelatedDriver, additionalUnrelatedDriver },
+                    source);
+            } catch (InvalidOperationException) { unrelatedAdditionBlocked = true; }
+            Require(unrelatedAdditionBlocked,
+                    "An unrelated INF appearing during Add-Driver must stop the batch.");
+
+            bool unrelatedRemovalBlocked = false;
+            try {
+                DriverStudioInstaller.ValidateStagedBatchCheckpoint(
+                    new[] { unrelatedDriver, additionalUnrelatedDriver },
+                    checkpointAfter, source);
+            } catch (InvalidOperationException) { unrelatedRemovalBlocked = true; }
+            Require(unrelatedRemovalBlocked,
+                    "Unrelated driver removal during Add-Driver must stop the batch.");
+
+            var changedUnrelated = new DriverStudioEngine.DriverPackage {
+                InfName=unrelatedDriver.InfName,
+                PublishedName=unrelatedDriver.PublishedName,
+                Provider=unrelatedDriver.Provider,
+                ClassName=unrelatedDriver.ClassName,
+                Version="9.9.9.9", DriverDate=unrelatedDriver.DriverDate
+            };
+            bool unrelatedUpdateBlocked = false;
+            try {
+                DriverStudioInstaller.ValidateStagedBatchCheckpoint(
+                    checkpointBaseline, new[] { stagedDriver, changedUnrelated }, source);
+            } catch (InvalidOperationException) { unrelatedUpdateBlocked = true; }
+            Require(unrelatedUpdateBlocked,
+                    "Unrelated driver version changing during import must stop the batch.");
+
+            bool repeatedStagingBlocked = false;
+            try {
+                DriverStudioInstaller.ValidateStagedBatchCheckpoint(
+                    checkpointAfter, checkpointAfter, source);
+            } catch (InvalidOperationException) { repeatedStagingBlocked = true; }
+            Require(repeatedStagingBlocked,
+                    "A previously installed INF must not be treated as a new checkpoint.");
+            Console.WriteLine("PASS Driver Studio per-INF checkpoint: stage, unrelated changes and repeat safeguards");
+
             bool staleBlocked = false;
             try {
                 DriverStudioInstaller.ValidatePlan(newDecision, new[] { source }, inventory);
