@@ -234,16 +234,16 @@ Public NotInheritable Class Wim360SwmOperations
                              StringComparison.OrdinalIgnoreCase) Then
             Throw New ArgumentException("Destination must be a standalone .wim file.")
         End If
-        Dim directory = Path.GetDirectoryName(dest)
-        If Not Directory.Exists(directory) Then
+        Dim destinationDirectory = Path.GetDirectoryName(dest)
+        If Not Directory.Exists(destinationDirectory) Then
             Throw New DirectoryNotFoundException("Destination directory does not exist.")
         End If
         If File.Exists(dest) Then
             Throw New IOException("Destination already exists; refusing to overwrite a WIM.")
         End If
-        Dim workingImage = Path.Combine(directory,
+        Dim workingImage = Path.Combine(destinationDirectory,
             "." & Path.GetFileNameWithoutExtension(dest) & "." &
-            Guid.NewGuid().ToString("N") & ".workingImage.wim")
+            Guid.NewGuid().ToString("N") & ".partial.wim")
         If Path.GetFullPath(workingImage).Equals(dest, StringComparison.OrdinalIgnoreCase) Then
             Throw New InvalidOperationException("Temporary destination conflicts with output.")
         End If
@@ -284,8 +284,10 @@ Public NotInheritable Class Wim360SwmOperations
                         If Not process.HasExited Then
                             Try
                                 process.Kill(entireProcessTree:=True)
-                                Await process.WaitForExitAsync().ConfigureAwait(False)
-                                processExited = True
+                                ' VB does not allow Await in Catch. Bound the
+                                ' synchronous post-kill wait; preserve the
+                                ' temporary file if termination is uncertain.
+                                processExited = process.WaitForExit(10000)
                             Catch
                                 ' Keep the workingImage file when DISM termination was not confirmed.
                             End Try
