@@ -296,7 +296,7 @@ Public NotInheritable Class Wim360Dashboard
         info.Controls.Add(details, 0, 1)
 
         Dim actions As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 6,
+            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 7,
             .Margin = New Padding(0, 5, 0, 0),
             .BackColor = Color.White
         }
