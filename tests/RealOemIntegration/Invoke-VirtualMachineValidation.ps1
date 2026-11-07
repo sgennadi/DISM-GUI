@@ -72,6 +72,42 @@ try {
         $report.Notes += ('Third-party inventory unavailable: ' + $_.Exception.Message)
     }
 
+    # Diagnostic comparison: production Driver Studio uses WindowsPowerShell
+    # 5.1 with UTF-16 EncodedCommand, while the CI runner uses PowerShell 7.
+    function Inspect-WindowsPSSignature([string]$catalogPath) {
+        $windowsPS = Join-Path $env:windir 'System32\WindowsPowerShell\v1.0\powershell.exe'
+        if (-not (Test-Path -LiteralPath $windowsPS)) {
+            return @{ ExitCode = -1; Stdout = ''; Stderr = 'Windows PowerShell not found' }
+        }
+        $literal = "'" + $catalogPath.Replace("'", "''") + "'"
+        $command = '$ErrorActionPreference=''Stop''; (Get-AuthenticodeSignature -LiteralPath ' + $literal + ').Status.ToString()'
+        $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+        $psi = [Diagnostics.ProcessStartInfo]::new()
+        $psi.FileName = $windowsPS
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        foreach ($arg in @('-NoProfile', '-NonInteractive', '-EncodedCommand', $encoded)) {
+            [void]$psi.ArgumentList.Add($arg)
+        }
+        $p = [Diagnostics.Process]::new()
+        $p.StartInfo = $psi
+        try {
+            if (-not $p.Start()) { throw 'Could not launch Windows PowerShell.' }
+            $outTask = $p.StandardOutput.ReadToEndAsync()
+            $errTask = $p.StandardError.ReadToEndAsync()
+            if (-not $p.WaitForExit(20000)) {
+                $p.Kill($true)
+                return @{ ExitCode = -2; Stdout = ''; Stderr = 'Timeout' }
+            }
+            return @{ ExitCode = $p.ExitCode; Stdout = $outTask.GetAwaiter().GetResult().Trim();
+                      Stderr = $errTask.GetAwaiter().GetResult().Trim() }
+        } finally {
+            $p.Dispose()
+        }
+    }
+
     $signedInf = $null
     if ($realWim -and $drivers.Count -gt 0) {
         foreach ($entry in ($drivers | Select-Object -First 100)) {
@@ -83,6 +119,16 @@ try {
             foreach ($cat in $cats) {
                 $signature = Get-AuthenticodeSignature -LiteralPath $cat.FullName -ErrorAction SilentlyContinue
                 if ($null -ne $signature -and "$($signature.Status)" -eq 'Valid') {
+                    $ps5 = Inspect-WindowsPSSignature $cat.FullName
+                    Write-Host ("CAT signature comparison: pwsh7=Valid WinPSExit={0} WinPSStatus={1}" -f $ps5.ExitCode, $ps5.Stdout)
+                    if ($ps5.ExitCode -ne 0) {
+                        $shortError = $ps5.Stderr
+                        if ($shortError.Length -gt 2000) {
+                            $shortError = $shortError.Substring($shortError.Length - 2000)
+                        }
+                        Write-Host ("Windows PowerShell signature error: {0}" -f $shortError)
+                        $report.Notes += ('Windows PowerShell CAT check error (exit ' + $ps5.ExitCode + ').')
+                    }
                     $signedInf = $inf
                     $report.SignedThirdPartyInf = [IO.Path]::GetFileName($inf)
                     $report.SignedCat = $cat.Name
