@@ -359,8 +359,12 @@ Public NotInheritable Class DriverStudioEngine
         Dim ambiguousSourceKeys As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
         For Each p In list
             Dim key = PackageKey(p)
+            ' Identical INF bytes in different folders do not prove the CAT
+            ' or SYS payloads are identical. Treat distinct sources as an
+            ' ambiguous family instead of trusting the first directory.
             Dim variant = Simplify(p.Version) & ChrW(0) &
-                          Simplify(p.DriverDate) & ChrW(0) & Simplify(p.Sha256)
+                          Simplify(p.DriverDate) & ChrW(0) &
+                          Simplify(p.Sha256) & ChrW(0) & Simplify(p.FilePath)
             Dim existingVariant As String = Nothing
             If firstVariant.TryGetValue(key, existingVariant) Then
                 If Not String.Equals(existingVariant, variant,
@@ -381,7 +385,7 @@ Public NotInheritable Class DriverStudioEngine
                 d.Status = "Review"
                 d.Selected = False
                 d.Detail = "Several source INF files have the same INF/provider/class " &
-                           "identity but differ in version, date or INF contents. " &
+                           "identity but differ in version, date, INF contents or source folder. " &
                            "Choose a single package/version and compare again; " &
                            "none will be imported automatically."
             Else
