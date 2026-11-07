@@ -2442,6 +2442,11 @@ internal static class LayoutSmoke
             };
             var checkpointBaseline = new[] { unrelatedDriver };
             var checkpointAfter = new[] { stagedDriver, unrelatedDriver };
+            var additionalUnrelatedDriver = new DriverStudioEngine.DriverPackage {
+                InfName="third-party-extra.inf", PublishedName="oem501.inf",
+                Provider="Additional Vendor", ClassName="Net",
+                Version="3.0.0.0", DriverDate="2026-11-03"
+            };
             var checkpointHash = DriverStudioInstaller.ValidateStagedBatchCheckpoint(
                 checkpointBaseline, checkpointAfter, source);
             Require(checkpointHash ==
@@ -2461,7 +2466,7 @@ internal static class LayoutSmoke
             bool unrelatedAdditionBlocked = false;
             try {
                 DriverStudioInstaller.ValidateStagedBatchCheckpoint(
-                    checkpointBaseline, new[] { stagedDriver, unrelatedDriver, inventory[0] },
+                    checkpointBaseline, new[] { stagedDriver, unrelatedDriver, additionalUnrelatedDriver },
                     source);
             } catch (InvalidOperationException) { unrelatedAdditionBlocked = true; }
             Require(unrelatedAdditionBlocked,
@@ -2470,7 +2475,7 @@ internal static class LayoutSmoke
             bool unrelatedRemovalBlocked = false;
             try {
                 DriverStudioInstaller.ValidateStagedBatchCheckpoint(
-                    new[] { unrelatedDriver, inventory[0] },
+                    new[] { unrelatedDriver, additionalUnrelatedDriver },
                     checkpointAfter, source);
             } catch (InvalidOperationException) { unrelatedRemovalBlocked = true; }
             Require(unrelatedRemovalBlocked,
