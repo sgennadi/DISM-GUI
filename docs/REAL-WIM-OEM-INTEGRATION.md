@@ -145,6 +145,25 @@ an image that another process is actively servicing.
 Create an empty D:\DismOemTest on a local fixed drive.
 Run an elevated Windows terminal for the copy-only execute mode.
 
+### 0. Check all WIM/INF source paths (read-only)
+
+Use the portable RealOemIntegration.exe on the Windows machine that has
+access to the files (local disks or readable UNC shares):
+
+~~~powershell
+.\RealOemIntegration.exe --probe --matrix "C:\OEMTests\matrix.json"
+~~~
+
+The probe checks whether every WIM and INF file can be opened and read.
+It reports **all** missing or inaccessible files in one pass, then exits
+nonzero if any are unavailable. It does **not** invoke DISM, mount images,
+verify WIM contents, test architectures, validate signatures or modify
+any files. It takes no work-root or execute argument.
+
+After all media is readable, run **--plan** to validate WIM indexes,
+architecture, signed CAT packages and combined scratch capacity before
+running copy-only servicing. The probe is not a substitute for --plan.
+
 ### 1. Validate every source without mounting or changing any WIM
 
 ~~~powershell
