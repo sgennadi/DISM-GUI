@@ -290,6 +290,44 @@ suppressed when the related inventory returned a warning. Duplicate identities
 are reported as ambiguous, rather than silently treated as a change. Always
 export with cleared Type/State/Search filters to get a complete comparison.
 
+### SWM integrity audit and safe export to a NEW WIM (4.3.19 candidate)
+
+**WIM 360 → SWM audit / export** inspects a complete split SWM set,
+verifies every header and computes SHA-256 for the **entire byte stream
+of every part**. The audit records each file's length, timestamp,
+SHA-256 and a combined manifest SHA-256; it detects missing, renamed
+or unrelated wildcard-matching parts and changes during hashing.
+A canceled or partial audit is not reported as verified.
+
+After a successful audit, select an image index and a **new, absent**
+`.wim` destination. DISM GUI acquires cooperative locks on the source
+SWM parts and destination, rehashes **every** source part immediately
+before conversion, then runs DISM `/Export-Image` with
+`/SWMFile:<matching-part-pattern>`, `/SourceIndex` and
+`/CheckIntegrity`. DISM exports to a uniquely named temporary WIM
+in the destination directory. After successful DISM exit, the source
+hashes are rechecked and the output WIM must be a valid, standalone
+single-index image. Only then is it moved to the requested filename;
+pre-existing destinations are **never overwritten**. Failed runs
+remove only their own partial output after DISM has actually exited.
+No SWM part is mounted, written, deleted or renamed by this operation.
+
+**Image-operation guard:** DISM GUI Mount and Commit/Discard now obtain
+machine-local OS-released file locks on the WIM and its mount folder
+for the full worker operation. This prevents *cooperating instances
+of DISM GUI on the same computer* from launching simultaneous
+conflicting commands. It does not stop external DISM processes,
+other applications, remote machines, or all legacy servicing actions;
+avoid modifying sources from other tools while a scan/export runs.
+
+The SWM tool has an English, high-DPI WinForms UI, cancelable hashing,
+clear progress and a permanent Audit / Export / Close footer.
+Microsoft documents SWM as **read-only**; this feature does not
+modify split image parts. CI tests a real DISM-created split image,
+actual export and subsequent apply into a disposable directory,
+no-overwrite behavior, altered/missing parts and SHA-256 preservation.
+Production Windows install images remain subject to manual testing.
+
 ### Mount safety, Commit/Discard verification and recovery journal (4.3.18)
 
 **WIM 360 → Mount health** is a read-only view of the current WIMGAPI
