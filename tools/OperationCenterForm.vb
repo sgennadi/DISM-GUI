@@ -122,9 +122,9 @@ Public NotInheritable Class OperationCenterForm
                                "secondary", AddressOf SaveClicked)
 
         Dim composer As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .RowCount = 1, .ColumnCount = 4
+            .Dock = DockStyle.Fill, .RowCount = 1, .ColumnCount = 5
         }
-        For Each width As Single In {22.0F, 54.0F, 9.0F, 15.0F}
+        For Each width As Single In {22.0F, 44.0F, 8.0F, 10.0F, 16.0F}
             composer.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, width))
         Next
         composer.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
@@ -144,13 +144,30 @@ Public NotInheritable Class OperationCenterForm
             .Margin = New Padding(3, 12, 7, 10)
         }
         composer.Controls.Add(imagePath, 1, 0)
+        Dim browseImage As New Button With {
+            .Name = "btnOperationBrowse", .Text = "...", .Dock = DockStyle.Fill,
+            .Margin = New Padding(0, 12, 6, 10)
+        }
+        ModernTheme.StyleButton(browseImage, "browse")
+        AddHandler browseImage.Click, Sub(sender, e)
+            Using dialog As New OpenFileDialog With {
+                .Title = "Choose read-only WIM/ESD/SWM source",
+                .Filter = "Windows images|*.wim;*.esd;*.swm|All files|*.*",
+                .CheckFileExists = True, .Multiselect = False
+            }
+                If dialog.ShowDialog(Me) = DialogResult.OK Then
+                    imagePath.Text = dialog.FileName
+                End If
+            End Using
+        End Sub
+        composer.Controls.Add(browseImage, 2, 0)
         indexBox = New NumericUpDown With {
             .Name = "numOperationIndex", .Dock = DockStyle.Fill,
             .Minimum = 0, .Maximum = 255, .Value = 0,
             .Margin = New Padding(3, 12, 7, 10)
         }
-        composer.Controls.Add(indexBox, 2, 0)
-        addStepButton = AddButton(composer, "btnOperationAdd", "Add step", 3,
+        composer.Controls.Add(indexBox, 3, 0)
+        addStepButton = AddButton(composer, "btnOperationAdd", "Add step", 4,
                                   "primary", AddressOf AddClicked)
 
         planGrid = MakeGrid("gridOperationPlan",
@@ -187,9 +204,9 @@ Public NotInheritable Class OperationCenterForm
             .Padding = New Padding(8, 10, 8, 8)
         }
         historyLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        historyLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 62))
-        historyLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 30))
-        historyLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 8))
+        historyLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 63))
+        historyLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 37))
+        historyLayout.RowStyles.Add(New RowStyle(SizeType.Absolute, 60))
         historyTab.Controls.Add(historyLayout)
         historyGrid = MakeGrid("gridOperationHistory",
                               {"UTC", "Profile / action", "Result", "Steps"})
@@ -205,13 +222,25 @@ Public NotInheritable Class OperationCenterForm
             .BackColor = Color.FromArgb(249, 251, 254)
         }
         historyLayout.Controls.Add(historyDetails, 0, 1)
-        Dim historyRefresh = New Button With {
-            .Name = "btnOperationHistoryRefresh",
-            .Text = "Refresh local history", .Dock = DockStyle.Fill
+        Dim historyActions As New TableLayoutPanel With {
+            .Dock = DockStyle.Fill, .RowCount = 1, .ColumnCount = 2
         }
-        ModernTheme.StyleButton(historyRefresh, "secondary")
-        AddHandler historyRefresh.Click, Sub(sender, e) ReloadHistory()
-        historyLayout.Controls.Add(historyRefresh, 0, 2)
+        historyActions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
+        historyActions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
+        historyActions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        historyLayout.Controls.Add(historyActions, 0, 2)
+        AddButton(historyActions, "btnOperationHistoryRefresh", "Refresh local history",
+                  0, "secondary", Sub(sender, e) ReloadHistory())
+        AddButton(historyActions, "btnOperationHistoryCopy", "Copy selected details",
+                  1, "browse", Sub(sender, e)
+            Try
+                If historyDetails.Text.Length > 0 Then
+                    Clipboard.SetText(historyDetails.Text)
+                End If
+            Catch ex As Exception
+                status.Text = "Clipboard unavailable: " & ex.Message
+            End Try
+        End Sub)
         AddHandler historyGrid.SelectionChanged, Sub(sender, e)
             If historyGrid.SelectedRows.Count = 0 Then Return
             historyDetails.Text = Convert.ToString(historyGrid.SelectedRows(0).Tag)
