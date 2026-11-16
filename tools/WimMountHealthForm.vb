@@ -15,6 +15,7 @@ Public NotInheritable Class WimMountHealthForm
     Private ReadOnly statusLabel As Label
     Private ReadOnly refreshButton As Button
     Private ReadOnly findLocksButton As Button
+    Private ReadOnly recoveryButton As Button
     Private ReadOnly copyButton As Button
     Private ReadOnly closeButton As Button
     Private checking As Boolean
@@ -107,9 +108,9 @@ Public NotInheritable Class WimMountHealthForm
         root.Controls.Add(statusLabel, 0, 3)
 
         Dim buttons As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 4, .RowCount = 1
+            .Dock = DockStyle.Fill, .ColumnCount = 5, .RowCount = 1
         }
-        For Each col As Single In {27.0F, 27.0F, 24.0F, 22.0F}
+        For Each col As Single In {20.0F, 21.0F, 21.0F, 21.0F, 17.0F}
             buttons.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, col))
         Next
         buttons.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
@@ -123,6 +124,11 @@ Public NotInheritable Class WimMountHealthForm
             .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 10, 4)
         }
         ModernTheme.StyleButton(findLocksButton, "secondary")
+        recoveryButton = New Button With {
+            .Name = "btnMountHealthRecovery", .Text = "Recovery assistant",
+            .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 8, 4)
+        }
+        ModernTheme.StyleButton(recoveryButton, "secondary")
         copyButton = New Button With {
             .Name = "btnMountHealthCopy", .Text = "Copy report",
             .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 10, 4),
@@ -136,12 +142,19 @@ Public NotInheritable Class WimMountHealthForm
         ModernTheme.StyleButton(closeButton, "neutral")
         buttons.Controls.Add(refreshButton, 0, 0)
         buttons.Controls.Add(findLocksButton, 1, 0)
-        buttons.Controls.Add(copyButton, 2, 0)
-        buttons.Controls.Add(closeButton, 3, 0)
+        buttons.Controls.Add(recoveryButton, 2, 0)
+        buttons.Controls.Add(copyButton, 3, 0)
+        buttons.Controls.Add(closeButton, 4, 0)
         root.Controls.Add(buttons, 0, 4)
 
         AddHandler refreshButton.Click, AddressOf RefreshClicked
         AddHandler findLocksButton.Click, AddressOf FindLocksClicked
+        AddHandler recoveryButton.Click, Sub(sender, e)
+            If checking Then Return
+            Using wizard As New MountRecoveryWizardForm(sourceBox.Text.Trim())
+                wizard.ShowDialog(Me)
+            End Using
+        End Sub
         AddHandler copyButton.Click, Sub(sender, e)
             Try
                 Clipboard.SetText(reportBox.Text)
