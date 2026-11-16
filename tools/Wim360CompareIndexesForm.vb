@@ -21,6 +21,9 @@ Public NotInheritable Class Wim360CompareIndexesForm
     Private ReadOnly searchBox As TextBox
     Private ReadOnly compareButton As Button
     Private ReadOnly exportButton As Button
+    Private ReadOnly directionMenu As ContextMenuStrip
+    Private ReadOnly directionChangeItem As ToolStripMenuItem
+    Private ReadOnly directionReverseItem As ToolStripMenuItem
     Private ReadOnly exportMenu As ContextMenuStrip
     Private ReadOnly exportFilteredMenuItem As ToolStripMenuItem
     Private ReadOnly exportChangesMenuItem As ToolStripMenuItem
@@ -38,6 +41,8 @@ Public NotInheritable Class Wim360CompareIndexesForm
     Private visibleRows As New List(Of Wim360IndexComparer.Row)()
     Private job As CancellationTokenSource
     Private working As Boolean
+    Private beforeIndex As Integer
+    Private afterIndex As Integer
 
     Public Sub New(report As Wim360Reader.WimReport,
                    Optional preferredIndexes As IEnumerable(Of Integer) = Nothing,
@@ -315,8 +320,22 @@ Public NotInheritable Class Wim360CompareIndexesForm
         grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(216, 234, 253)
         grid.DefaultCellStyle.SelectionForeColor = ModernTheme.TextInk
         AddHandler grid.CellValueNeeded, AddressOf GridValueNeeded
+        AddHandler grid.CellFormatting, AddressOf GridCellFormatting
         AddHandler grid.CellToolTipTextNeeded, AddressOf GridTooltipNeeded
+        AddHandler grid.ColumnHeaderMouseClick, AddressOf GridHeaderClicked
         AddHandler grid.ClientSizeChanged, Sub(sender, e) FitIndexColumns()
+        directionMenu = New ContextMenuStrip()
+        directionChangeItem = New ToolStripMenuItem("Choose Before -> After...") With {
+            .Name = "mnu360IndexChangeDirection"
+        }
+        directionReverseItem = New ToolStripMenuItem("Reverse direction") With {
+            .Name = "mnu360IndexReverseDirection"
+        }
+        directionMenu.Items.Add(directionChangeItem)
+        directionMenu.Items.Add(directionReverseItem)
+        AddHandler directionChangeItem.Click, AddressOf ChooseDirectionClicked
+        AddHandler directionReverseItem.Click, AddressOf ReverseDirectionClicked
+        grid.ContextMenuStrip = directionMenu
         root.Controls.Add(grid, 0, 3)
 
         Dim statusPanel As New TableLayoutPanel With {
@@ -330,6 +349,8 @@ Public NotInheritable Class Wim360CompareIndexesForm
         statusPanel.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         summaryLabel = MakeLabel("Select at least two indexes.", 9.4F, True)
         summaryLabel.Name = "lbl360IndexCompareSummary"
+        summaryLabel.Cursor = Cursors.Hand
+        AddHandler summaryLabel.Click, AddressOf ChooseDirectionClicked
         statusPanel.Controls.Add(summaryLabel, 0, 0)
         hintLabel = MakeLabel("No image files will be modified.", 9, False)
         hintLabel.Name = "lbl360IndexCompareHint"
@@ -455,6 +476,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
             searchDelay.Stop()
             searchDelay.Dispose()
             hashMenu.Dispose()
+            directionMenu.Dispose()
             exportMenu.Dispose()
         End Sub
         WindowGeometry.Install(Me, "Software\DISMGUI\Wim360IndexComparison")
@@ -753,13 +775,20 @@ Public NotInheritable Class Wim360CompareIndexesForm
         Dim previousState = Convert.ToString(stateBox.SelectedItem)
         Dim previousQuery = searchBox.Text
         comparison = result
+        If Not result.Indexes.Contains(beforeIndex) OrElse
+           Not result.Indexes.Contains(afterIndex) OrElse
+           beforeIndex = afterIndex Then
+            beforeIndex = result.Indexes(0)
+            afterIndex = result.Indexes(1)
+        End If
         grid.SuspendLayout()
         Try
             grid.RowCount = 0
             grid.Columns.Clear()
             AddColumn("Kind", 115)
             AddColumn("Item / relative path", 350)
-            AddColumn("Comparison", 168)
+            AddColumn("Change " & beforeIndex.ToString() & " -> " &
+                      afterIndex.ToString(), 168)
             For Each index In result.Indexes
                 AddColumn("Index " & index.ToString(), 178)
             Next
@@ -782,7 +811,9 @@ Public NotInheritable Class Wim360CompareIndexesForm
         stateBox.Items.AddRange(New Object() {
             "All results", "Differences only", "Missing / only in some",
             "Different", "Exists in all", "Present in all",
-            "Ambiguous duplicates"
+            "Ambiguous duplicates",
+            "Pair changes only", "Added (pair)", "Removed (pair)",
+            "Modified (pair)", "Ambiguous (pair)", "Unchanged (pair)"
         })
         For Each index In result.Indexes
             stateBox.Items.Add("Only in Index " & index.ToString())
@@ -846,10 +877,25 @@ Public NotInheritable Class Wim360CompareIndexesForm
 
     Private Sub ApplyFilter()
         If comparison Is Nothing Then Return
+        Dim selectedState = Convert.ToString(stateBox.SelectedItem)
+        Dim pairSpecific = selectedState = "Pair changes only" OrElse
+                           selectedState.EndsWith(" (pair)", StringComparison.Ordinal)
+        Dim globalState = If(pairSpecific, "All results", selectedState)
         visibleRows = Wim360IndexComparer.Filter(comparison.Rows,
             Convert.ToString(categoryBox.SelectedItem),
-            Convert.ToString(stateBox.SelectedItem), searchBox.Text,
-            comparison.Indexes.Count)
+            globalState, searchBox.Text, comparison.Indexes.Count)
+        If pairSpecific Then
+            Dim expected = selectedState.Replace(" (pair)", "")
+            visibleRows = visibleRows.Where(Function(item)
+                Dim change = Wim360IndexComparer.PairChangeType(
+                    item, beforeIndex, afterIndex)
+                If selectedState = "Pair changes only" Then
+                    Return change = "Added" OrElse change = "Removed" OrElse
+                           change = "Modified" OrElse change = "Ambiguous"
+                End If
+                Return String.Equals(change, expected, StringComparison.Ordinal)
+            End Function).ToList()
+        End If
         grid.RowCount = visibleRows.Count
         UpdateHashButton()
         ' The row-wide Missing / Different filter is not a per-index count:
@@ -883,7 +929,16 @@ Public NotInheritable Class Wim360CompareIndexesForm
                 ", differing " & x.Different.ToString("N0") &
                 ", ambiguous " & x.Ambiguous.ToString("N0")
         End Function))
+        Dim pairCounts = Wim360IndexComparer.SummarizePairChanges(
+            comparison, visibleRows, beforeIndex, afterIndex)
         detailsTip.SetToolTip(summaryLabel,
+            "Click to change direction: Index " & beforeIndex.ToString() &
+            " -> Index " & afterIndex.ToString() & "." & Environment.NewLine &
+            "Added: " & pairCounts.Added.ToString("N0") &
+            "; Removed: " & pairCounts.Removed.ToString("N0") &
+            "; Modified: " & pairCounts.Modified.ToString("N0") &
+            "; Ambiguous: " & pairCounts.Ambiguous.ToString("N0") &
+            Environment.NewLine &
             "Filtered rows: " & visibleRows.Count.ToString("N0") & " of " &
             comparison.Rows.Count.ToString("N0") & ". " &
             missingRowCount.ToString("N0") &
@@ -891,6 +946,69 @@ Public NotInheritable Class Wim360CompareIndexesForm
             Environment.NewLine & detailed & Environment.NewLine &
             "Different: value mismatch across indexes, not necessarily a " &
             "specific index's fault. Ambiguous: duplicate identity.")
+        grid.Invalidate()
+    End Sub
+
+    Private Sub ApplyPairDirection(before As Integer, after As Integer)
+        If comparison Is Nothing Then Return
+        If before = after OrElse
+           Not comparison.Indexes.Contains(before) OrElse
+           Not comparison.Indexes.Contains(after) Then
+            Throw New ArgumentException("Choose different indexes from the completed comparison.")
+        End If
+        beforeIndex = before
+        afterIndex = after
+        If grid.Columns.Count >= 3 Then
+            grid.Columns(2).HeaderText =
+                "Change " & beforeIndex.ToString() & " -> " & afterIndex.ToString()
+        End If
+        ApplyFilter()
+        grid.Invalidate()
+    End Sub
+
+    ' Called by Windows layout regression tests without opening a modal dialog.
+    Public Sub SetPairDirectionForTest(before As Integer, after As Integer)
+        ApplyPairDirection(before, after)
+    End Sub
+
+    Private Sub ChooseDirectionClicked(sender As Object, e As EventArgs)
+        If comparison Is Nothing OrElse working Then Return
+        Dim chosen = ChooseChangePair(True)
+        If chosen IsNot Nothing Then ApplyPairDirection(chosen.Item1, chosen.Item2)
+    End Sub
+
+    Private Sub ReverseDirectionClicked(sender As Object, e As EventArgs)
+        If comparison Is Nothing OrElse working Then Return
+        ApplyPairDirection(afterIndex, beforeIndex)
+    End Sub
+
+    Private Sub GridHeaderClicked(sender As Object,
+                                  e As DataGridViewCellMouseEventArgs)
+        If e.ColumnIndex = 2 AndAlso e.Button = MouseButtons.Left Then
+            ChooseDirectionClicked(sender, EventArgs.Empty)
+        End If
+    End Sub
+
+    ' Soft row tints complement, never replace, explicit status text.
+    ' No visual implication of byte-for-byte equality when only lengths
+    ' or file paths have been compared.
+    Private Shared Function ChangeBackground(kind As String) As Color
+        Select Case kind
+            Case "Added" : Return Color.FromArgb(231, 247, 237)
+            Case "Removed" : Return Color.FromArgb(253, 237, 239)
+            Case "Modified" : Return Color.FromArgb(255, 246, 224)
+            Case "Ambiguous" : Return Color.FromArgb(241, 239, 250)
+            Case Else : Return Color.White
+        End Select
+    End Function
+
+    Private Sub GridCellFormatting(sender As Object,
+                                   e As DataGridViewCellFormattingEventArgs)
+        If comparison Is Nothing OrElse e.RowIndex < 0 OrElse
+           e.RowIndex >= visibleRows.Count Then Return
+        Dim status = Wim360IndexComparer.PairChangeType(
+            visibleRows(e.RowIndex), beforeIndex, afterIndex)
+        e.CellStyle.BackColor = ChangeBackground(status)
     End Sub
 
     Private Sub GridValueNeeded(sender As Object, e As DataGridViewCellValueEventArgs)
@@ -899,7 +1017,8 @@ Public NotInheritable Class Wim360CompareIndexesForm
         Select Case e.ColumnIndex
             Case 0 : e.Value = item.Kind
             Case 1 : e.Value = item.Name
-            Case 2 : e.Value = item.State
+            Case 2 : e.Value = Wim360IndexComparer.PairChangeType(
+                item, beforeIndex, afterIndex)
             Case Else
                 If comparison IsNot Nothing AndAlso e.ColumnIndex - 3 < comparison.Indexes.Count Then
                     e.Value = item.At(comparison.Indexes(e.ColumnIndex - 3))
@@ -914,8 +1033,16 @@ Public NotInheritable Class Wim360CompareIndexesForm
         Select Case e.ColumnIndex
             Case 0 : e.ToolTipText = item.Kind
             Case 1 : e.ToolTipText = item.Name
-            Case 2 : e.ToolTipText = item.State & If(item.Notes.Length > 0,
-                                                      Environment.NewLine & item.Notes, "")
+            Case 2
+                Dim status = Wim360IndexComparer.PairChangeType(
+                    item, beforeIndex, afterIndex)
+                e.ToolTipText = status & " | Before index " &
+                    beforeIndex.ToString() & " -> After index " &
+                    afterIndex.ToString() & Environment.NewLine &
+                    "All selected indexes: " & item.State &
+                    If(item.Notes.Length > 0, Environment.NewLine & item.Notes, "") &
+                    Environment.NewLine &
+                    "Values are reported metadata, not proof of identical file bytes."
             Case Else
                 If comparison IsNot Nothing AndAlso e.ColumnIndex - 3 < comparison.Indexes.Count Then
                     e.ToolTipText = item.At(comparison.Indexes(e.ColumnIndex - 3))
@@ -928,10 +1055,12 @@ Public NotInheritable Class Wim360CompareIndexesForm
         exportMenu.Show(exportButton, New Point(0, exportButton.Height))
     End Sub
 
-    Private Function ChooseChangePair() As Tuple(Of Integer, Integer, Boolean)
+    Private Function ChooseChangePair(
+           Optional selectingOnly As Boolean = False) As Tuple(Of Integer, Integer, Boolean)
         If comparison Is Nothing OrElse comparison.Indexes.Count < 2 Then Return Nothing
         Using chooser As New Form With {
-            .Name = "frm360IndexChangeExport", .Text = "Export change report",
+            .Name = "frm360IndexChangeExport",
+            .Text = If(selectingOnly, "Display change direction", "Export change report"),
             .StartPosition = FormStartPosition.CenterParent,
             .FormBorderStyle = FormBorderStyle.FixedDialog,
             .MinimizeBox = False, .MaximizeBox = False, .ShowInTaskbar = False,
@@ -976,14 +1105,14 @@ Public NotInheritable Class Wim360CompareIndexesForm
             layout.Controls.Add(beforeCombo, 1, 1)
             layout.Controls.Add(MakeLabel("After index", 9.0F, True), 0, 2)
             layout.Controls.Add(afterCombo, 1, 2)
-            beforeCombo.SelectedIndex = 0
-            afterCombo.SelectedIndex = 1
+            beforeCombo.SelectedIndex = Math.Max(0, comparison.Indexes.IndexOf(beforeIndex))
+            afterCombo.SelectedIndex = Math.Max(0, comparison.Indexes.IndexOf(afterIndex))
 
             Dim includeSame As New CheckBox With {
                 .Name = "chk360ChangeIncludeUnchanged",
                 .Text = "Include unchanged rows in CSV (default: changes only)",
                 .Dock = DockStyle.Fill, .Checked = False,
-                .AutoSize = False
+                .AutoSize = False, .Visible = Not selectingOnly
             }
             layout.Controls.Add(includeSame, 0, 3)
             layout.SetColumnSpan(includeSame, 2)
@@ -992,7 +1121,8 @@ Public NotInheritable Class Wim360CompareIndexesForm
                 .WrapContents = False
             }
             Dim save As New Button With {
-                .Name = "btn360ChangeSave", .Text = "Continue to Save...",
+                .Name = "btn360ChangeSave",
+                .Text = If(selectingOnly, "Apply direction", "Continue to Save..."),
                 .Width = 164, .Height = 34, .DialogResult = DialogResult.OK
             }
             ModernTheme.StyleButton(save, "primary")
@@ -1026,6 +1156,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
         If comparison Is Nothing OrElse working Then Return
         Dim direction = ChooseChangePair()
         If direction Is Nothing Then Return
+        ApplyPairDirection(direction.Item1, direction.Item2)
         Dim rowsToSave = visibleRows.ToList()
         Dim report = comparison
         Using dialog As New SaveFileDialog With {

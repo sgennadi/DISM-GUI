@@ -863,6 +863,84 @@ internal static class LayoutSmoke
                 exportMenu.Items[1].Name == "mnu360IndexCompareExportChanges" &&
                 exportMenu.Items[1].Text.Contains("Before -> After"),
                 "Comparison GUI must offer both existing CSV export and directional change report.");
+        var directionMenu = matrix!.ContextMenuStrip;
+        Require(directionMenu is { Items.Count: 2 } &&
+                directionMenu.Items[0].Name == "mnu360IndexChangeDirection" &&
+                directionMenu.Items[1].Name == "mnu360IndexReverseDirection" &&
+                matrix.Columns[2].HeaderText == "Change 1 -> 2",
+                "WIM 360 pairwise direction must be visible and changeable from the grid.");
+
+        var idxChanged = comparison.Rows.FindIndex(x => x.Name.EndsWith("changed.dll"));
+        var idxRemoved = comparison.Rows.FindIndex(x => x.Name == "=HYPERLINK()");
+        var idxUnchanged = comparison.Rows.FindIndex(x => x.Name.EndsWith("common.dll"));
+        var idxOutside = comparison.Rows.FindIndex(x => x.Name.EndsWith("unique.dll"));
+        Require(idxChanged >= 0 && idxRemoved >= 0 &&
+                idxUnchanged >= 0 && idxOutside >= 0 &&
+                Convert.ToString(matrix[2, idxChanged].Value) == "Modified" &&
+                Convert.ToString(matrix[2, idxRemoved].Value) == "Removed" &&
+                Convert.ToString(matrix[2, idxUnchanged].Value) == "Unchanged" &&
+                Convert.ToString(matrix[2, idxOutside].Value) == "Outside pair",
+                "Virtual comparison cells must show directional classifications, not global states.");
+
+        Color GetPairTint(int rowNumber)
+        {
+            Color seen = Color.Empty;
+            DataGridViewCellFormattingEventHandler capture = (sender, ev) =>
+            {
+                if (ev.RowIndex == rowNumber && ev.ColumnIndex == 2)
+                    seen = ev.CellStyle.BackColor;
+            };
+            matrix.CellFormatting += capture;
+            _ = matrix[2, rowNumber].FormattedValue;
+            matrix.CellFormatting -= capture;
+            return seen;
+        }
+        Require(GetPairTint(idxChanged) == Color.FromArgb(255, 246, 224) &&
+                GetPairTint(idxRemoved) == Color.FromArgb(253, 237, 239) &&
+                GetPairTint(idxUnchanged) == Color.White,
+                "Modified/Removed/Unchanged rows must receive semantic soft tints.");
+
+        dialog.SetPairDirectionForTest(2, 1);
+        Application.DoEvents();
+        Require(matrix.Columns[2].HeaderText == "Change 2 -> 1" &&
+                Convert.ToString(matrix[2, idxRemoved].Value) == "Added" &&
+                GetPairTint(idxRemoved) == Color.FromArgb(231, 247, 237),
+                "Reversing before/after must reclassify and recolor the same row.");
+        dialog.SetPairDirectionForTest(1, 3);
+        Application.DoEvents();
+        Require(Convert.ToString(matrix[2, idxChanged].Value) == "Unchanged" &&
+                Convert.ToString(matrix[2, idxOutside].Value) == "Added",
+                "Pair comparison may be unchanged even when an unrelated index differs.");
+
+        var pairFilter = Find(dialog, "cmb360IndexCompareState") as ComboBox;
+        Require(pairFilter is not null &&
+                pairFilter.Items.Contains("Pair changes only") &&
+                pairFilter.Items.Contains("Added (pair)") &&
+                pairFilter.Items.Contains("Removed (pair)"),
+                "Directional filters must be discoverable from the existing result selector.");
+        dialog.SetPairDirectionForTest(1, 2);
+        pairFilter!.SelectedItem = "Pair changes only";
+        Application.DoEvents();
+        Require(matrix.RowCount == 2,
+                "Pair changes only must exclude unchanged rows and rows outside the chosen pair.");
+        pairFilter.SelectedItem = "Removed (pair)";
+        Application.DoEvents();
+        Require(matrix.RowCount == 1 &&
+                Convert.ToString(matrix[2, 0].Value) == "Removed",
+                "Directional Removed filter must display the correct row.");
+        dialog.SetPairDirectionForTest(2, 1);
+        Application.DoEvents();
+        Require(matrix.RowCount == 0,
+                "Reversing the chosen direction must refresh current pair-specific filters.");
+        pairFilter.SelectedItem = "Added (pair)";
+        Application.DoEvents();
+        Require(matrix.RowCount == 1 &&
+                Convert.ToString(matrix[2, 0].Value) == "Added",
+                "Pair-specific filter must follow the selected direction.");
+        pairFilter.SelectedItem = "All results";
+        dialog.SetPairDirectionForTest(1, 2);
+        Application.DoEvents();
+
         var coverageLabel = Find(dialog, "lbl360IndexCompareSummary") as Label;
         Require(coverageLabel is not null &&
                 coverageLabel.Text.Contains("Missing 1:1, 2:2, 3:2") &&
