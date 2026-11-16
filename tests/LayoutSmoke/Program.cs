@@ -2344,8 +2344,12 @@ internal static class LayoutSmoke
         var scratch = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
             "DISMGUI-Operations-" + Guid.NewGuid().ToString("N"));
         var previous = Environment.GetEnvironmentVariable("DISMGUI_TEST_OPERATION_ROOT");
+        var previousRecovery = Environment.GetEnvironmentVariable("DISMGUI_TEST_RECOVERY_ROOT");
+        var previousDiagnostics = Environment.GetEnvironmentVariable("DISMGUI_TEST_DIAGNOSTICS");
         System.IO.Directory.CreateDirectory(scratch);
+        Environment.SetEnvironmentVariable("DISMGUI_TEST_DIAGNOSTICS", "1");
         Environment.SetEnvironmentVariable("DISMGUI_TEST_OPERATION_ROOT", scratch);
+        Environment.SetEnvironmentVariable("DISMGUI_TEST_RECOVERY_ROOT", scratch);
         try
         {
             var plan = new OperationWorkflow.Profile {
@@ -2356,8 +2360,9 @@ internal static class LayoutSmoke
                 }
             };
             Require(OperationWorkflow.Validate(plan) == plan &&
-                    OperationWorkflow.AllowedKinds().Length == 4,
-                    "Operation profiles must allow only the four known read-only operations.");
+                    OperationWorkflow.AllowedKinds().Length == 5 &&
+                    OperationWorkflow.AllowedKinds().Contains("ExportIndexNewWim"),
+                    "Operation profiles must allow safe checks and approved NEW WIM export.");
             OperationWorkflow.SaveProfile(plan);
             var stored = OperationWorkflow.LoadProfiles();
             Require(stored.Count == 1 && stored[0].Steps.Count == 2 &&
@@ -2371,7 +2376,29 @@ internal static class LayoutSmoke
                     }
                 });
             } catch (System.IO.InvalidDataException) { blocked = true; }
-            Require(blocked, "Arbitrary or WIM-writing operation types must be rejected.");
+            Require(blocked, "Arbitrary and unapproved WIM-changing operations must be rejected.");
+            blocked = false;
+            try {
+                OperationWorkflow.Validate(new OperationWorkflow.Profile {
+                    Name = "Export without destination",
+                    Steps = new System.Collections.Generic.List<OperationWorkflow.StepPlan> {
+                        new() { Kind = "ExportIndexNewWim",
+                                ImagePath = @"C:	est.wim", ImageIndex = 1 }
+                    }
+                });
+            } catch (System.IO.InvalidDataException) { blocked = true; }
+            Require(blocked, "New WIM export must require an explicit output filename.");
+            var exportProfile = new OperationWorkflow.Profile {
+                Name = "Approved new file only",
+                Steps = new System.Collections.Generic.List<OperationWorkflow.StepPlan> {
+                    new() { Kind = "ExportIndexNewWim",
+                            ImagePath = @"C:source.wim", ImageIndex = 1,
+                            OutputPath = @"D:
+ew-output.wim" }
+                }
+            };
+            Require(OperationWorkflow.Validate(exportProfile) == exportProfile,
+                    "Explicit copy-only NEW WIM export should be a valid profile type.");
 
             var preview = OperationWorkflow.PreflightAsync(plan,
                 System.Threading.CancellationToken.None).GetAwaiter().GetResult();
@@ -2390,6 +2417,26 @@ internal static class LayoutSmoke
                     result.Results[0].Detail.Contains("choose a WIM") &&
                     OperationWorkflow.LoadHistory().Count == 1,
                     "Unscoped mount health must warn rather than falsely imply a verified mount.");
+
+            var boot = new DateTime(2026, 11, 16, 12, 0, 0, DateTimeKind.Utc);
+            Require(!MountRecoverySession.RestartAppearsToHaveOccurred(boot,
+                    boot.AddSeconds(10)) &&
+                    MountRecoverySession.RestartAppearsToHaveOccurred(boot,
+                    boot.AddMinutes(10)),
+                    "Restart checkpoint needs a distinct boot, not an elapsed button click.");
+            var checkpoint = MountRecoverySession.BeginRestartReview(
+                new MountRecoverySession.Assessment {
+                    ImageFile = @"C:
+onexistent.wim", Index = 1,
+                    Status = "Invalid / check mount",
+                    MountFolder = @"C:WIMWorkMount",
+                    RegistrationChecked = true
+                });
+            Require(MountRecoverySession.LoadCheckpoint()!.Index == 1 &&
+                    MountRecoverySession.ReviewAfterRestart(
+                        @"C:
+onexistent.wim", 1).Contains("not been confirmed"),
+                    "Recovery wizard checkpoints must persist safely and refuse blind cleanup.");
 
             var locks = new WimMountLocks.ScanResult { FilesSampled = 5, Limited = true };
             locks.Candidates.Add(new WimMountLocks.LockCandidate {
@@ -2416,6 +2463,8 @@ internal static class LayoutSmoke
             var history = Find(center, "gridOperationHistory") as DataGridView;
             var image = Find(center, "txtOperationImage") as TextBox;
             var browse = Find(center, "btnOperationBrowse") as Button;
+            var output = Find(center, "txtOperationOutput") as TextBox;
+            var outputBrowse = Find(center, "btnOperationOutputBrowse") as Button;
             var historyRefresh = Find(center, "btnOperationHistoryRefresh") as Button;
             var historyCopy = Find(center, "btnOperationHistoryCopy") as Button;
             var kind = Find(center, "cmbOperationKind") as ComboBox;
@@ -2430,6 +2479,7 @@ internal static class LayoutSmoke
                     queue is not null && queue.ReadOnly &&
                     history is not null && history.ReadOnly &&
                     image is not null && browse is not null &&
+                    output is not null && outputBrowse is not null &&
                     historyRefresh is not null && historyCopy is not null &&
                     kind is not null && name is not null &&
                     load is not null && save is not null && preflight is not null &&
@@ -2438,6 +2488,11 @@ internal static class LayoutSmoke
             Require(!cancel!.Enabled && run!.Enabled && preflight!.Enabled,
                     "An idle Operation Center must not have an active cancel action.");
             NoOverlap(image!, browse!, "Operation Center WIM path and browse");
+            NoOverlap(output!, outputBrowse!, "Operation Center NEW WIM output browse");
+            kind!.SelectedItem = "ExportIndexNewWim";
+            Application.DoEvents();
+            Require(output.Enabled && outputBrowse.Enabled,
+                    "Export destination must be available only for new-output steps.");
             NoOverlap(load!, save!, "Operation Center saved profiles controls");
             NoOverlap(preflight, run, "Operation Center preflight / run actions");
             Snapshot(center, "DISM-GUI-Operation-Center");
@@ -2446,11 +2501,49 @@ internal static class LayoutSmoke
             Snapshot(center, "DISM-GUI-Operation-History");
             center.Close();
             Application.DoEvents();
-            Console.WriteLine("PASS read-only Operation Center, local profiles, journal, locks and DPI");
+
+            using var approval = new OperationExportApprovalForm(
+                @"C:input.wim", 1, @"D:NEW.wim");
+            approval.Show(owner);
+            Application.DoEvents();
+            VerifyScrollableDialog(approval, "Export new WIM approval");
+            var confirmText = Find(approval, "txtExportConfirmation") as TextBox;
+            var consent = Find(approval, "chkExportApproved") as CheckBox;
+            var authorize = Find(approval, "btnExportApprove") as Button;
+            Require(confirmText is not null && consent is not null &&
+                    authorize is not null && !authorize.Enabled && !consent.Checked,
+                    "An approval dialog must initially refuse writes.");
+            consent!.Checked = true;
+            confirmText!.Text = "EXPORT";
+            Application.DoEvents();
+            Require(authorize!.Enabled, "Approval requires checkbox and typed EXPORT.");
+            confirmText.Text = "export";
+            Application.DoEvents();
+            Require(!authorize.Enabled, "Case-sensitive confirmation cannot be bypassed.");
+            Snapshot(approval, "DISM-GUI-Export-Approval");
+            approval.Close();
+            Application.DoEvents();
+
+            using var recovery = new MountRecoveryWizardForm();
+            recovery.Show(owner);
+            Application.DoEvents();
+            VerifyScrollableDialog(recovery, "Mount Recovery");
+            Require(Find(recovery, "txtRecoveryWim") is TextBox &&
+                    Find(recovery, "btnRecoveryInspect") is Button &&
+                    Find(recovery, "btnRecoveryLocks") is Button &&
+                    Find(recovery, "btnRecoveryCheckpoint") is Button &&
+                    Find(recovery, "btnRecoveryRecheck") is Button,
+                    "Mount Recovery must expose Inspect, lock scan and restart verification.");
+            Snapshot(recovery, "DISM-GUI-Mount-Recovery");
+            recovery.Close();
+            Application.DoEvents();
+            Console.WriteLine("PASS Operation Center, safe WIM approvals, recovery checkpoints and 200% DPI");
         }
         finally
         {
             Environment.SetEnvironmentVariable("DISMGUI_TEST_OPERATION_ROOT", previous);
+            Environment.SetEnvironmentVariable("DISMGUI_TEST_RECOVERY_ROOT", previousRecovery);
+            Environment.SetEnvironmentVariable("DISMGUI_TEST_DIAGNOSTICS", previousDiagnostics);
             try { System.IO.Directory.Delete(scratch, true); } catch { }
         }
     }
