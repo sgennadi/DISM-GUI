@@ -52,7 +52,8 @@ Public NotInheritable Class MountRecoveryWizardForm
         root.RowStyles.Add(New RowStyle(SizeType.Absolute, 58))
         root.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         root.RowStyles.Add(New RowStyle(SizeType.Absolute, 56))
-        root.RowStyles.Add(New RowStyle(SizeType.Absolute, 58))
+        root.RowStyles.Add(New RowStyle(SizeType.Absolute,
+            Math.Max(90, CInt(Math.Ceiling(Me.Font.Height * 4.6F)))))
         Controls.Add(root)
 
         Dim heading As New TableLayoutPanel With {
@@ -134,24 +135,24 @@ Public NotInheritable Class MountRecoveryWizardForm
         Next
         actions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         inspectButton = New Button With {
-            .Name = "btnRecoveryInspect", .Text = "Inspect status",
+            .Name = "btnRecoveryInspect", .Text = "Inspect",
             .Dock = DockStyle.Fill, .Margin = New Padding(0, 5, 7, 5)
         }
         locksButton = New Button With {
-            .Name = "btnRecoveryLocks", .Text = "Find file locks",
+            .Name = "btnRecoveryLocks", .Text = "File locks",
             .Dock = DockStyle.Fill, .Margin = New Padding(0, 5, 7, 5)
         }
         checkpointButton = New Button With {
-            .Name = "btnRecoveryCheckpoint", .Text = "Record restart check",
+            .Name = "btnRecoveryCheckpoint", .Text = "Save checkpoint",
             .Dock = DockStyle.Fill, .Margin = New Padding(0, 5, 7, 5),
             .Enabled = False
         }
         recheckButton = New Button With {
-            .Name = "btnRecoveryRecheck", .Text = "Verify after restart",
+            .Name = "btnRecoveryRecheck", .Text = "Verify restart",
             .Dock = DockStyle.Fill, .Margin = New Padding(0, 5, 7, 5)
         }
         Dim copyButton As New Button With {
-            .Name = "btnRecoveryCopy", .Text = "Copy report",
+            .Name = "btnRecoveryCopy", .Text = "Copy",
             .Dock = DockStyle.Fill, .Margin = New Padding(0, 5, 7, 5)
         }
         Dim closeButton As New Button With {
