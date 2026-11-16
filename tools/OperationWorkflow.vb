@@ -205,18 +205,18 @@ Public NotInheritable Class OperationWorkflow
            End Function) Then
             Throw New InvalidDataException("Invalid local operation history.")
         End If
-        For Each entry In runs
-            If entry.Status = "RUNNING" Then
-                entry.Status = "REVIEW_REQUIRED"
-                Dim pending = entry.Results.FirstOrDefault(Function(x)
+        For Each historyItem As RunRecord In runs
+            If historyItem.Status = "RUNNING" Then
+                historyItem.Status = "REVIEW_REQUIRED"
+                Dim pending = historyItem.Results.FirstOrDefault(Function(x)
                     Return x.Status = "RUNNING"
                 End Function)
                 If pending IsNot Nothing Then
                     pending.Status = "REVIEW_REQUIRED"
                     pending.Detail &= " Application stopped before final verification. " &
                                       "No automatic retry or cleanup."
-                ElseIf entry.Results.Count < MaxSteps Then
-                    entry.Results.Add(New StepResult With {
+                ElseIf historyItem.Results.Count < MaxSteps Then
+                    historyItem.Results.Add(New StepResult With {
                         .Kind = "Interrupted previous run",
                         .Status = "REVIEW_REQUIRED",
                         .Detail = "DISM GUI stopped before final verification; " &
