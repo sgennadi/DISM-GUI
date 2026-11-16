@@ -564,6 +564,34 @@ internal static class LayoutSmoke
                 comparison.Rows.Single(x => x.Name.EndsWith("changed.dll")).State == "Different" &&
                 comparison.Rows.Single(x => x.Name.EndsWith("common.dll")).State == "Present in all",
                 "Presence matrix has incorrect missing/unique/different classifications");
+
+        // Coverage counts must be per INDEX, not merely the number of rows
+        // marked Missing. Also verify only-here, differing and empty filters.
+        var coverage = Wim360IndexComparer.SummarizeCoverage(
+            comparison.Rows, comparison.Indexes);
+        Require(coverage.Count == 3 &&
+                coverage[0].Index == 1 && coverage[0].TotalRows == 5 &&
+                coverage[0].Present == 4 && coverage[0].Missing == 1 &&
+                coverage[0].OnlyHere == 1 && coverage[0].Different == 1 &&
+                coverage[1].Index == 2 && coverage[1].Present == 3 &&
+                coverage[1].Missing == 2 && coverage[1].OnlyHere == 0 &&
+                coverage[2].Index == 3 && coverage[2].Present == 3 &&
+                coverage[2].Missing == 2 && coverage[2].OnlyHere == 1,
+                "Coverage must count present, absent and exclusive entries in each index.");
+        var missingFromThree = Wim360IndexComparer.Filter(
+            comparison.Rows, "All types", "Missing from Index 3", "");
+        var coverageFiltered = Wim360IndexComparer.SummarizeCoverage(
+            missingFromThree, comparison.Indexes);
+        Require(coverageFiltered.All(x => x.TotalRows == 2) &&
+                coverageFiltered[0].Missing == 0 &&
+                coverageFiltered[1].Missing == 1 &&
+                coverageFiltered[2].Present == 0 &&
+                coverageFiltered[2].Missing == 2,
+                "Per-index coverage must reflect current filters, including missing cells.");
+        Require(Wim360IndexComparer.SummarizeCoverage(
+                    Array.Empty<Wim360IndexComparer.Row>(), comparison.Indexes)
+                    .All(x => x.TotalRows == 0 && x.Present == 0 && x.Missing == 0),
+                "Empty comparison results must have zero coverage, not phantom missing rows.");
         Require(Wim360IndexComparer.Filter(comparison.Rows, "All types",
                     "Missing / only in some", "").Count == 3 &&
                 Wim360IndexComparer.Filter(comparison.Rows, "All types",
@@ -660,6 +688,11 @@ internal static class LayoutSmoke
                     "Differences only", "", 3).Count == 1,
                 "Changes-only filter must retain ambiguous duplicate identities");
 
+        Require(Wim360IndexComparer.SummarizeCoverage(
+                    repeated.Rows, repeated.Indexes).All(x =>
+                        x.Present == 1 && x.Missing == 0 && x.Ambiguous == 1),
+                "Ambiguous duplicate rows must be counted for every affected index.");
+
         var folderComparison = Wim360IndexComparer.CompareRecords(report.ImageFile,
             "Mounted file paths / sizes", new[] { 1, 2, 3 }, new[] {
                 new Wim360IndexComparer.Item { Index=1, Kind="Folders", Key=@"Windows\Policy", Value="Present" },
@@ -748,6 +781,12 @@ internal static class LayoutSmoke
         Require(matrix is not null && matrix.VirtualMode &&
                 matrix.Columns.Count == 6 && matrix.RowCount == 5 &&
                 action is not null && action.Enabled, "Three-index comparison UI not initialized");
+
+        var coverageLabel = Find(dialog, "lbl360IndexCompareSummary") as Label;
+        Require(coverageLabel is not null &&
+                coverageLabel.Text.Contains("Missing 1:1, 2:2, 3:2") &&
+                coverageLabel.Text.Contains("Different/ambiguous 1"),
+                "WIM 360 must show per-index missing counts in the comparison status.");
         // A scrollable dialog is not sufficient if the actual comparison grid
         // starts below the viewport at 125-175% UI font scaling.
         var matrixViewport = Find(dialog, "Wim360CompareIndexesViewport") as Panel;
@@ -809,6 +848,9 @@ internal static class LayoutSmoke
         Application.DoEvents();
         Require(matrix.RowCount == 2,
                 "Missing-from-index filter must show paths absent in index 3");
+
+        Require(coverageLabel!.Text.Contains("Missing 1:0, 2:1, 3:2"),
+                "Changing the result filter must immediately refresh per-index missing counts.");
         dialog.PreviewForTest(comparison);
         Application.DoEvents();
         Require(state.SelectedItem?.ToString() == "Missing from Index 3" &&
