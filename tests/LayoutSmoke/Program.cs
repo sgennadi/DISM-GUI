@@ -2386,9 +2386,10 @@ internal static class LayoutSmoke
             var result = System.Threading.Tasks.Task.Run(() =>
                 OperationWorkflow.RunAsync(runOnlyHealth, null,
                     System.Threading.CancellationToken.None)).GetAwaiter().GetResult();
-            Require(result.Status == "PASS" && result.Results.Count == 1 &&
+            Require(result.Status == "WARN" && result.Results.Count == 1 &&
+                    result.Results[0].Detail.Contains("choose a WIM") &&
                     OperationWorkflow.LoadHistory().Count == 1,
-                    "A safe operation must execute and retain local history.");
+                    "Unscoped mount health must warn rather than falsely imply a verified mount.");
 
             var locks = new WimMountLocks.ScanResult { FilesSampled = 5, Limited = true };
             locks.Candidates.Add(new WimMountLocks.LockCandidate {
@@ -2414,6 +2415,9 @@ internal static class LayoutSmoke
             var queue = Find(center, "gridOperationPlan") as DataGridView;
             var history = Find(center, "gridOperationHistory") as DataGridView;
             var image = Find(center, "txtOperationImage") as TextBox;
+            var browse = Find(center, "btnOperationBrowse") as Button;
+            var historyRefresh = Find(center, "btnOperationHistoryRefresh") as Button;
+            var historyCopy = Find(center, "btnOperationHistoryCopy") as Button;
             var kind = Find(center, "cmbOperationKind") as ComboBox;
             var name = Find(center, "txtOperationProfileName") as TextBox;
             var load = Find(center, "btnOperationLoad") as Button;
@@ -2425,12 +2429,15 @@ internal static class LayoutSmoke
             Require(tabs is not null && tabs.TabPages.Count == 2 &&
                     queue is not null && queue.ReadOnly &&
                     history is not null && history.ReadOnly &&
-                    image is not null && kind is not null && name is not null &&
+                    image is not null && browse is not null &&
+                    historyRefresh is not null && historyCopy is not null &&
+                    kind is not null && name is not null &&
                     load is not null && save is not null && preflight is not null &&
                     run is not null && cancel is not null && add is not null,
                     "Operation Center must expose plan, queue, profile, preflight and history controls.");
             Require(!cancel!.Enabled && run!.Enabled && preflight!.Enabled,
                     "An idle Operation Center must not have an active cancel action.");
+            NoOverlap(image!, browse!, "Operation Center WIM path and browse");
             NoOverlap(load!, save!, "Operation Center saved profiles controls");
             NoOverlap(preflight, run, "Operation Center preflight / run actions");
             Snapshot(center, "DISM-GUI-Operation-Center");
