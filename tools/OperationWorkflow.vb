@@ -21,6 +21,7 @@ Public NotInheritable Class OperationWorkflow
         Public Property Kind As String = "WimMetadata"
         Public Property ImagePath As String = ""
         Public Property ImageIndex As Integer = 0
+        Public Property OutputPath As String = ""
     End Class
 
     Public NotInheritable Class Profile
@@ -36,6 +37,7 @@ Public NotInheritable Class OperationWorkflow
     End Class
 
     Public NotInheritable Class RunRecord
+        Public Property Id As String = Guid.NewGuid().ToString("N")
         Public Property Profile As String = ""
         Public Property StartedUtc As DateTime = DateTime.UtcNow
         Public Property FinishedUtc As DateTime
@@ -83,7 +85,7 @@ Public NotInheritable Class OperationWorkflow
     End Function
 
     Public Shared Function AllowedKinds() As String()
-        Return {"EnvironmentPreflight", "WimMetadata", "MountHealth", "MountedInventory"}
+        Return {"EnvironmentPreflight", "WimMetadata", "MountHealth", "MountedInventory", "ExportIndexNewWim"}
     End Function
 
     Public Shared Function Validate(profile As Profile) As Profile
@@ -103,6 +105,31 @@ Public NotInheritable Class OperationWorkflow
             If stepItem Is Nothing OrElse
                Not AllowedKinds().Contains(stepItem.Kind, StringComparer.Ordinal) Then
                 Throw New InvalidDataException("Only known read-only operation types are allowed.")
+            End If
+            If stepItem.Kind <> "ExportIndexNewWim" AndAlso
+               Not String.IsNullOrWhiteSpace(stepItem.OutputPath) Then
+                Throw New InvalidDataException("Only NEW WIM export accepts an output path.")
+            End If
+            If stepItem.Kind = "ExportIndexNewWim" Then
+                If String.IsNullOrWhiteSpace(stepItem.ImagePath) OrElse
+                   Not Path.IsPathFullyQualified(stepItem.ImagePath) OrElse
+                   Not {".wim", ".esd"}.Contains(Path.GetExtension(stepItem.ImagePath),
+                                                StringComparer.OrdinalIgnoreCase) OrElse
+                   stepItem.ImageIndex < 1 OrElse
+                   String.IsNullOrWhiteSpace(stepItem.OutputPath) OrElse
+                   Not Path.IsPathFullyQualified(stepItem.OutputPath) OrElse
+                   Not String.Equals(Path.GetExtension(stepItem.OutputPath), ".wim",
+                                     StringComparison.OrdinalIgnoreCase) Then
+                    Throw New InvalidDataException(
+                        "New WIM export requires an absolute WIM/ESD, positive index and " &
+                        "an absolute NEW .wim destination.")
+                End If
+                If String.Equals(Path.GetFullPath(stepItem.ImagePath),
+                                 Path.GetFullPath(stepItem.OutputPath),
+                                 StringComparison.OrdinalIgnoreCase) Then
+                    Throw New InvalidDataException("Export destination cannot be the source.")
+                End If
+                Continue For
             End If
             If stepItem.Kind = "EnvironmentPreflight" Then
                 If Not String.IsNullOrWhiteSpace(stepItem.ImagePath) OrElse
@@ -178,11 +205,28 @@ Public NotInheritable Class OperationWorkflow
            End Function) Then
             Throw New InvalidDataException("Invalid local operation history.")
         End If
+        For Each entry In runs
+            If entry.Status = "RUNNING" Then
+                entry.Status = "REVIEW_REQUIRED"
+                entry.Results.Add(New StepResult With {
+                    .Kind = "Interrupted previous run",
+                    .Status = "REVIEW_REQUIRED",
+                    .Detail = "DISM GUI closed before final verification. " &
+                              "A partial WIM export may remain. No automatic resume or cleanup."
+                })
+            End If
+        Next
         Return runs
     End Function
 
     Private Shared Sub SaveHistory(record As RunRecord)
+        If record Is Nothing OrElse String.IsNullOrWhiteSpace(record.Id) Then
+            Throw New InvalidDataException("Operation run must have a unique journal ID.")
+        End If
         Dim recent = LoadHistory()
+        recent.RemoveAll(Function(x)
+            Return String.Equals(x.Id, record.Id, StringComparison.OrdinalIgnoreCase)
+        End Function)
         recent.Insert(0, record)
         AtomicSave(StoragePath("history.json"),
             JsonSerializer.Serialize(recent.Take(100).ToList(),
@@ -221,7 +265,15 @@ Public NotInheritable Class OperationWorkflow
         For Each item In profile.Steps
             token.ThrowIfCancellationRequested()
             Try
-                If item.Kind = "EnvironmentPreflight" Then
+                If item.Kind = "ExportIndexNewWim" Then
+                    Dim export = Await Task.Run(
+                        Function() OperationExport.Check(item.ImagePath,
+                                                         item.ImageIndex, item.OutputPath), token)
+                    result.Add(Entry(item, "READY",
+                        "Write to NEW output only; requires interactive approval. " &
+                        "Minimum " & (export.RequiredBytes  1048576L).ToString(
+                            CultureInfo.InvariantCulture) & " MiB free."))
+                ElseIf item.Kind = "EnvironmentPreflight" Then
                     result.Add(Entry(item, "READY", "Windows environment check can run read-only."))
                 ElseIf item.Kind = "MountHealth" AndAlso
                        String.IsNullOrWhiteSpace(item.ImagePath) Then
@@ -291,7 +343,8 @@ Public NotInheritable Class OperationWorkflow
 
     Public Shared Async Function RunAsync(profile As Profile,
                                           progress As IProgress(Of StepResult),
-                                          token As CancellationToken
+                                          token As CancellationToken,
+                                          Optional approveExport As Func(Of StepPlan, Task(Of Boolean)) = Nothing
                                           ) As Task(Of RunRecord)
         Validate(profile)
         Dim run As New RunRecord With {
@@ -299,6 +352,9 @@ Public NotInheritable Class OperationWorkflow
             .StartedUtc = DateTime.UtcNow,
             .Status = "RUNNING"
         }
+        ' Persist the RUNNING checkpoint before any long-running operation.
+        ' If the application crashes, LoadHistory flags an uncertain outcome.
+        SaveHistory(run)
         Try
             Dim preview = Await PreflightAsync(profile, token)
             If preview.Any(Function(x) x.Status = "BLOCKED") Then
@@ -312,24 +368,78 @@ Public NotInheritable Class OperationWorkflow
                     token.ThrowIfCancellationRequested()
                     Dim report As StepResult
                     Try
-                        report = Await ExecuteStepAsync(stepItem, token)
+                        If stepItem.Kind = "ExportIndexNewWim" Then
+                            If approveExport Is Nothing Then
+                                report = Entry(stepItem, "BLOCKED",
+                                    "Interactive approval is required for NEW WIM export.")
+                            Else
+                                ' Never use approvals stored in a profile.
+                                Dim accepted = Await approveExport(stepItem)
+                                token.ThrowIfCancellationRequested()
+                                If Not accepted Then
+                                    report = Entry(stepItem, "BLOCKED",
+                                        "Operator declined this write step. No DISM export started.")
+                                Else
+                                    Dim check = Await Task.Run(
+                                        Function() OperationExport.Check(stepItem.ImagePath,
+                                                stepItem.ImageIndex, stepItem.OutputPath), token)
+                                    Dim checkpoint = Entry(stepItem, "RUNNING",
+                                        "Approved new-file export, output: " & check.Output &
+                                        ". Verify any partial output if interrupted.")
+                                    run.Results.Add(checkpoint)
+                                    SaveHistory(run)
+                                    If progress IsNot Nothing Then progress.Report(checkpoint)
+                                    Dim outcome = Await OperationExport.ExportAsync(
+                                        stepItem.ImagePath, stepItem.ImageIndex,
+                                        stepItem.OutputPath, token)
+                                    run.Results.RemoveAt(run.Results.Count - 1)
+                                    report = Entry(stepItem, "PASS", outcome)
+                                End If
+                            End If
+                        Else
+                            report = Await ExecuteStepAsync(stepItem, token)
+                        End If
                     Catch ex As OperationCanceledException
                         Throw
                     Catch ex As Exception
                         report = Entry(stepItem, "FAIL",
                             ErrorDiagnostics.Redact(ex.GetType().Name & ": " & ex.Message))
                     End Try
+                    If run.Results.Count > 0 AndAlso
+                       run.Results(run.Results.Count - 1).Status = "RUNNING" Then
+                        ' Failure or uncertainty during a write replaces its checkpoint
+                        ' with review-required evidence; never repeat automatically.
+                        run.Results.RemoveAt(run.Results.Count - 1)
+                        report.Status = "REVIEW_REQUIRED"
+                    End If
                     run.Results.Add(report)
+                    SaveHistory(run)
                     If progress IsNot Nothing Then progress.Report(report)
-                    If report.Status = "FAIL" Then Exit For
+                    If report.Status = "FAIL" OrElse
+                       report.Status = "BLOCKED" OrElse
+                       report.Status = "REVIEW_REQUIRED" Then Exit For
                 Next
-                run.Status = If(run.Results.Any(Function(x) x.Status = "FAIL"),
-                                "FAIL",
-                                If(run.Results.Any(Function(x) x.Status = "WARN"),
-                                   "WARN", "PASS"))
+                run.Status = If(run.Results.Any(Function(x)
+                                    Return x.Status = "REVIEW_REQUIRED"
+                                End Function), "REVIEW_REQUIRED",
+                                If(run.Results.Any(Function(x) x.Status = "BLOCKED"),
+                                   "BLOCKED",
+                                   If(run.Results.Any(Function(x) x.Status = "FAIL"),
+                                      "FAIL",
+                                      If(run.Results.Any(Function(x) x.Status = "WARN"),
+                                         "WARN", "PASS"))))
             End If
         Catch ex As OperationCanceledException
-            run.Status = "CANCELED"
+            run.Status = If(run.Results.Any(Function(x) x.Status = "RUNNING"),
+                            "REVIEW_REQUIRED", "CANCELED")
+            If run.Status = "REVIEW_REQUIRED" Then
+                run.Results.Add(New StepResult With {
+                    .Kind = "Interrupted new-WIM export",
+                    .Status = "REVIEW_REQUIRED",
+                    .Detail = "Export was canceled after its write checkpoint; " &
+                              "inspect the temporary WIM, DISM log and destination manually."
+                })
+            End If
         Catch ex As Exception
             run.Status = "FAIL"
             run.Results.Add(New StepResult With {
