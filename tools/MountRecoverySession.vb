@@ -36,6 +36,11 @@ Public NotInheritable Class MountRecoverySession
     End Class
 
     Private Shared Function StoreFile() As String
+        Dim testRoot = Environment.GetEnvironmentVariable("DISMGUI_TEST_RECOVERY_ROOT")
+        If Environment.GetEnvironmentVariable("DISMGUI_TEST_DIAGNOSTICS") = "1" AndAlso
+           Not String.IsNullOrWhiteSpace(testRoot) Then
+            Return Path.Combine(Path.GetFullPath(testRoot), "checkpoint.json")
+        End If
         Return Path.Combine(Environment.GetFolderPath(
             Environment.SpecialFolder.LocalApplicationData),
             "DISMGUI", "MountRecovery", "checkpoint.json")
