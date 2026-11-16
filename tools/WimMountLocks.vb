@@ -96,7 +96,7 @@ Public NotInheritable Class WimMountLocks
             Throw New DirectoryNotFoundException("Mount folder is not accessible.")
         End If
         If (File.GetAttributes(full) And FileAttributes.ReparsePoint) <>
-            FileAttributes.Normal Then
+            CType(0, FileAttributes) Then
             Throw New IOException("Mount folder itself is a reparse point; inspect manually.")
         End If
         Return full
