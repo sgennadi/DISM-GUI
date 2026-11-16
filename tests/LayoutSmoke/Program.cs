@@ -1360,7 +1360,7 @@ internal static class LayoutSmoke
                     "Verified dismount must be distinguished from an interrupted operation");
             var health = WimMountSafety.BuildHealthReport();
             Require(health.Contains("WIMMount registry registrations (read-only)") &&
-                    health.Contains("not a DISM Invalid/OK status code"),
+                    health.Contains("NOT a DISM Invalid/OK status code"),
                     "Mount Health must include WIMMount registration inspection without mutation.");
             Require(health.Contains("MOUNT HEALTH") &&
                     health.Contains("Review required") &&
