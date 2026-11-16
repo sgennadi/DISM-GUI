@@ -96,7 +96,8 @@ Public NotInheritable Class OperationCenterForm
         layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 64))
         layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 58))
         layout.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 60))
+        layout.RowStyles.Add(New RowStyle(SizeType.Absolute,
+            Math.Max(72, CInt(Math.Ceiling(Me.Font.Height * 4.5F)))))
         planTab.Controls.Add(layout)
 
         Dim profiles As New TableLayoutPanel With {
