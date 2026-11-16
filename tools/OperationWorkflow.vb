@@ -89,7 +89,7 @@ Public NotInheritable Class OperationWorkflow
         End If
         If String.IsNullOrWhiteSpace(profile.Name) OrElse
            profile.Name.Trim().Length > 80 OrElse
-           profile.Name.IndexOfAny({ControlChars.Cr, ControlChars.Lf, ChrW(0)}) >= 0 Then
+           profile.Name.IndexOfAny(New Char() {ChrW(13), ChrW(10), ChrW(0)}) >= 0 Then
             Throw New InvalidDataException("Profile name must be 1-80 single-line characters.")
         End If
         If profile.Steps Is Nothing OrElse profile.Steps.Count = 0 OrElse
