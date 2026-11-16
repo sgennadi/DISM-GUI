@@ -1377,11 +1377,13 @@ internal static class LayoutSmoke
             var reportBox = Find(dialog, "txtMountHealthReport") as TextBox;
             var refresh = Find(dialog, "btnMountHealthRefresh") as Button;
             var locksButton = Find(dialog, "btnMountHealthFindLocks") as Button;
+            var wizardButton = Find(dialog, "btnMountHealthRecovery") as Button;
             var copy = Find(dialog, "btnMountHealthCopy") as Button;
             var close = Find(dialog, "btnMountHealthClose") as Button;
             Require(reportBox is not null && reportBox.ReadOnly &&
                     reportBox.Multiline && reportBox.ScrollBars == ScrollBars.Both &&
                     refresh is not null && locksButton is not null &&
+                    wizardButton is not null &&
                     copy is not null && close is not null,
                     "WIM 360 Mount Health GUI must be read-only and contain refresh/copy/close");
             var subtitle = Find(dialog, "lblMountHealthSubtitle") as Label;
@@ -3425,8 +3427,10 @@ onexistent.wim", 1).Contains("not been confirmed"),
                     "Tools menu must expose the Integrated Test Center");
             Require(tools.ContextMenuStrip.Items.Cast<ToolStripItem>()
                     .Any(item => item.Name == "mnuOperationCenter") &&
-                    Find(dashboard!, "btn360OperationCenter") is Button,
-                    "Operation Center must be accessible from Tools and WIM 360");
+                    Find(dashboard!, "btn360OperationCenter") is Button &&
+                    tools.ContextMenuStrip.Items.Cast<ToolStripItem>()
+                        .Any(item => item.Name == "mnuMountRecoveryWizard"),
+                    "Operation Center and Mount Recovery must be accessible from Tools and WIM 360");
             Require(Find(dashboard!, "btn360TestCenter") is Button,
                     "WIM 360 must provide the direct complete-test shortcut");
             var splitter = Find(form, "mainOutputSplitter") as SplitContainer;
