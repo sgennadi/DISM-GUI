@@ -229,6 +229,50 @@ Public NotInheritable Class WimMountSafety
         Return list
     End Function
 
+    ' DISM returns HRESULT 0xC1420117 after it has reached 100% when
+    ' Windows still has handles open underneath the mount directory.
+    ' A failed unmount never authorizes automatic cleanup or another Commit.
+    Public Shared Function IsIncompleteUnmount(exitCode As String) As Boolean
+        Dim raw = If(exitCode, "").Trim()
+        If raw.StartsWith("0x", StringComparison.OrdinalIgnoreCase) Then
+            Dim unsignedCode As ULong
+            Return ULong.TryParse(raw.Substring(2), NumberStyles.HexNumber,
+                                  CultureInfo.InvariantCulture, unsignedCode) AndAlso
+                   unsignedCode = &HC1420117UL
+        End If
+        Dim numericCode As Long
+        Return Long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture,
+                             numericCode) AndAlso
+               (numericCode = -1052638953L OrElse numericCode = 3242328343L)
+    End Function
+
+    Public Shared Function FailureGuidance(exitCode As String, wasCommit As Boolean,
+                                           Optional registration As String = "") As String
+        Dim state = If(String.IsNullOrWhiteSpace(registration),
+                       "Mount registration has not been verified.", registration)
+        If IsIncompleteUnmount(exitCode) Then
+            Return "DISM could not completely release the mount folder (0xC1420117)." &
+                Environment.NewLine & state & Environment.NewLine &
+                "A process may still have files or a current directory open inside the mount: " &
+                "Explorer, Total Commander, a terminal, an editor, a file scan or antivirus." &
+                Environment.NewLine &
+                "Close windows using the folder and check Resource Monitor > CPU > " &
+                "Associated Handles for its path. Refresh WIM 360 Mount health before " &
+                "choosing any further action." & Environment.NewLine &
+                If(wasCommit,
+                   "A failed Commit may already have written changes. Do not retry Commit " &
+                   "or switch to Discard automatically.",
+                   "Do not automatically repeat Discard; check whether DISM still " &
+                   "registers the image as mounted.") &
+                Environment.NewLine &
+                "Do not delete or take ownership of the mount folder or run " &
+                "Cleanup-Mountpoints until its state has been reviewed."
+        End If
+        Return "DISM did not verify the dismount (exit " & If(exitCode, "") & "). " &
+            state & " Review WIM 360 Mount health and the DISM log. " &
+            "Do not automatically retry a Commit or Discard."
+    End Function
+
     Public Shared Function BuildHealthReport(Optional chosenWim As String = ""
                                              ) As String
         Dim lines As New List(Of String) From {

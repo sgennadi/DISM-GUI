@@ -1297,6 +1297,28 @@ internal static class LayoutSmoke
             Require(unsafeStateRejected,
                     "Needs-remount state must fail closed, never run cleanup");
             report.Images[0].MountStatus = "Mounted (R/W)";
+            // A 100%-then-error unmount is not a success: Windows DISM reports
+            // this HRESULT as both signed decimal and hexadecimal.
+            Require(WimMountSafety.IsIncompleteUnmount("-1052638953") &&
+                    WimMountSafety.IsIncompleteUnmount("0xC1420117") &&
+                    WimMountSafety.IsIncompleteUnmount("3242328343") &&
+                    !WimMountSafety.IsIncompleteUnmount("0") &&
+                    !WimMountSafety.IsIncompleteUnmount("87") &&
+                    !WimMountSafety.IsIncompleteUnmount("garbage"),
+                    "DISM 0xC1420117 must be recognized in all real exit-code formats.");
+            var blockedCommit = WimMountSafety.FailureGuidance("-1052638953", true,
+                "WIMGAPI still registers the image.");
+            var blockedDiscard = WimMountSafety.FailureGuidance("0xC1420117", false,
+                "WIMGAPI no longer registers the image.");
+            Require(blockedCommit.Contains("0xC1420117") &&
+                    blockedCommit.Contains("Total Commander") &&
+                    blockedCommit.Contains("Resource Monitor") &&
+                    blockedCommit.Contains("Do not retry Commit") &&
+                    blockedDiscard.Contains("Do not automatically repeat Discard") &&
+                    blockedDiscard.Contains("no longer registers") &&
+                    !WimMountSafety.FailureGuidance("87", true)
+                                   .Contains("0xC1420117"),
+                    "Failed dismount must show actionable, non-destructive mount guidance.");
             var pending = WimMountSafety.BeginDismount(writable);
             var first = WimMountSafety.RecentOperations();
             Require(first.Count == 1 && first[0].Id == pending.Id &&
