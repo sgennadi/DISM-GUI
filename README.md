@@ -228,6 +228,22 @@ row; it does not identify which index contains the correct value.
 For more than three indexes, remaining counts are available in the tooltip.
 
 
+### Visual pair comparison (4.3.21)
+
+The **Comparison** column now displays **Change 1 -> 2** (or your chosen
+Before -> After indexes). Rows are labeled Added, Removed, Modified,
+Ambiguous, Unchanged or Outside pair and use soft green, red, amber
+and violet tints for the change categories. Color is never the only
+signal. Click the Comparison column header or the status line to select
+the direction, or right-click the table to **Choose Before -> After**
+or **Reverse direction**. The **Result** selector includes pair-specific
+Added / Removed / Modified / Ambiguous / Unchanged and **Pair changes
+only** filters, which refresh immediately when direction changes.
+
+The existing Export menu provides the same before/after pair selection
+for CSV. For path-only comparisons, **Unchanged** means the reported
+path-presence values match; it does NOT mean file contents are equal.
+
 ### Directional change report (Before → After)
 
 In **WIM 360 → Compare indexes**, choose 2–8 indexes and a comparison
