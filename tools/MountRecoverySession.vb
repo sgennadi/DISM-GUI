@@ -123,8 +123,8 @@ Public NotInheritable Class MountRecoverySession
     Public Shared Function LoadCheckpoint() As Checkpoint
         Dim target = StoreFile()
         If Not File.Exists(target) Then Return Nothing
-        Dim file As New FileInfo(target)
-        If file.Length < 2 OrElse file.Length > 32768 Then
+        Dim checkpointFile As New FileInfo(target)
+        If checkpointFile.Length < 2 OrElse checkpointFile.Length > 32768 Then
             Throw New InvalidDataException("Unexpected recovery checkpoint size.")
         End If
         Dim record = JsonSerializer.Deserialize(Of Checkpoint)(File.ReadAllText(target))
