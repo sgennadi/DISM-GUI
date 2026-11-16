@@ -469,6 +469,46 @@ fixtures, plus disposable Windows DISM images where available.
 Physical Windows 11/Server servicing should still be tested with
 non-production copies before deployment.
 
+### Operation Center, profiles, WIM export and Mount Recovery (new candidate)
+
+**Tools → Operation Center** and **WIM 360 → Operation Center** open the
+same resizable workflow window. Five operations are allowlisted:
+EnvironmentPreflight, WimMetadata, MountHealth, MountedInventory (an already
+verified mounted index) and **ExportIndexNewWim**. Preflight validates every
+source and destination before queue execution. Read-only checks run
+sequentially. ExportIndexNewWim runs DISM only on an isolated, previously
+nonexistent destination WIM; each export requires a fresh checkbox and
+typed EXPORT confirmation, not a stored approval.
+
+The export uses a conservative disk-space gate, one cooperative global
+writer lease, a random temporary filename, WIMGAPI output verification
+and source SHA-256 before and after. Existing output WIMs are never
+overwritten. If interrupted, the temporary partial file is retained
+for manual inspection. The queue marks uncertain outcomes REVIEW_REQUIRED
+and never resumes or cleans up automatically.
+
+**Profiles** store at most 24 plans with up to 16 steps each in
+`%LOCALAPPDATA%\DISMGUI\OperationCenter\profiles.json`. Run history
+and checkpoints are stored in `history.json`. No arbitrary command,
+unattended Mount, Commit, Discard, package changes or driver injection
+is permitted: those servicing actions retain their existing interactive
+workflow and independent safety checks.
+
+**Tools → WIM Mount Recovery**, also available from WIM 360 Mount Health,
+provides a guided, read-only investigation for Invalid mounts. It can
+inspect WIMGAPI state, sample open-file process handles through Windows
+Restart Manager, record a local restart checkpoint and independently
+recheck mount registration after an operator-initiated Windows Restart.
+It never edits WIMMount registry entries or force-cleans mount folders.
+
+CI exercises profile validation, real disposable WIM export, read-only
+WIM mount/unmount, restart checkpoints and GUI screenshots for simulated
+125%, 150%, 175% and **200%** scaling. Physical 200% screen testing and
+real Windows 11/Server 2022/Server 2025 install.wim signed-OEM servicing
+still require operator-provided media and are **not certified** by CI.
+See docs/FOUR-STAGE-ACCEPTANCE.md and
+tests/Acceptance/Invoke-FourStageAcceptance.cmd for field verification.
+
 ### Real WIM mount integration test (4.3.6)
 
 The Windows x64 CI runner creates a disposable WIM using `dism.exe

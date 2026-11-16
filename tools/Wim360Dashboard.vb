@@ -421,11 +421,17 @@ Public NotInheritable Class Wim360Dashboard
             End Using
         End Sub
         actions.Controls.Add(health, 0, 5)
-        Dim healthHint = MakeText("Mount status + local recovery journal",
-                                  9.0F, False, ModernTheme.Muted)
-        healthHint.Name = "lbl360MountHealthHint"
-        healthHint.Margin = New Padding(2, 2, 0, 2)
-        actions.Controls.Add(healthHint, 1, 5)
+        Dim operationCenter As New Button With {
+            .Name = "btn360OperationCenter", .Text = "Operation Center",
+            .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 8, 4)
+        }
+        ModernTheme.StyleButton(operationCenter, "secondary")
+        AddHandler operationCenter.Click, Sub(sender, e)
+            Using viewer As New OperationCenterForm(fileBox.Text.Trim())
+                viewer.ShowDialog(Me.FindForm())
+            End Using
+        End Sub
+        actions.Controls.Add(operationCenter, 1, 5)
 
         Dim swmTools As New Button With {
             .Name = "btn360SwmTools", .Text = "SWM audit / export",

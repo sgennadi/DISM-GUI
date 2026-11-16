@@ -577,6 +577,26 @@ Public NotInheritable Class ModernTheme
             End Using
         End Sub
         toolsMenu.Items.Add(testCenterMenu)
+        Dim centerMenu As New ToolStripMenuItem("Operation Center...") With {
+            .Name = "mnuOperationCenter",
+            .ToolTipText = "Preflight, read-only job queue, local saved profiles and recovery history."
+        }
+        AddHandler centerMenu.Click, Sub(sender, e)
+            Using viewer As New OperationCenterForm()
+                viewer.ShowDialog(frm)
+            End Using
+        End Sub
+        toolsMenu.Items.Add(centerMenu)
+        Dim recoveryMenu As New ToolStripMenuItem("WIM Mount Recovery...") With {
+            .Name = "mnuMountRecoveryWizard",
+            .ToolTipText = "Inspect invalid mounts, find file locks and verify after a manual restart."
+        }
+        AddHandler recoveryMenu.Click, Sub(sender, e)
+            Using wizard As New MountRecoveryWizardForm()
+                wizard.ShowDialog(frm)
+            End Using
+        End Sub
+        toolsMenu.Items.Add(recoveryMenu)
         toolsMenu.Items.Add(New ToolStripSeparator())
         toolsMenu.Items.Add(updatesStatus)
         toolsMenu.Items.Add(updatesMenuItem)
