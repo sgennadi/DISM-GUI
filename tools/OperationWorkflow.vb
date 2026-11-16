@@ -45,7 +45,10 @@ Public NotInheritable Class OperationWorkflow
 
     Private Shared Function RootFolder() As String
         Dim unitRoot = Environment.GetEnvironmentVariable("DISMGUI_TEST_OPERATION_ROOT")
-        If Not String.IsNullOrWhiteSpace(unitRoot) Then
+        ' Test-only path override. In real installations, profile files
+        ' must stay under LocalAppData, never a mounted user-selected WIM.
+        If Not String.IsNullOrWhiteSpace(unitRoot) AndAlso
+           Environment.GetEnvironmentVariable("DISMGUI_TEST_DIAGNOSTICS") = "1" Then
             Return Path.GetFullPath(unitRoot)
         End If
         Return Path.Combine(Environment.GetFolderPath(
@@ -259,8 +262,13 @@ Public NotInheritable Class OperationWorkflow
         If stepItem.Kind = "MountHealth" Then
             Dim report = Await Task.Run(
                 Function() WimMountSafety.BuildHealthReport(stepItem.ImagePath), token)
-            Return Entry(stepItem, If(report.Contains("Invalid / check mount"), "WARN", "PASS"),
-                         "Read-only WIMMount registration and local history inspected.")
+            Dim unchecked = String.IsNullOrWhiteSpace(stepItem.ImagePath)
+            Dim suspicious = report.Contains("Invalid / check mount",
+                                              StringComparison.OrdinalIgnoreCase)
+            Return Entry(stepItem, If(unchecked OrElse suspicious, "WARN", "PASS"),
+                If(unchecked,
+                   "Registry and local history only; choose a WIM to verify its WIMGAPI status.",
+                   "Read-only WIMMount registration and local history inspected."))
         End If
         Dim inspectedImage = Await Task.Run(
             Function() Wim360Reader.Inspect(stepItem.ImagePath), token)
@@ -316,7 +324,9 @@ Public NotInheritable Class OperationWorkflow
                     If report.Status = "FAIL" Then Exit For
                 Next
                 run.Status = If(run.Results.Any(Function(x) x.Status = "FAIL"),
-                                "FAIL", "PASS")
+                                "FAIL",
+                                If(run.Results.Any(Function(x) x.Status = "WARN"),
+                                   "WARN", "PASS"))
             End If
         Catch ex As OperationCanceledException
             run.Status = "CANCELED"
