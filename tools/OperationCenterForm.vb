@@ -376,6 +376,7 @@ Public NotInheritable Class OperationCenterForm
                 .ImageIndex = CInt(indexBox.Value),
                 .OutputPath = If(outputPath.Text, "").Trim()
             }
+            If item.Kind <> "ExportIndexNewWim" Then item.OutputPath = ""
             If item.Kind = "EnvironmentPreflight" Then
                 item.ImagePath = ""
                 item.ImageIndex = 0
