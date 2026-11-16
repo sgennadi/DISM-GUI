@@ -37,15 +37,15 @@ Public NotInheritable Class OperationExport
             Throw New IOException(
                 "Use a local fixed disk for export output; UNC destinations are not supported.")
         End If
-        Dim directory = Path.GetDirectoryName(full)
-        If Not Directory.Exists(directory) Then
+        Dim destinationFolder = Path.GetDirectoryName(full)
+        If Not IO.Directory.Exists(destinationFolder) Then
             Throw New DirectoryNotFoundException("Create the output directory first.")
         End If
         Dim volume As New DriveInfo(Path.GetPathRoot(full))
         If Not volume.IsReady OrElse volume.DriveType <> DriveType.Fixed Then
             Throw New IOException("Export output requires an available fixed disk.")
         End If
-        Dim parent = directory
+        Dim parent = destinationFolder
         While Not String.IsNullOrWhiteSpace(parent)
             If (File.GetAttributes(parent) And FileAttributes.ReparsePoint) <>
                 CType(0, FileAttributes) Then
@@ -60,7 +60,7 @@ Public NotInheritable Class OperationExport
             End If
             parent = nextParent
         End While
-        If File.Exists(full) OrElse Directory.Exists(full) Then
+        If File.Exists(full) OrElse IO.Directory.Exists(full) Then
             Throw New IOException("Destination already exists; no WIM will be overwritten.")
         End If
         Return full
