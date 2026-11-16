@@ -7,8 +7,8 @@ Imports System.Threading
 Imports System.Threading.Tasks
 Imports System.Windows.Forms
 
-' Unified operator-facing safe plan and history. Writes to WIM, recovery
-' actions, driver installs and arbitrary shell commands are NOT batch types.
+' Safe read-only operations and one explicitly approved NEW WIM export.
+' Commit, Discard, driver injections and arbitrary commands are NEVER batch types.
 Public NotInheritable Class OperationCenterForm
     Inherits Form
 
@@ -16,6 +16,7 @@ Public NotInheritable Class OperationCenterForm
     Private ReadOnly saved As ComboBox
     Private ReadOnly kindSelector As ComboBox
     Private ReadOnly imagePath As TextBox
+    Private ReadOnly outputPath As TextBox
     Private ReadOnly indexBox As NumericUpDown
     Private ReadOnly planGrid As DataGridView
     Private ReadOnly historyGrid As DataGridView
@@ -70,7 +71,7 @@ Public NotInheritable Class OperationCenterForm
             .Dock = DockStyle.Fill, .TextAlign = ContentAlignment.MiddleLeft
         }, 0, 0)
         heading.Controls.Add(New Label With {
-            .Text = "Preflight, sequential read-only operations, saved profiles and recovery history",
+            .Text = "Preflight, sequential checks and approved NEW WIM exports; local profiles and recovery history",
             .Dock = DockStyle.Fill, .AutoEllipsis = True,
             .ForeColor = ModernTheme.Muted,
             .TextAlign = ContentAlignment.MiddleLeft
@@ -87,12 +88,13 @@ Public NotInheritable Class OperationCenterForm
         root.Controls.Add(tabs, 0, 1)
 
         Dim layout As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .RowCount = 4, .ColumnCount = 1,
+            .Dock = DockStyle.Fill, .RowCount = 5, .ColumnCount = 1,
             .Padding = New Padding(8, 10, 8, 8)
         }
         layout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 54))
         layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 64))
+        layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 58))
         layout.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         layout.RowStyles.Add(New RowStyle(SizeType.Absolute, 60))
         planTab.Controls.Add(layout)
@@ -169,6 +171,54 @@ Public NotInheritable Class OperationCenterForm
         composer.Controls.Add(indexBox, 3, 0)
         addStepButton = AddButton(composer, "btnOperationAdd", "Add step", 4,
                                   "primary", AddressOf AddClicked)
+        Dim destinationRow As New TableLayoutPanel With {
+            .Dock = DockStyle.Fill, .RowCount = 1, .ColumnCount = 3
+        }
+        destinationRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 18))
+        destinationRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 70))
+        destinationRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 12))
+        destinationRow.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        destinationRow.Controls.Add(New Label With {
+            .Text = "NEW WIM output", .Dock = DockStyle.Fill,
+            .TextAlign = ContentAlignment.MiddleLeft
+        }, 0, 0)
+        outputPath = New TextBox With {
+            .Name = "txtOperationOutput",
+            .Dock = DockStyle.Fill, .Margin = New Padding(2, 10, 8, 10),
+            .PlaceholderText = "Destination does not exist; required only for ExportIndexNewWim"
+        }
+        destinationRow.Controls.Add(outputPath, 1, 0)
+        Dim browseOutput As New Button With {
+            .Name = "btnOperationOutputBrowse", .Text = "Browse...",
+            .Dock = DockStyle.Fill, .Margin = New Padding(0, 5, 2, 5)
+        }
+        ModernTheme.StyleButton(browseOutput, "secondary")
+        AddHandler browseOutput.Click, Sub(sender, e)
+            Using dialog As New SaveFileDialog With {
+                .Title = "Choose a NEW .wim destination (never overwrite)",
+                .Filter = "Windows image (*.wim)|*.wim",
+                .DefaultExt = "wim",
+                .OverwritePrompt = True
+            }
+                If dialog.ShowDialog(Me) = DialogResult.OK Then
+                    outputPath.Text = dialog.FileName
+                End If
+            End Using
+        End Sub
+        destinationRow.Controls.Add(browseOutput, 2, 0)
+        layout.Controls.Add(destinationRow, 0, 2)
+        AddHandler kindSelector.SelectedIndexChanged, Sub(sender, e)
+            Dim kind = Convert.ToString(kindSelector.SelectedItem)
+            Dim isExport = String.Equals(kind, "ExportIndexNewWim", StringComparison.Ordinal)
+            indexBox.Enabled = isExport OrElse kind = "MountedInventory"
+            outputPath.Enabled = isExport
+            browseOutput.Enabled = isExport
+            If Not indexBox.Enabled Then indexBox.Value = 0D
+            If isExport AndAlso indexBox.Value = 0D Then indexBox.Value = 1D
+        End Sub
+        outputPath.Enabled = False
+        browseOutput.Enabled = False
+        indexBox.Enabled = False
 
         planGrid = MakeGrid("gridOperationPlan",
              {"Order", "Operation", "Index", "WIM / ESD / SWM", "Result"})
@@ -177,7 +227,7 @@ Public NotInheritable Class OperationCenterForm
         planGrid.Columns(2).FillWeight = 9
         planGrid.Columns(3).FillWeight = 42
         planGrid.Columns(4).FillWeight = 18
-        layout.Controls.Add(planGrid, 0, 2)
+        layout.Controls.Add(planGrid, 0, 3)
 
         Dim actions As New TableLayoutPanel With {
             .Dock = DockStyle.Fill, .ColumnCount = 5, .RowCount = 1
@@ -186,7 +236,7 @@ Public NotInheritable Class OperationCenterForm
             actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 20.0F))
         Next
         actions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        layout.Controls.Add(actions, 0, 3)
+        layout.Controls.Add(actions, 0, 4)
         AddButton(actions, "btnOperationRemove", "Remove step", 0,
                   "secondary", AddressOf RemoveClicked)
         AddButton(actions, "btnOperationClear", "Clear plan", 1,
@@ -248,7 +298,7 @@ Public NotInheritable Class OperationCenterForm
 
         status = New Label With {
             .Name = "lblOperationStatus", .Dock = DockStyle.Fill,
-            .Text = "Read-only queue. No DISM Commit, Discard, mount or import operations are scheduled.",
+            .Text = "Read-only checks and approved export to NEW WIM only. No Commit, Discard or driver injection.",
             .ForeColor = ModernTheme.Muted, .TextAlign = ContentAlignment.MiddleLeft,
             .AutoEllipsis = True
         }
@@ -323,12 +373,14 @@ Public NotInheritable Class OperationCenterForm
             Dim item As New OperationWorkflow.StepPlan With {
                 .Kind = Convert.ToString(kindSelector.SelectedItem),
                 .ImagePath = If(imagePath.Text, "").Trim(),
-                .ImageIndex = CInt(indexBox.Value)
+                .ImageIndex = CInt(indexBox.Value),
+                .OutputPath = If(outputPath.Text, "").Trim()
             }
             If item.Kind = "EnvironmentPreflight" Then
                 item.ImagePath = ""
                 item.ImageIndex = 0
-            ElseIf item.Kind <> "MountedInventory" Then
+            ElseIf item.Kind <> "MountedInventory" AndAlso
+                   item.Kind <> "ExportIndexNewWim" Then
                 item.ImageIndex = 0
             End If
             If planGrid.Rows.Count >= OperationWorkflow.MaxSteps Then
@@ -340,7 +392,8 @@ Public NotInheritable Class OperationCenterForm
             OperationWorkflow.Validate(temporary)
             Dim pos = planGrid.Rows.Add(planGrid.Rows.Count + 1, item.Kind,
                 If(item.ImageIndex = 0, "-", item.ImageIndex.ToString()),
-                item.ImagePath, "Queued")
+                If(item.OutputPath.Length > 0,
+                   item.ImagePath & " -> " & item.OutputPath, item.ImagePath), "Queued")
             planGrid.Rows(pos).Tag = item
             status.Text = "Step added; Preflight checks every selected source before execution."
         Catch ex As Exception
@@ -366,7 +419,7 @@ Public NotInheritable Class OperationCenterForm
     Private Sub ClearClicked(sender As Object, e As EventArgs)
         If busy Then Return
         planGrid.Rows.Clear()
-        status.Text = "Queue cleared; no WIM files changed."
+        status.Text = "Queue cleared; nothing was executed."
     End Sub
 
     Private Sub Renumber()
@@ -392,7 +445,7 @@ Public NotInheritable Class OperationCenterForm
         Try
             OperationWorkflow.SaveProfile(CurrentProfile())
             ReloadProfiles()
-            status.Text = "Profile saved locally. No image write actions were saved."
+            status.Text = "Profile saved locally. Export steps still need fresh approval."
         Catch ex As Exception
             status.Text = "Save profile failed: " & ex.Message
         End Try
@@ -410,7 +463,9 @@ Public NotInheritable Class OperationCenterForm
             For Each stepItem In match.Steps
                 Dim pos = planGrid.Rows.Add(planGrid.Rows.Count + 1, stepItem.Kind,
                     If(stepItem.ImageIndex = 0, "-", stepItem.ImageIndex.ToString()),
-                    stepItem.ImagePath, "Queued")
+                    If(stepItem.OutputPath.Length > 0,
+                       stepItem.ImagePath & " -> " & stepItem.OutputPath,
+                       stepItem.ImagePath), "Queued")
                 planGrid.Rows(pos).Tag = stepItem
             Next
             status.Text = "Profile loaded. Run Preflight before execution."
@@ -460,13 +515,22 @@ Public NotInheritable Class OperationCenterForm
                     If IsDisposed Then Return
                     If nextResultIndex < planGrid.Rows.Count Then
                         planGrid.Rows(nextResultIndex).Cells(4).Value = item.Status
-                        nextResultIndex += 1
+                        If item.Status <> "RUNNING" Then nextResultIndex += 1
                     End If
                     status.Text = item.Kind & " | " & item.Status & " | " & item.Detail
                 End Sub)
-            Dim run = Await OperationWorkflow.RunAsync(profile, observer, active.Token)
+            Dim approval As Func(Of OperationWorkflow.StepPlan, Task(Of Boolean)) =
+                Function(item)
+                    Using confirmation As New OperationExportApprovalForm(
+                        item.ImagePath, item.ImageIndex, item.OutputPath)
+                        Return Task.FromResult(
+                            confirmation.ShowDialog(Me) = DialogResult.OK)
+                    End Using
+                End Function
+            Dim run = Await OperationWorkflow.RunAsync(
+                profile, observer, active.Token, approval)
             status.Text = "Queue " & run.Status & " - " & run.Results.Count.ToString() &
-                          " steps recorded locally. No WIM writes."
+                          " checkpoints saved. Review partial WIM files after an interruption."
             ReloadHistory()
         Catch ex As Exception
             status.Text = "Queue unavailable: " & ex.Message
@@ -480,7 +544,7 @@ Public NotInheritable Class OperationCenterForm
     Private Sub CancelClicked(sender As Object, e As EventArgs)
         If Not busy Then Return
         active?.Cancel()
-        status.Text = "Cancel requested; current read-only operation may finish first."
+        status.Text = "Cancel requested; a running DISM export may leave a partial WIM for review."
     End Sub
 
     Private Sub ReloadHistory()
