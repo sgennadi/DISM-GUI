@@ -21,6 +21,9 @@ Public NotInheritable Class Wim360CompareIndexesForm
     Private ReadOnly searchBox As TextBox
     Private ReadOnly compareButton As Button
     Private ReadOnly exportButton As Button
+    Private ReadOnly exportMenu As ContextMenuStrip
+    Private ReadOnly exportFilteredMenuItem As ToolStripMenuItem
+    Private ReadOnly exportChangesMenuItem As ToolStripMenuItem
     Private ReadOnly hashButton As Button
     Private ReadOnly hashMenu As ContextMenuStrip
     Private ReadOnly hashSingleMenuItem As ToolStripMenuItem
@@ -380,11 +383,25 @@ Public NotInheritable Class Wim360CompareIndexesForm
         AddHandler hashSingleMenuItem.Click, AddressOf HashSingleClicked
         AddHandler hashBatchMenuItem.Click, AddressOf HashBatchClicked
         exportButton = New Button With {
-            .Name = "btn360IndexCompareCsv", .Text = If(stackedLayout, "Export CSV", "Export filtered CSV"),
+            .Name = "btn360IndexCompareCsv", .Text = "Export...",
             .Dock = DockStyle.Fill, .Margin = New Padding(4, 7, 6, 4),
             .Enabled = False
         }
         ModernTheme.StyleButton(exportButton, "browse")
+        detailsTip.SetToolTip(exportButton,
+            "Save filtered multi-index CSV or a directional Before/After change report.")
+        exportMenu = New ContextMenuStrip()
+        exportFilteredMenuItem = New ToolStripMenuItem("Filtered comparison CSV") With {
+            .Name = "mnu360IndexCompareExportFiltered"
+        }
+        exportChangesMenuItem = New ToolStripMenuItem("Change report (Before -> After)...") With {
+            .Name = "mnu360IndexCompareExportChanges"
+        }
+        exportMenu.Items.Add(exportFilteredMenuItem)
+        exportMenu.Items.Add(exportChangesMenuItem)
+        exportButton.ContextMenuStrip = exportMenu
+        AddHandler exportFilteredMenuItem.Click, AddressOf ExportFilteredClicked
+        AddHandler exportChangesMenuItem.Click, AddressOf ExportChangesClicked
         actions.Controls.Add(exportButton, If(stackedLayout, 2, 3), 0)
         closeButton = New Button With {
             .Name = "btn360IndexCompareClose", .Text = "Close",
@@ -438,6 +455,7 @@ Public NotInheritable Class Wim360CompareIndexesForm
             searchDelay.Stop()
             searchDelay.Dispose()
             hashMenu.Dispose()
+            exportMenu.Dispose()
         End Sub
         WindowGeometry.Install(Me, "Software\DISMGUI\Wim360IndexComparison")
 
@@ -906,7 +924,142 @@ Public NotInheritable Class Wim360CompareIndexesForm
     End Sub
 
     Private Sub ExportClicked(sender As Object, e As EventArgs)
-        If comparison Is Nothing Then Return
+        If comparison Is Nothing OrElse working Then Return
+        exportMenu.Show(exportButton, New Point(0, exportButton.Height))
+    End Sub
+
+    Private Function ChooseChangePair() As Tuple(Of Integer, Integer, Boolean)
+        If comparison Is Nothing OrElse comparison.Indexes.Count < 2 Then Return Nothing
+        Using chooser As New Form With {
+            .Name = "frm360IndexChangeExport", .Text = "Export change report",
+            .StartPosition = FormStartPosition.CenterParent,
+            .FormBorderStyle = FormBorderStyle.FixedDialog,
+            .MinimizeBox = False, .MaximizeBox = False, .ShowInTaskbar = False,
+            .AutoScaleMode = AutoScaleMode.Font, .Font = Me.Font,
+            .BackColor = Color.White,
+            .ClientSize = New Size(500, 274), .MinimumSize = New Size(490, 300)
+        }
+            Dim layout As New TableLayoutPanel With {
+                .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 5,
+                .Padding = New Padding(16, 12, 16, 12), .BackColor = Color.White
+            }
+            layout.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 132))
+            layout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+            For Each pct As Single In {24.0F, 17.0F, 17.0F, 18.0F, 24.0F}
+                layout.RowStyles.Add(New RowStyle(SizeType.Percent, pct))
+            Next
+            Dim help As New Label With {
+                .Text = "Choose direction. Added = only in After; Removed = only in Before.",
+                .Dock = DockStyle.Fill, .AutoSize = False,
+                .ForeColor = ModernTheme.TextInk,
+                .TextAlign = ContentAlignment.MiddleLeft
+            }
+            layout.Controls.Add(help, 0, 0)
+            layout.SetColumnSpan(help, 2)
+
+            Dim beforeCombo As New ComboBox With {
+                .Name = "cmb360ChangeBefore", .Dock = DockStyle.Fill,
+                .DropDownStyle = ComboBoxStyle.DropDownList,
+                .Margin = New Padding(0, 4, 0, 5)
+            }
+            Dim afterCombo As New ComboBox With {
+                .Name = "cmb360ChangeAfter", .Dock = DockStyle.Fill,
+                .DropDownStyle = ComboBoxStyle.DropDownList,
+                .Margin = New Padding(0, 4, 0, 5)
+            }
+            For Each index In comparison.Indexes
+                Dim label = "Index " & index.ToString()
+                beforeCombo.Items.Add(label)
+                afterCombo.Items.Add(label)
+            Next
+            layout.Controls.Add(MakeLabel("Before index", 9.0F, True), 0, 1)
+            layout.Controls.Add(beforeCombo, 1, 1)
+            layout.Controls.Add(MakeLabel("After index", 9.0F, True), 0, 2)
+            layout.Controls.Add(afterCombo, 1, 2)
+            beforeCombo.SelectedIndex = 0
+            afterCombo.SelectedIndex = 1
+
+            Dim includeSame As New CheckBox With {
+                .Name = "chk360ChangeIncludeUnchanged",
+                .Text = "Include unchanged rows in CSV (default: changes only)",
+                .Dock = DockStyle.Fill, .Checked = False,
+                .AutoSize = False
+            }
+            layout.Controls.Add(includeSame, 0, 3)
+            layout.SetColumnSpan(includeSame, 2)
+            Dim footer As New FlowLayoutPanel With {
+                .Dock = DockStyle.Fill, .FlowDirection = FlowDirection.RightToLeft,
+                .WrapContents = False
+            }
+            Dim save As New Button With {
+                .Name = "btn360ChangeSave", .Text = "Continue to Save...",
+                .Width = 164, .Height = 34, .DialogResult = DialogResult.OK
+            }
+            ModernTheme.StyleButton(save, "primary")
+            Dim cancel As New Button With {
+                .Name = "btn360ChangeCancel", .Text = "Cancel",
+                .Width = 96, .Height = 34, .DialogResult = DialogResult.Cancel
+            }
+            ModernTheme.StyleButton(cancel, "neutral")
+            footer.Controls.Add(save)
+            footer.Controls.Add(cancel)
+            layout.Controls.Add(footer, 0, 4)
+            layout.SetColumnSpan(footer, 2)
+            AddHandler beforeCombo.SelectedIndexChanged, Sub(sender, args)
+                save.Enabled = beforeCombo.SelectedIndex <> afterCombo.SelectedIndex
+            End Sub
+            AddHandler afterCombo.SelectedIndexChanged, Sub(sender, args)
+                save.Enabled = beforeCombo.SelectedIndex <> afterCombo.SelectedIndex
+            End Sub
+            chooser.Controls.Add(layout)
+            chooser.AcceptButton = save
+            chooser.CancelButton = cancel
+            If chooser.ShowDialog(Me) <> DialogResult.OK Then Return Nothing
+            If beforeCombo.SelectedIndex = afterCombo.SelectedIndex Then Return Nothing
+            Return Tuple.Create(comparison.Indexes(beforeCombo.SelectedIndex),
+                                comparison.Indexes(afterCombo.SelectedIndex),
+                                Not includeSame.Checked)
+        End Using
+    End Function
+
+    Private Sub ExportChangesClicked(sender As Object, e As EventArgs)
+        If comparison Is Nothing OrElse working Then Return
+        Dim direction = ChooseChangePair()
+        If direction Is Nothing Then Return
+        Dim rowsToSave = visibleRows.ToList()
+        Dim report = comparison
+        Using dialog As New SaveFileDialog With {
+            .Title = "Save filtered change report (read-only WIM)",
+            .Filter = "CSV change report (*.csv)|*.csv",
+            .DefaultExt = "csv", .AddExtension = True,
+            .OverwritePrompt = True, .RestoreDirectory = True,
+            .FileName = Path.GetFileNameWithoutExtension(source.ImageFile) &
+                        "-index-" & direction.Item1.ToString() & "-to-" &
+                        direction.Item2.ToString() & "-changes.csv"
+        }
+            If dialog.ShowDialog(Me) <> DialogResult.OK Then Return
+            Try
+                Dim stats = Wim360IndexComparer.SummarizePairChanges(
+                    report, rowsToSave, direction.Item1, direction.Item2)
+                Using writer As New StreamWriter(dialog.FileName, False,
+                                                 New UTF8Encoding(True))
+                    Wim360IndexComparer.WriteChangeCsv(writer, report, rowsToSave,
+                        direction.Item1, direction.Item2, direction.Item3)
+                End Using
+                Dim exported = If(direction.Item3, stats.Changes,
+                                  stats.Changes + stats.Unchanged)
+                hintLabel.Text = "Saved " & exported.ToString("N0") &
+                    " directional change rows. Source WIM not changed."
+            Catch ex As Exception
+                ErrorDiagnostics.RememberFailure("WIM 360 change report export", ex)
+                MessageBox.Show(Me, "Could not export change report: " & ex.Message,
+                    "WIM 360", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+            End Try
+        End Using
+    End Sub
+
+    Private Sub ExportFilteredClicked(sender As Object, e As EventArgs)
+        If comparison Is Nothing OrElse working Then Return
         Using dialog As New SaveFileDialog With {
             .Title = "Export the filtered multi-index comparison",
             .Filter = "CSV comparison (*.csv)|*.csv",
