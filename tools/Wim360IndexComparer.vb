@@ -425,6 +425,57 @@ Public NotInheritable Class Wim360IndexComparer
         Return result
     End Function
 
+    ' The compact per-index coverage summary is computed over the CURRENT
+    ' filtered rows. A missing cell is only meaningful for a complete
+    ' comparison; callers must not use partial/failed inventory results.
+    ' Counting is linear in the number of actual row/index presences.
+    Public NotInheritable Class IndexCoverage
+        Public Property Index As Integer
+        Public Property TotalRows As Integer
+        Public Property Present As Integer
+        Public Property Missing As Integer
+        Public Property OnlyHere As Integer
+        Public Property Different As Integer
+        Public Property Ambiguous As Integer
+    End Class
+
+    Public Shared Function SummarizeCoverage(rows As IEnumerable(Of Row),
+                    indexes As IEnumerable(Of Integer)) As List(Of IndexCoverage)
+        If rows Is Nothing Then Throw New ArgumentNullException(NameOf(rows))
+        If indexes Is Nothing Then Throw New ArgumentNullException(NameOf(indexes))
+        Dim selected = indexes.Distinct().OrderBy(Function(x) x).ToList()
+        If selected.Count < 2 OrElse selected.Count > 8 Then
+            Throw New ArgumentException("Coverage requires 2 to 8 selected indexes.")
+        End If
+        Dim result = selected.Select(Function(i) New IndexCoverage With {
+            .Index = i
+        }).ToList()
+        Dim lookup = result.ToDictionary(Function(x) x.Index)
+        Dim total As Integer = 0
+        For Each entry In rows
+            If entry Is Nothing Then Continue For
+            total += 1
+            For Each index In entry.Values.Keys
+                Dim found As IndexCoverage = Nothing
+                If Not lookup.TryGetValue(index, found) Then Continue For
+                found.Present += 1
+                If entry.Values.Count = 1 Then found.OnlyHere += 1
+                If String.Equals(entry.State, "Different",
+                                 StringComparison.Ordinal) Then
+                    found.Different += 1
+                ElseIf String.Equals(entry.State, "Ambiguous duplicates",
+                                     StringComparison.Ordinal) Then
+                    found.Ambiguous += 1
+                End If
+            Next
+        Next
+        For Each item In result
+            item.TotalRows = total
+            item.Missing = total - item.Present
+        Next
+        Return result
+    End Function
+
     Public Shared Function Filter(rows As IEnumerable(Of Row), category As String,
                                   state As String, query As String,
                                   Optional totalIndexes As Integer = 0) As List(Of Row)
