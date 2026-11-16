@@ -2385,7 +2385,7 @@ internal static class LayoutSmoke
                     Name = "Export without destination",
                     Steps = new System.Collections.Generic.List<OperationWorkflow.StepPlan> {
                         new() { Kind = "ExportIndexNewWim",
-                                ImagePath = @"C:	est.wim", ImageIndex = 1 }
+                                ImagePath = @"C:\test.wim", ImageIndex = 1 }
                     }
                 });
             } catch (System.IO.InvalidDataException) { blocked = true; }
@@ -2394,9 +2394,8 @@ internal static class LayoutSmoke
                 Name = "Approved new file only",
                 Steps = new System.Collections.Generic.List<OperationWorkflow.StepPlan> {
                     new() { Kind = "ExportIndexNewWim",
-                            ImagePath = @"C:source.wim", ImageIndex = 1,
-                            OutputPath = @"D:
-ew-output.wim" }
+                            ImagePath = @"C:\source.wim", ImageIndex = 1,
+                            OutputPath = @"D:\new-output.wim" }
                 }
             };
             Require(OperationWorkflow.Validate(exportProfile) == exportProfile,
@@ -2428,16 +2427,14 @@ ew-output.wim" }
                     "Restart checkpoint needs a distinct boot, not an elapsed button click.");
             var checkpoint = MountRecoverySession.BeginRestartReview(
                 new MountRecoverySession.Assessment {
-                    ImageFile = @"C:
-onexistent.wim", Index = 1,
+                    ImageFile = @"C:\nonexistent.wim", Index = 1,
                     Status = "Invalid / check mount",
-                    MountFolder = @"C:WIMWorkMount",
+                    MountFolder = @"C:\WIMWork\Mount",
                     RegistrationChecked = true
                 });
             Require(MountRecoverySession.LoadCheckpoint()!.Index == 1 &&
                     MountRecoverySession.ReviewAfterRestart(
-                        @"C:
-onexistent.wim", 1).Contains("not been confirmed"),
+                        @"C:\nonexistent.wim", 1).Contains("not been confirmed"),
                     "Recovery wizard checkpoints must persist safely and refuse blind cleanup.");
 
             var locks = new WimMountLocks.ScanResult { FilesSampled = 5, Limited = true };
@@ -2505,7 +2502,7 @@ onexistent.wim", 1).Contains("not been confirmed"),
             Application.DoEvents();
 
             using var approval = new OperationExportApprovalForm(
-                @"C:input.wim", 1, @"D:NEW.wim");
+                @"C:\input.wim", 1, @"D:\NEW.wim");
             approval.Show(owner);
             Application.DoEvents();
             VerifyScrollableDialog(approval, "Export new WIM approval");
