@@ -45,7 +45,10 @@ Public NotInheritable Class WimMountHealthForm
         root.RowStyles.Add(New RowStyle(SizeType.Absolute, 47))
         root.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         root.RowStyles.Add(New RowStyle(SizeType.Absolute, 53))
-        root.RowStyles.Add(New RowStyle(SizeType.Absolute, 57))
+        ' Five responsive actions may wrap at 200% DPI; reserve enough height
+        ' without overlapping the read-only report or status.
+        root.RowStyles.Add(New RowStyle(SizeType.Absolute,
+            Math.Max(88, CInt(Math.Ceiling(Me.Font.Height * 4.2F)))))
         Controls.Add(root)
 
         Dim header As New TableLayoutPanel With {
@@ -115,17 +118,20 @@ Public NotInheritable Class WimMountHealthForm
         Next
         buttons.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         refreshButton = New Button With {
-            .Name = "btnMountHealthRefresh", .Text = "Refresh mount health",
+            .Name = "btnMountHealthRefresh", .Text = "Refresh",
+            .AccessibleDescription = "Refresh mounted image registration and local recovery history.",
             .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 10, 4)
         }
         ModernTheme.StyleButton(refreshButton, "primary")
         findLocksButton = New Button With {
-            .Name = "btnMountHealthFindLocks", .Text = "Find file locks",
+            .Name = "btnMountHealthFindLocks", .Text = "File locks",
+            .AccessibleDescription = "Find process handles for sampled mounted files.",
             .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 10, 4)
         }
         ModernTheme.StyleButton(findLocksButton, "secondary")
         recoveryButton = New Button With {
-            .Name = "btnMountHealthRecovery", .Text = "Recovery assistant",
+            .Name = "btnMountHealthRecovery", .Text = "Recovery",
+            .AccessibleDescription = "Open the guided non-destructive mount recovery assistant.",
             .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 8, 4)
         }
         ModernTheme.StyleButton(recoveryButton, "secondary")
