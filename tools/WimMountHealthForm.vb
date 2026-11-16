@@ -14,6 +14,7 @@ Public NotInheritable Class WimMountHealthForm
     Private ReadOnly reportBox As TextBox
     Private ReadOnly statusLabel As Label
     Private ReadOnly refreshButton As Button
+    Private ReadOnly findLocksButton As Button
     Private ReadOnly copyButton As Button
     Private ReadOnly closeButton As Button
     Private checking As Boolean
@@ -106,9 +107,9 @@ Public NotInheritable Class WimMountHealthForm
         root.Controls.Add(statusLabel, 0, 3)
 
         Dim buttons As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 3, .RowCount = 1
+            .Dock = DockStyle.Fill, .ColumnCount = 4, .RowCount = 1
         }
-        For Each col As Single In {35.0F, 35.0F, 30.0F}
+        For Each col As Single In {27.0F, 27.0F, 24.0F, 22.0F}
             buttons.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, col))
         Next
         buttons.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
@@ -117,6 +118,11 @@ Public NotInheritable Class WimMountHealthForm
             .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 10, 4)
         }
         ModernTheme.StyleButton(refreshButton, "primary")
+        findLocksButton = New Button With {
+            .Name = "btnMountHealthFindLocks", .Text = "Find file locks",
+            .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 10, 4)
+        }
+        ModernTheme.StyleButton(findLocksButton, "secondary")
         copyButton = New Button With {
             .Name = "btnMountHealthCopy", .Text = "Copy report",
             .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 10, 4),
@@ -129,11 +135,13 @@ Public NotInheritable Class WimMountHealthForm
         }
         ModernTheme.StyleButton(closeButton, "neutral")
         buttons.Controls.Add(refreshButton, 0, 0)
-        buttons.Controls.Add(copyButton, 1, 0)
-        buttons.Controls.Add(closeButton, 2, 0)
+        buttons.Controls.Add(findLocksButton, 1, 0)
+        buttons.Controls.Add(copyButton, 2, 0)
+        buttons.Controls.Add(closeButton, 3, 0)
         root.Controls.Add(buttons, 0, 4)
 
         AddHandler refreshButton.Click, AddressOf RefreshClicked
+        AddHandler findLocksButton.Click, AddressOf FindLocksClicked
         AddHandler copyButton.Click, Sub(sender, e)
             Try
                 Clipboard.SetText(reportBox.Text)
@@ -147,10 +155,62 @@ Public NotInheritable Class WimMountHealthForm
         AddHandler Me.Shown, Sub(sender, e) RefreshClicked(sender, e)
     End Sub
 
+    ' Read-only best-effort Restart Manager query against actual WIMGAPI mount
+    ' registration; no arbitrary folders, force-unlocks or process termination.
+    Private Async Sub FindLocksClicked(sender As Object, e As EventArgs)
+        If checking Then Return
+        Dim source = sourceBox.Text.Trim()
+        If String.IsNullOrWhiteSpace(source) Then
+            statusLabel.Text = "Choose the WIM/ESD source path before scanning file locks."
+            Return
+        End If
+        checking = True
+        refreshButton.Enabled = False
+        findLocksButton.Enabled = False
+        copyButton.Enabled = False
+        statusLabel.Text = "Sampling mounted files with Windows Restart Manager (read-only)..."
+        Try
+            Dim result = Await Task.Run(Function()
+                Dim inspected = Wim360Reader.Inspect(source)
+                If Not String.IsNullOrWhiteSpace(inspected.MountScanWarning) Then
+                    Throw New InvalidOperationException(inspected.MountScanWarning)
+                End If
+                Dim mounted = inspected.Images.FirstOrDefault(Function(x)
+                    Return Not String.IsNullOrWhiteSpace(x.MountFolder)
+                End Function)
+                If mounted Is Nothing Then
+                    Return "No registered mount folder was found for the selected image." &
+                        Environment.NewLine &
+                        "The absence of registration is not permission to delete a folder."
+                End If
+                Return "Index " & mounted.Index.ToString() & " | " &
+                    mounted.MountStatus & Environment.NewLine &
+                    WimMountLocks.FormatResult(WimMountLocks.Scan(
+                        mounted.MountFolder, inspected.ImageFile))
+            End Function)
+            If IsDisposed Then Return
+            reportBox.Text &= Environment.NewLine & Environment.NewLine & result
+            statusLabel.Text = "Best-effort file-lock scan. Missing handles are possible."
+            copyButton.Enabled = True
+        Catch ex As Exception
+            RuntimeDiagnostics.RecordException("WIM mount lock inspection", ex)
+            If Not IsDisposed Then
+                statusLabel.Text = "File-lock scan unavailable: " & ex.Message
+            End If
+        Finally
+            checking = False
+            If Not IsDisposed Then
+                refreshButton.Enabled = True
+                findLocksButton.Enabled = True
+            End If
+        End Try
+    End Sub
+
     Private Async Sub RefreshClicked(sender As Object, e As EventArgs)
         If checking Then Return
         checking = True
         refreshButton.Enabled = False
+        findLocksButton.Enabled = False
         copyButton.Enabled = False
         statusLabel.Text = "Refreshing image mount status and local journal (read-only)..."
         Dim source = sourceBox.Text.Trim()
@@ -169,7 +229,10 @@ Public NotInheritable Class WimMountHealthForm
             End If
         Finally
             checking = False
-            If Not IsDisposed Then refreshButton.Enabled = True
+            If Not IsDisposed Then
+                refreshButton.Enabled = True
+                findLocksButton.Enabled = True
+            End If
         End Try
     End Sub
 End Class
