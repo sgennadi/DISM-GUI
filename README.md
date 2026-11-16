@@ -218,6 +218,16 @@ actual bytes, select one file in the mounted-files mode and choose **Verify SHA-
 Equal file lengths alone do not establish equal content, and the SHA-256
 operation can take time for large files. All operations are read-only.
 
+The comparison status now shows **Missing 1:N, 2:N, 3:N** counts for the
+currently displayed rows (up to three indexes in the compact status line).
+Hover over the status to see **all selected indexes**, including present,
+missing, exclusive, differing and ambiguous records. Counts update with
+the Type / Result / Search filters, so "Missing from Index 3" is counted
+relative to the filtered rows. A value difference marks the comparison
+row; it does not identify which index contains the correct value.
+For more than three indexes, remaining counts are available in the tooltip.
+
+
 For example, for `install.wim` with indexes 1, 2 and 3, first use
 **Index metadata** to compare editions and builds. Select
 **Files + folders (no mounting)** to compare all paths under
