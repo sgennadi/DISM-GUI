@@ -249,8 +249,8 @@ Public NotInheritable Class OperationWorkflow
         If stepItem.Kind = "EnvironmentPreflight" Then
             Dim checks = Await IntegratedTestChecks.RunAllAsync("",
                 False, 96, 1024, 680, Nothing, token)
-            Dim failed = checks.Count(Function(x) x.Status = "FAIL")
-            Dim warning = checks.Count(Function(x) x.Status = "WARN")
+            Dim failed = checks.Where(Function(x) x.Status = "FAIL").Count()
+            Dim warning = checks.Where(Function(x) x.Status = "WARN").Count()
             Return Entry(stepItem, If(failed > 0, "FAIL",
                     If(warning > 0, "WARN", "PASS")),
                     checks.Count.ToString() & " checks; " &
