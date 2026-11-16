@@ -3,6 +3,7 @@ Imports System.Collections.Generic
 Imports System.Globalization
 Imports System.IO
 Imports System.Linq
+Imports Microsoft.Win32
 Imports System.Security.Principal
 Imports System.Text
 Imports System.Text.Json
@@ -273,6 +274,111 @@ Public NotInheritable Class WimMountSafety
             "Do not automatically retry a Commit or Discard."
     End Function
 
+    ' Mount HEALTH has no write or repair capability. A raw registry status
+    ' value is internal WIMMount metadata, NOT the DISM Status enumeration.
+    Public Shared Function FormatRegistryMountEntry(keyName As String,
+                                                     mountPath As String,
+                                                     imagePath As String,
+                                                     imageIndex As String,
+                                                     statusRaw As Integer) As String
+        Return "WIMMount entry " & If(keyName, "") & Environment.NewLine &
+            "  Mount: " & If(mountPath, "") & Environment.NewLine &
+            "  Image: " & If(imagePath, "") & " | index " & If(imageIndex, "") &
+            Environment.NewLine &
+            "  Raw registry Status: 0x" &
+            statusRaw.ToString("X8", CultureInfo.InvariantCulture) &
+            " (not a DISM mount-state code)"
+    End Function
+
+    Public Shared Function InvalidMountGuidance(mountStatus As String) As String
+        Dim value = If(mountStatus, "").Trim()
+        If value.StartsWith("Invalid", StringComparison.OrdinalIgnoreCase) Then
+            Return "REVIEW REQUIRED: WIMGAPI reports an invalid mount. " &
+                "A successful /Cleanup-Mountpoints exit does not prove that " &
+                "the registration was removed." & Environment.NewLine &
+                "Close Explorer, Total Commander, editors and terminals using the " &
+                "mount directory. If not already done, reboot Windows and check " &
+                "DISM /Get-MountedImageInfo again." & Environment.NewLine &
+                "If /Remount-Image and /Cleanup-Mountpoints already failed, " &
+                "do not repeat them blindly. Preserve DISM logs and use a " &
+                "manual administrator review." & Environment.NewLine &
+                "Do NOT delete WIMMount registry keys, force-delete the mount " &
+                "folder, stop the WIMMount driver or retry Commit automatically."
+        End If
+        If String.Equals(value, "Needs remount", StringComparison.OrdinalIgnoreCase) Then
+            Return "REVIEW REQUIRED: DISM indicates Needs Remount. " &
+                "Review DISM /Get-MountedImageInfo and use the documented " &
+                "/Remount-Image procedure only when appropriate. No auto repair."
+        End If
+        Return ""
+    End Function
+
+    ' Read the SYSTEM-WIDE WIMMount registry only; never write keys, touch
+    ' open handles, run DISM cleanup or infer that an absent entry permits deletion.
+    Private Shared Function ReadRegistryMountReport(chosenWim As String) As List(Of String)
+        Dim lines As New List(Of String) From {
+            "WIMMount registry registrations (read-only)",
+            "Registry raw Status is NOT a DISM Invalid/OK status code."
+        }
+        Dim wanted As String = ""
+        Try
+            If Not String.IsNullOrWhiteSpace(chosenWim) Then
+                wanted = Path.GetFullPath(chosenWim.Trim().Trim(""""c)).
+                    TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            End If
+            Dim view = If(Environment.Is64BitOperatingSystem,
+                          RegistryView.Registry64, RegistryView.Registry32)
+            Using machine = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, view)
+                Using root = machine.OpenSubKey("SOFTWARE\Microsoft\WIMMount\Mounted Images", False)
+                    If root Is Nothing Then
+                        lines.Add("Registration key not found; this is not evidence " &
+                                  "that the mount folder can be removed.")
+                        Return lines
+                    End If
+                    Dim entries = root.GetSubKeyNames().OrderBy(
+                        Function(x) x, StringComparer.OrdinalIgnoreCase).Take(128)
+                    Dim matched As Integer = 0
+                    For Each subkey As String In entries
+                        Using record = root.OpenSubKey(subkey, False)
+                            If record Is Nothing Then Continue For
+                            Dim mountPath = TryCast(record.GetValue("Mount Path"), String)
+                            Dim imagePath = TryCast(record.GetValue("WIM Path"), String)
+                            If wanted.Length > 0 Then
+                                Dim candidate As String = ""
+                                Try
+                                    candidate = Path.GetFullPath(If(imagePath, "")).
+                                        TrimEnd(Path.DirectorySeparatorChar,
+                                                Path.AltDirectorySeparatorChar)
+                                Catch
+                                    Continue For
+                                End Try
+                                If Not String.Equals(wanted, candidate,
+                                            StringComparison.OrdinalIgnoreCase) Then Continue For
+                            End If
+                            Dim raw As Object = record.GetValue("Status")
+                            Dim rawValue As Integer = If(TypeOf raw Is Integer,
+                                                        CInt(If(raw, 0)), 0)
+                            Dim indexText = Convert.ToString(record.GetValue("Image Index"),
+                                                              CultureInfo.InvariantCulture)
+                            lines.Add(FormatRegistryMountEntry(subkey, mountPath,
+                                      imagePath, indexText, rawValue))
+                            matched += 1
+                        End Using
+                    Next
+                    If matched = 0 Then lines.Add(
+                        "No matching registry entries found; this alone does NOT " &
+                        "confirm that the mount folder is safe to delete.")
+                End Using
+            End Using
+        Catch ex As Exception When TypeOf ex Is UnauthorizedAccessException OrElse
+                                  TypeOf ex Is System.Security.SecurityException OrElse
+                                  TypeOf ex Is IOException OrElse
+                                  TypeOf ex Is ArgumentException
+            lines.Add("Registry inspection unavailable: " & ex.Message)
+        End Try
+        Return lines
+    End Function
+
     Public Shared Function BuildHealthReport(Optional chosenWim As String = ""
                                              ) As String
         Dim lines As New List(Of String) From {
@@ -290,12 +396,16 @@ Public NotInheritable Class WimMountSafety
                 For Each image In report.Images
                     lines.Add("Index " & image.Index.ToString() & " | " &
                               image.MountStatus & " | " & image.MountFolder)
+                    Dim advice = InvalidMountGuidance(image.MountStatus)
+                    If advice.Length > 0 Then lines.Add(advice)
                 Next
             Catch ex As Exception
                 lines.Add("Image inspection unavailable: " & ex.Message)
             End Try
             lines.Add("")
         End If
+        lines.AddRange(ReadRegistryMountReport(chosenWim))
+        lines.Add("")
         Dim recent = RecentOperations()
         lines.Add("Local DISM dismount journal (" & recent.Count.ToString() & " entries):")
         For Each record In recent
