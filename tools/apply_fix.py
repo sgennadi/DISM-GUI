@@ -180,9 +180,31 @@ def main():
     End Sub
 
     Private Sub ShowUnmountResult(ByVal dismounted As Boolean,
-                                  ByVal journalSaved As Boolean, ByVal failure As String)
+                                  ByVal journalSaved As Boolean,
+                                  ByVal failure As String, ByVal exitCode As String)
         If Me.IsDisposed OrElse Me.Disposing Then Return
         Dim verified = dismounted AndAlso journalSaved
+        If Not verified AndAlso WimMountSafety.IsIncompleteUnmount(exitCode) Then
+            Me.Activate()
+            Dim openHealth = MessageBox.Show(Me,
+                "DISM reached 100%, but could not release the mount directory " &
+                "(0xC1420117)." & Environment.NewLine &
+                "Close Explorer, Total Commander, terminal windows or scanners " &
+                "that still have files open inside the mount folder." &
+                Environment.NewLine &
+                "A failed Commit may have written changes. No retry or cleanup " &
+                "will run automatically." & Environment.NewLine & Environment.NewLine &
+                "Open read-only WIM 360 Mount health now?",
+                "Dismount incomplete - directory in use",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button1)
+            If openHealth = DialogResult.Yes Then
+                Using health As New WimMountHealthForm(txtWIM.Text)
+                    health.ShowDialog(Me)
+                End Using
+            End If
+            Return
+        End If
         Dim caption = "DISM GUI - Dismount WIM"
         Dim message = If(verified, "WIM image successfully dismounted.",
                          If(dismounted,
@@ -413,29 +435,40 @@ def main():
 
     data = replace_block(data, "    Private Sub BackgroundWorkerDisMount_RunWorkerCompleted",
                          "    Private Sub btnOpnDriverFolder_Click", '''    Private Sub BackgroundWorkerDisMount_RunWorkerCompleted(ByVal sender As Object, ByVal e As System.ComponentModel.RunWorkerCompletedEventArgs) Handles BackgroundWorkerDisMount.RunWorkerCompleted
-        Dim dismounted = (e.Error Is Nothing AndAlso Not e.Cancelled AndAlso
-                          strDISMExitCode = "0")
+        Dim completedExitCode As String = If(strDISMExitCode, "")
+        Dim exitOk = (e.Error Is Nothing AndAlso Not e.Cancelled AndAlso
+                      completedExitCode = "0")
         Dim details As String = If(e.Error IsNot Nothing, e.Error.Message,
-                                   "DISM exit code: " & strDISMExitCode)
-        If dismounted Then
+                                   "DISM exit code: " & completedExitCode)
+        ' Regardless of the exit code, independently query WIMGAPI registration.
+        ' 100% progress plus 0xC1420117 can leave the directory in a mixed
+        ' state. Do NOT treat absent registration as successful DISM completion.
+        Dim registrationAbsent As Boolean? = Nothing
+        Dim stateDescription As String = "Mount registration could not be verified."
+        If activeDismountTarget IsNot Nothing Then
             Try
-                dismounted = activeDismountTarget IsNot Nothing AndAlso
-                             WimMountSafety.VerifyNoLongerMounted(activeDismountTarget)
-                If Not dismounted Then
-                    details &= " | Image still registered as mounted or cannot be verified."
-                End If
+                registrationAbsent = WimMountSafety.VerifyNoLongerMounted(activeDismountTarget)
+                stateDescription = If(registrationAbsent.Value,
+                    "WIMGAPI no longer registers this image; folder cleanup is not proven.",
+                    "WIMGAPI still registers this image as mounted.")
             Catch ex As Exception
                 RuntimeDiagnostics.RecordException("DISM dismount postflight", ex)
-                dismounted = False
                 details &= " | Mount registration check failed: " & ex.Message
             End Try
+        End If
+        Dim dismounted = exitOk AndAlso registrationAbsent.HasValue AndAlso
+                        registrationAbsent.Value
+        If Not dismounted Then
+            details &= Environment.NewLine &
+                WimMountSafety.FailureGuidance(completedExitCode,
+                    blnDISMCommit, stateDescription)
         End If
         Dim journalSaved As Boolean = True
         Try
             If activeDismountJournal Is Nothing Then Throw New InvalidOperationException(
                 "No pending dismount journal entry exists.")
             WimMountSafety.FinishDismount(activeDismountJournal, dismounted,
-                strDISMExitCode, If(dismounted, "", details))
+                completedExitCode, If(dismounted, "", details))
         Catch ex As Exception
             RuntimeDiagnostics.RecordException("DISM dismount journal completion", ex)
             journalSaved = False
@@ -445,18 +478,17 @@ def main():
         activeDismountJournal = Nothing
         activeDismountLease?.Dispose()
         activeDismountLease = Nothing
-        ' The UI must reflect the ACTUAL WIMGAPI state even when journaling
-        ' fails after a verified dismount. Never leave a false mounted flag.
-        If dismounted Then
-            btnMount.Enabled = True
-            btnDismount.Enabled = False
-            WIMMounted = False
-            strMountedImageLocation = ""
+        ' Reflect OBSERVED registration even after nonzero DISM exit, while
+        ' preserving Review required in the journal. No automatic recovery.
+        If registrationAbsent.HasValue Then
+            WIMMounted = Not registrationAbsent.Value
+            btnMount.Enabled = registrationAbsent.Value
+            btnDismount.Enabled = Not registrationAbsent.Value
+            If registrationAbsent.Value Then strMountedImageLocation = ""
         End If
         frmProgress.Close()
-        ' Post the result AFTER the progress window is closed.
         Me.BeginInvoke(New MethodInvoker(Sub()
-            ShowUnmountResult(dismounted, journalSaved, details)
+            ShowUnmountResult(dismounted, journalSaved, details, completedExitCode)
             If closeAfterUnmount Then
                 If dismounted AndAlso journalSaved Then
                     Me.Close()
