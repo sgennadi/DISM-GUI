@@ -208,12 +208,21 @@ Public NotInheritable Class OperationWorkflow
         For Each entry In runs
             If entry.Status = "RUNNING" Then
                 entry.Status = "REVIEW_REQUIRED"
-                entry.Results.Add(New StepResult With {
-                    .Kind = "Interrupted previous run",
-                    .Status = "REVIEW_REQUIRED",
-                    .Detail = "DISM GUI closed before final verification. " &
-                              "A partial WIM export may remain. No automatic resume or cleanup."
-                })
+                Dim pending = entry.Results.FirstOrDefault(Function(x)
+                    Return x.Status = "RUNNING"
+                End Function)
+                If pending IsNot Nothing Then
+                    pending.Status = "REVIEW_REQUIRED"
+                    pending.Detail &= " Application stopped before final verification. " &
+                                      "No automatic retry or cleanup."
+                ElseIf entry.Results.Count < MaxSteps Then
+                    entry.Results.Add(New StepResult With {
+                        .Kind = "Interrupted previous run",
+                        .Status = "REVIEW_REQUIRED",
+                        .Detail = "DISM GUI stopped before final verification; " &
+                                  "review any temporary WIM, no automatic retry."
+                    })
+                End If
             End If
         Next
         Return runs
