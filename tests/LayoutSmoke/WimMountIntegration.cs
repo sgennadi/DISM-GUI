@@ -5,6 +5,7 @@ using System.Linq;
 using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Threading;
+using System.Threading.Tasks;
 using DISM_GUI;
 
 // Creates one disposable, non-OS WIM with DISM, mounts it READ ONLY,
