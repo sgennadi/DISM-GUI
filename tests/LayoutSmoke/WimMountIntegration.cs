@@ -13,6 +13,19 @@ using DISM_GUI;
 // This proves the mount/metadata integration, not Windows servicing APIs.
 internal static class WimMountIntegration
 {
+    private sealed class CancelAtExportCheckpoint : IProgress<OperationWorkflow.StepResult>
+    {
+        private readonly CancellationTokenSource cancellation;
+        public CancelAtExportCheckpoint(CancellationTokenSource cancellation)
+            => this.cancellation = cancellation;
+        public void Report(OperationWorkflow.StepResult value)
+        {
+            // Synchronous callback makes cancellation deterministic, before DISM starts.
+            if (value.Kind == "ExportIndexNewWim" && value.Status == "RUNNING")
+                cancellation.Cancel();
+        }
+    }
+
     private static (int ExitCode, string Output) RunDism(string[] args, int timeoutMs)
     {
         var start = new ProcessStartInfo("dism.exe")
@@ -786,6 +799,31 @@ internal static class WimMountIntegration
                 history[0].Status != "PASS" || history[1].Status != "BLOCKED")
                 throw new InvalidOperationException(
                     "Approved and unapproved new-WIM exports were not journaled.");
+            var canceledOutput = Path.Combine(root, "canceled-last-step.wim");
+            var fullPlan = new OperationWorkflow.Profile {
+                Name = "Cancel at final export checkpoint",
+                Steps = Enumerable.Range(0, OperationWorkflow.MaxSteps - 1)
+                    .Select(_ => new OperationWorkflow.StepPlan {
+                        Kind = "WimMetadata", ImagePath = path
+                    }).ToList()
+            };
+            fullPlan.Steps.Add(new OperationWorkflow.StepPlan {
+                Kind = "ExportIndexNewWim", ImagePath = path,
+                ImageIndex = 1, OutputPath = canceledOutput
+            });
+            using var cancelAtCheckpoint = new CancellationTokenSource();
+            var canceledRun = OperationWorkflow.RunAsync(fullPlan,
+                new CancelAtExportCheckpoint(cancelAtCheckpoint), cancelAtCheckpoint.Token,
+                _ => Task.FromResult(true)).GetAwaiter().GetResult();
+            var restoredRun = OperationWorkflow.LoadHistory().First(x => x.Id == canceledRun.Id);
+            if (restoredRun.Status != "REVIEW_REQUIRED" ||
+                restoredRun.Results.Count != OperationWorkflow.MaxSteps ||
+                restoredRun.Results.Take(OperationWorkflow.MaxSteps - 1).Any(x => x.Status != "PASS") ||
+                restoredRun.Results.Last().Status != "REVIEW_REQUIRED" ||
+                !restoredRun.Results.Last().Detail.Contains(canceledOutput) ||
+                File.Exists(canceledOutput) || Digest(path) != sourceHash)
+                throw new InvalidOperationException(
+                    "Canceling the sixteenth step must retain a readable bounded journal and its output checkpoint.");
             Console.WriteLine("PASS real DISM new-WIM export: separate approval, per-step " +
                 "checkpoint, unique output, WIMGAPI postflight and original SHA-256.");
         } finally {
