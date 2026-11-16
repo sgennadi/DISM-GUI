@@ -736,6 +736,61 @@ internal static class WimMountIntegration
         }
 
         var path = Path.GetFullPath(image);
+        // Real Windows DISM export into a NEW temporary image, never a user's
+        // install.wim. Verify approval gating, checkpoints and source SHA-256.
+        var output = Path.Combine(root,
+            "operation-export-" + Guid.NewGuid().ToString("N") + ".wim");
+        var previousRoot = Environment.GetEnvironmentVariable("DISMGUI_TEST_OPERATION_ROOT");
+        var previousTest = Environment.GetEnvironmentVariable("DISMGUI_TEST_DIAGNOSTICS");
+        try {
+            Environment.SetEnvironmentVariable("DISMGUI_TEST_DIAGNOSTICS", "1");
+            Environment.SetEnvironmentVariable("DISMGUI_TEST_OPERATION_ROOT",
+                Path.Combine(root, "operation-export-journal"));
+            var sourceHash = Digest(path);
+            var exportPlan = new OperationWorkflow.Profile {
+                Name = "Verified new WIM only",
+                Steps = new System.Collections.Generic.List<OperationWorkflow.StepPlan> {
+                    new() {
+                        Kind = "ExportIndexNewWim",
+                        ImagePath = path, ImageIndex = 1,
+                        OutputPath = output
+                    }
+                }
+            };
+            var approvalMissing = OperationWorkflow.RunAsync(
+                exportPlan, null, CancellationToken.None).GetAwaiter().GetResult();
+            if (approvalMissing.Status != "BLOCKED" || File.Exists(output))
+                throw new InvalidOperationException(
+                    "A profile must not start DISM export without per-step approval.");
+            var capacity = OperationExport.Check(path, 1, output);
+            if (capacity.RequiredBytes <= 0 || capacity.AvailableBytes < capacity.RequiredBytes)
+                throw new InvalidOperationException("NEW WIM export preflight not enforced.");
+            var approved = OperationWorkflow.RunAsync(
+                exportPlan, null, CancellationToken.None,
+                _ => Task.FromResult(true)).GetAwaiter().GetResult();
+            var inspectedExport = Wim360Reader.Inspect(output);
+            if (approved.Status != "PASS" || !File.Exists(output) ||
+                inspectedExport.ImageCount != 1 ||
+                !string.Equals(sourceHash, Digest(path), StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    "Approved real DISM export failed postflight or changed its source.");
+            var collisionRejected = false;
+            try { OperationExport.Check(path, 1, output); }
+            catch (IOException) { collisionRejected = true; }
+            if (!collisionRejected)
+                throw new InvalidOperationException(
+                    "Existing WIM destination must never be overwritten.");
+            var history = OperationWorkflow.LoadHistory();
+            if (history.Count != 2 ||
+                history[0].Status != "PASS" || history[1].Status != "BLOCKED")
+                throw new InvalidOperationException(
+                    "Approved and unapproved new-WIM exports were not journaled.");
+            Console.WriteLine("PASS real DISM new-WIM export: separate approval, per-step " +
+                "checkpoint, unique output, WIMGAPI postflight and original SHA-256.");
+        } finally {
+            Environment.SetEnvironmentVariable("DISMGUI_TEST_OPERATION_ROOT", previousRoot);
+            Environment.SetEnvironmentVariable("DISMGUI_TEST_DIAGNOSTICS", previousTest);
+        }
         var mount = Path.Combine(root, "read-only-mount");
         Directory.CreateDirectory(mount);
         var beforeHash = Digest(path);
