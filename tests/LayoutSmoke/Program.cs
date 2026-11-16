@@ -1297,6 +1297,23 @@ internal static class LayoutSmoke
             Require(unsafeStateRejected,
                     "Needs-remount state must fail closed, never run cleanup");
             report.Images[0].MountStatus = "Mounted (R/W)";
+            // Raw WIMMount registry DWORDs are not the DISM mount-state enum.
+            // In particular, value 0x3 must not be labeled Invalid by itself.
+            var rawMountRecord = WimMountSafety.FormatRegistryMountEntry(
+                "f860eef0-509c-48f1-90ef-3d52e5a4d5f5", mount, imagePath, "1", 3);
+            var invalidGuidance = WimMountSafety.InvalidMountGuidance(
+                "Invalid / check mount");
+            var remountGuidance = WimMountSafety.InvalidMountGuidance(
+                "Needs remount");
+            Require(rawMountRecord.Contains("Raw registry Status: 0x00000003") &&
+                    rawMountRecord.Contains("not a DISM mount-state code") &&
+                    invalidGuidance.Contains("REVIEW REQUIRED") &&
+                    invalidGuidance.Contains("successful /Cleanup-Mountpoints") &&
+                    invalidGuidance.Contains("reboot Windows") &&
+                    invalidGuidance.Contains("Do NOT delete WIMMount registry keys") &&
+                    remountGuidance.Contains("documented") &&
+                    WimMountSafety.InvalidMountGuidance("Not mounted") == "",
+                    "Invalid mount recovery must be read-only and distinguish registry status.");
             // A 100%-then-error unmount is not a success: Windows DISM reports
             // this HRESULT as both signed decimal and hexadecimal.
             Require(WimMountSafety.IsIncompleteUnmount("-1052638953") &&
@@ -1342,6 +1359,9 @@ internal static class LayoutSmoke
                         x.Id == discard.Id && x.State == "Verified"),
                     "Verified dismount must be distinguished from an interrupted operation");
             var health = WimMountSafety.BuildHealthReport();
+            Require(health.Contains("WIMMount registry registrations (read-only)") &&
+                    health.Contains("not a DISM Invalid/OK status code"),
+                    "Mount Health must include WIMMount registration inspection without mutation.");
             Require(health.Contains("MOUNT HEALTH") &&
                     health.Contains("Review required") &&
                     health.Contains("Commit") && health.Contains("Discard") &&
