@@ -1305,8 +1305,11 @@ internal static class LayoutSmoke
                 "Invalid / check mount");
             var remountGuidance = WimMountSafety.InvalidMountGuidance(
                 "Needs remount");
+            var unknownRawStatus = WimMountSafety.FormatRegistryMountEntry(
+                "fixture", mount, imagePath, "1", null);
             Require(rawMountRecord.Contains("Raw registry Status: 0x00000003") &&
                     rawMountRecord.Contains("not a DISM mount-state code") &&
+                    unknownRawStatus.Contains("Raw registry Status: unavailable") &&
                     invalidGuidance.Contains("REVIEW REQUIRED") &&
                     invalidGuidance.Contains("successful /Cleanup-Mountpoints") &&
                     invalidGuidance.Contains("reboot Windows") &&
