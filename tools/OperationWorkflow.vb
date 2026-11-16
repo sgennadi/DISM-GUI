@@ -8,8 +8,8 @@ Imports System.Text.Json
 Imports System.Threading
 Imports System.Threading.Tasks
 
-' Explicit, bounded and locally persisted READ-ONLY operation plans.
-' No arbitrary command strings, scripts, DISM writers or unattended servicing.
+' Bounded local plans: read-only checks and interactively approved NEW WIM export.
+' No arbitrary command strings, scripts or unattended servicing.
 Public NotInheritable Class OperationWorkflow
     Private Sub New()
     End Sub
@@ -104,7 +104,7 @@ Public NotInheritable Class OperationWorkflow
         For Each stepItem In profile.Steps
             If stepItem Is Nothing OrElse
                Not AllowedKinds().Contains(stepItem.Kind, StringComparer.Ordinal) Then
-                Throw New InvalidDataException("Only known read-only operation types are allowed.")
+                Throw New InvalidDataException("Only known operation types are allowed.")
             End If
             If stepItem.Kind <> "ExportIndexNewWim" AndAlso
                Not String.IsNullOrWhiteSpace(stepItem.OutputPath) Then
@@ -201,7 +201,8 @@ Public NotInheritable Class OperationWorkflow
         If runs Is Nothing Then Return New List(Of RunRecord)()
         If runs.Count > 100 OrElse runs.Any(Function(x)
               Return x Is Nothing OrElse x.Results Is Nothing OrElse
-                     x.Results.Count > MaxSteps
+                     x.Results.Count > MaxSteps OrElse
+                     x.Results.Any(Function(item) item Is Nothing)
            End Function) Then
             Throw New InvalidDataException("Invalid local operation history.")
         End If
@@ -442,19 +443,30 @@ Public NotInheritable Class OperationWorkflow
             run.Status = If(run.Results.Any(Function(x) x.Status = "RUNNING"),
                             "REVIEW_REQUIRED", "CANCELED")
             If run.Status = "REVIEW_REQUIRED" Then
-                run.Results.Add(New StepResult With {
-                    .Kind = "Interrupted new-WIM export",
-                    .Status = "REVIEW_REQUIRED",
-                    .Detail = "Export was canceled after its write checkpoint; " &
-                              "inspect the temporary WIM, DISM log and destination manually."
-                })
+                For Each checkpoint In run.Results.Where(Function(x) x.Status = "RUNNING")
+                    checkpoint.Status = "REVIEW_REQUIRED"
+                    checkpoint.Detail &= " Export was canceled after its write checkpoint; " &
+                        "inspect the temporary WIM, DISM log and destination manually."
+                Next
             End If
         Catch ex As Exception
-            run.Status = "FAIL"
-            run.Results.Add(New StepResult With {
-                .Kind = "Operation Center", .Status = "FAIL",
-                .Detail = ErrorDiagnostics.Redact(ex.GetType().Name & ": " & ex.Message)
-            })
+            Dim detail = ErrorDiagnostics.Redact(ex.GetType().Name & ": " & ex.Message)
+            Dim pending = run.Results.LastOrDefault(Function(x) x.Status = "RUNNING")
+            run.Status = If(pending IsNot Nothing OrElse
+                run.Results.Any(Function(x) x.Status = "REVIEW_REQUIRED"),
+                "REVIEW_REQUIRED", "FAIL")
+            If pending IsNot Nothing Then
+                pending.Status = "REVIEW_REQUIRED"
+                pending.Detail &= " Final verification was interrupted: " & detail
+            ElseIf run.Results.Count < MaxSteps Then
+                run.Results.Add(New StepResult With {
+                    .Kind = "Operation Center", .Status = run.Status, .Detail = detail
+                })
+            Else
+                Dim last = run.Results(run.Results.Count - 1)
+                last.Status = run.Status
+                last.Detail &= " Operation Center finalization failed: " & detail
+            End If
         Finally
             run.FinishedUtc = DateTime.UtcNow
             SaveHistory(run)
