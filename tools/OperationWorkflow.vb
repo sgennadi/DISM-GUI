@@ -56,13 +56,13 @@ Public NotInheritable Class OperationWorkflow
         Return Path.Combine(RootFolder(), name)
     End Function
 
-    Private Shared Sub AtomicSave(path As String, json As String)
-        Dim folder = Path.GetDirectoryName(path)
+    Private Shared Sub AtomicSave(destinationPath As String, json As String)
+        Dim folder = IO.Path.GetDirectoryName(destinationPath)
         Directory.CreateDirectory(folder)
-        Dim temp = path & "." & Guid.NewGuid().ToString("N") & ".tmp"
+        Dim temp = destinationPath & "." & Guid.NewGuid().ToString("N") & ".tmp"
         Try
             File.WriteAllText(temp, json, New UTF8Encoding(False))
-            File.Move(temp, path, True)
+            File.Move(temp, destinationPath, True)
         Finally
             If File.Exists(temp) Then File.Delete(temp)
         End Try
