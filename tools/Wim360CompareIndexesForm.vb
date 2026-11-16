@@ -839,13 +839,13 @@ Public NotInheritable Class Wim360CompareIndexesForm
         ' Calculate per-index coverage from the exact visible/filtered rows.
         Dim coverage = Wim360IndexComparer.SummarizeCoverage(
             visibleRows, comparison.Indexes)
-        Dim missingRowCount = visibleRows.Count(Function(x)
+        Dim missingRowCount = visibleRows.Where(Function(x)
             Return x.State = "Missing in some" OrElse
                    x.State.StartsWith("Only in Index ", StringComparison.Ordinal)
-        End Function)
-        Dim changed = visibleRows.Count(Function(x)
+        End Function).Count()
+        Dim changed = visibleRows.Where(Function(x)
             Return x.State = "Different" OrElse x.State = "Ambiguous duplicates"
-        End Function)
+        End Function).Count()
         Dim compact = String.Join(", ", coverage.Take(3).Select(Function(x)
             Return x.Index.ToString() & ":" & x.Missing.ToString("N0")
         End Function))
