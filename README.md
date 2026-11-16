@@ -424,6 +424,21 @@ It remains accessible even when no WIM file is selected, so interrupted
 operations can be reviewed. The health window can refresh and copy the
 report, but cannot automatically clean, remount, commit or discard an image.
 
+The report additionally reads the relevant 64-bit (or native 32-bit)
+`HKLM\SOFTWARE\Microsoft\WIMMount\Mounted Images` entries, including
+the registered mount path, WIM path, image index and **raw** DWORD status.
+These registry values are diagnostic only: a value such as `0x3` must
+not be interpreted as the DISM/WIMGAPI `Invalid` status. A missing key
+does not prove that a mount folder is safe to delete.
+
+If WIMGAPI reports `Invalid / check mount`, Mount health explicitly
+marks the mount as requiring review. It recommends releasing handles,
+rebooting if not already done, and checking `dism /Get-MountedImageInfo`
+again. If `/Remount-Image` and `/Cleanup-Mountpoints` have already
+failed, the app does not retry them, stop WIMMount, modify the registry,
+force-delete folders or assume that `/Cleanup-Mountpoints` exit 0
+removed the invalid registration.
+
 Before invoking legacy **Dismount WIM**, DISM GUI now validates the fresh
 WIM/ESD source, numeric index, exact registered mount folder and
 mount state. **Commit** requires a registered `Mounted (R/W)` index;
