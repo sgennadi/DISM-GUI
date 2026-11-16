@@ -402,8 +402,8 @@ Public NotInheritable Class OperationCenterForm
                 planGrid.Rows(i).Cells(4).Value = checks(i).Status
             Next
             status.Text = "Preflight: " &
-                checks.Count(Function(x) x.Status = "READY").ToString() &
-                " ready, " & checks.Count(Function(x) x.Status = "BLOCKED").ToString() &
+                checks.Where(Function(x) x.Status = "READY").Count().ToString() &
+                " ready, " & checks.Where(Function(x) x.Status = "BLOCKED").Count().ToString() &
                 " blocked. No servicing commands were executed."
         Catch ex As OperationCanceledException
             status.Text = "Preflight canceled."
