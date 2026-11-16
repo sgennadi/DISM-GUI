@@ -280,7 +280,7 @@ Public NotInheritable Class OperationWorkflow
                                                          item.ImageIndex, item.OutputPath), token)
                     result.Add(Entry(item, "READY",
                         "Write to NEW output only; requires interactive approval. " &
-                        "Minimum " & (export.RequiredBytes  1048576L).ToString(
+                        "Minimum " & Math.Ceiling(export.RequiredBytes / 1048576.0R).ToString(
                             CultureInfo.InvariantCulture) & " MiB free."))
                 ElseIf item.Kind = "EnvironmentPreflight" Then
                     result.Add(Entry(item, "READY", "Windows environment check can run read-only."))
