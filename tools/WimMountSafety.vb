@@ -280,13 +280,16 @@ Public NotInheritable Class WimMountSafety
                                                      mountPath As String,
                                                      imagePath As String,
                                                      imageIndex As String,
-                                                     statusRaw As Integer) As String
+                                                     statusRaw As Integer?) As String
+        Dim statusText = If(statusRaw.HasValue,
+                            "0x" & statusRaw.GetValueOrDefault().ToString(
+                                "X8", CultureInfo.InvariantCulture),
+                            "unavailable")
         Return "WIMMount entry " & If(keyName, "") & Environment.NewLine &
             "  Mount: " & If(mountPath, "") & Environment.NewLine &
             "  Image: " & If(imagePath, "") & " | index " & If(imageIndex, "") &
             Environment.NewLine &
-            "  Raw registry Status: 0x" &
-            statusRaw.ToString("X8", CultureInfo.InvariantCulture) &
+            "  Raw registry Status: " & statusText &
             " (not a DISM mount-state code)"
     End Function
 
@@ -356,8 +359,8 @@ Public NotInheritable Class WimMountSafety
                                             StringComparison.OrdinalIgnoreCase) Then Continue For
                             End If
                             Dim raw As Object = record.GetValue("Status")
-                            Dim rawValue As Integer = If(TypeOf raw Is Integer,
-                                                        CInt(If(raw, 0)), 0)
+                            Dim rawValue As Integer? = Nothing
+                            If TypeOf raw Is Integer Then rawValue = DirectCast(raw, Integer)
                             Dim indexText = Convert.ToString(record.GetValue("Image Index"),
                                                               CultureInfo.InvariantCulture)
                             lines.Add(FormatRegistryMountEntry(subkey, mountPath,
