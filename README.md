@@ -228,6 +228,32 @@ row; it does not identify which index contains the correct value.
 For more than three indexes, remaining counts are available in the tooltip.
 
 
+### Directional change report (Before → After)
+
+In **WIM 360 → Compare indexes**, choose 2–8 indexes and a comparison
+mode. Use the Type / Result / Search filters to narrow the rows.
+Click **Export...** and choose **Change report (Before -> After)**.
+Choose **Before index** and **After index** (they must differ). By default,
+the CSV exports only changes; check **Include unchanged rows** if needed.
+The existing **Filtered comparison CSV** option remains available in
+the same Export menu.
+
+The directional report uses the **currently filtered rows** and includes
+a clear summary with Added, Removed, Modified, Ambiguous, Unchanged and
+Outside chosen pair totals, followed by the matching item paths,
+before/after reported values and any warnings. The meaning is relative
+to the direction: **Added** is present only in the After index,
+**Removed** only in Before, and **Modified** means the reported values
+differ. Duplicate identities affecting either of the selected indexes
+are **Ambiguous**. An item present only in a different, third index is
+outside the selected pair and is not exported as a change.
+
+The report does not scan or modify the source WIM again and does not
+claim equal file bytes merely because paths or reported sizes match.
+For actual content comparisons, use the existing bounded SHA-256 checks
+on already mounted images. CSV fields are quoted and protected against
+spreadsheet formula injection. The source WIM remains unchanged.
+
 For example, for `install.wim` with indexes 1, 2 and 3, first use
 **Index metadata** to compare editions and builds. Select
 **Files + folders (no mounting)** to compare all paths under

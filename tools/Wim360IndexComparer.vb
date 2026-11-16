@@ -26,6 +26,9 @@ Public NotInheritable Class Wim360IndexComparer
         Public Property Name As String = ""
         Public Property State As String = ""
         Public Property Values As New Dictionary(Of Integer, String)()
+        ' Preserve which specific image index had duplicates. A duplicate
+        ' in Index 3 must not make a clear Index 1 -> Index 2 change ambiguous.
+        Public Property DuplicateIndexes As New HashSet(Of Integer)()
         Public Property PresentCount As Integer
         Public Property Notes As String = ""
 
@@ -396,6 +399,7 @@ Public NotInheritable Class Wim360IndexComparer
             If row.Values.TryGetValue(entry.Index, previous) Then
                 ' Even a same-value duplicate has an ambiguous identity.
                 row.Notes = "More than one item has the same identity in an index."
+                row.DuplicateIndexes.Add(entry.Index)
                 If Not String.Equals(previous, value,
                                      StringComparison.OrdinalIgnoreCase) Then
                     row.Values(entry.Index) = previous & " | " & value
@@ -527,6 +531,153 @@ Public NotInheritable Class Wim360IndexComparer
             End If
             Return True
         End Function).ToList()
+    End Function
+
+    ' Direction is explicit: "Added" means absent in BEFORE, present in
+    ' AFTER; "Removed" is the reverse. This compares the audited values
+    ' ALREADY in memory; it never mounts an image or reads disk contents.
+    ' Same path/size is not proof of identical bytes.
+    Public NotInheritable Class PairChangeSummary
+        Public Property RowsConsidered As Integer
+        Public Property Added As Integer
+        Public Property Removed As Integer
+        Public Property Modified As Integer
+        Public Property Ambiguous As Integer
+        Public Property Unchanged As Integer
+        Public Property OutsidePair As Integer
+        Public ReadOnly Property Changes As Integer
+            Get
+                Return Added + Removed + Modified + Ambiguous
+            End Get
+        End Property
+    End Class
+
+    Private Shared Sub ValidateChangePair(result As Result,
+                                           beforeIndex As Integer,
+                                           afterIndex As Integer)
+        If result Is Nothing Then Throw New ArgumentNullException(NameOf(result))
+        If beforeIndex = afterIndex OrElse
+           Not result.Indexes.Contains(beforeIndex) OrElse
+           Not result.Indexes.Contains(afterIndex) Then
+            Throw New ArgumentException(
+                "Choose two different indexes from the completed comparison.")
+        End If
+    End Sub
+
+    Public Shared Function PairChangeType(entry As Row,
+                  beforeIndex As Integer, afterIndex As Integer) As String
+        If entry Is Nothing Then Throw New ArgumentNullException(NameOf(entry))
+        If beforeIndex = afterIndex Then
+            Throw New ArgumentException("Choose different before and after indexes.")
+        End If
+        Dim beforeValue As String = Nothing
+        Dim afterValue As String = Nothing
+        Dim presentBefore = entry.Values.TryGetValue(beforeIndex, beforeValue)
+        Dim presentAfter = entry.Values.TryGetValue(afterIndex, afterValue)
+        If Not presentBefore AndAlso Not presentAfter Then Return "Outside pair"
+
+        ' State can be ambiguous due to duplicates in an unselected third
+        ' index. Use known duplicate locations; fall back conservatively when
+        ' old manually supplied results omit that detail.
+        If entry.DuplicateIndexes IsNot Nothing AndAlso
+           entry.DuplicateIndexes.Count > 0 Then
+            If entry.DuplicateIndexes.Contains(beforeIndex) OrElse
+               entry.DuplicateIndexes.Contains(afterIndex) Then Return "Ambiguous"
+        ElseIf String.Equals(entry.State, "Ambiguous duplicates",
+                             StringComparison.Ordinal) Then
+            Return "Ambiguous"
+        End If
+        If Not presentBefore Then Return "Added"
+        If Not presentAfter Then Return "Removed"
+        If Not String.Equals(beforeValue, afterValue,
+                             StringComparison.OrdinalIgnoreCase) Then Return "Modified"
+        Return "Unchanged"
+    End Function
+
+    Public Shared Function SummarizePairChanges(result As Result,
+                  rows As IEnumerable(Of Row), beforeIndex As Integer,
+                  afterIndex As Integer) As PairChangeSummary
+        ValidateChangePair(result, beforeIndex, afterIndex)
+        If rows Is Nothing Then Throw New ArgumentNullException(NameOf(rows))
+        Dim summary As New PairChangeSummary()
+        For Each entry In rows
+            If entry Is Nothing Then Continue For
+            summary.RowsConsidered += 1
+            Select Case PairChangeType(entry, beforeIndex, afterIndex)
+                Case "Added" : summary.Added += 1
+                Case "Removed" : summary.Removed += 1
+                Case "Modified" : summary.Modified += 1
+                Case "Ambiguous" : summary.Ambiguous += 1
+                Case "Unchanged" : summary.Unchanged += 1
+                Case "Outside pair" : summary.OutsidePair += 1
+            End Select
+        Next
+        Return summary
+    End Function
+
+    Private Shared Sub WriteChangeLine(writer As TextWriter,
+                                        ParamArray values As String())
+        writer.WriteLine(String.Join(",", values.Select(Function(x) CsvCell(x))))
+    End Sub
+
+    Public Shared Sub WriteChangeCsv(writer As TextWriter, result As Result,
+                  filteredRows As IEnumerable(Of Row), beforeIndex As Integer,
+                  afterIndex As Integer, Optional changesOnly As Boolean = True)
+        If writer Is Nothing Then Throw New ArgumentNullException(NameOf(writer))
+        ValidateChangePair(result, beforeIndex, afterIndex)
+        If filteredRows Is Nothing Then
+            Throw New ArgumentNullException(NameOf(filteredRows))
+        End If
+        Dim rows As IList(Of Row) = TryCast(filteredRows, IList(Of Row))
+        If rows Is Nothing Then rows = filteredRows.ToList()
+        Dim summary = SummarizePairChanges(result, rows, beforeIndex, afterIndex)
+        Dim beforeLabel = ColumnLabel(result, beforeIndex)
+        Dim afterLabel = ColumnLabel(result, afterIndex)
+
+        WriteChangeLine(writer, "Report", "WIM 360 - directional index changes")
+        WriteChangeLine(writer, "Source WIM", result.ImageFile)
+        WriteChangeLine(writer, "Comparison mode", result.Mode)
+        WriteChangeLine(writer, "Before", beforeLabel)
+        WriteChangeLine(writer, "After", afterLabel)
+        WriteChangeLine(writer, "Scope", "Currently filtered comparison rows")
+        WriteChangeLine(writer, "Rows considered", summary.RowsConsidered.ToString(
+            CultureInfo.InvariantCulture))
+        WriteChangeLine(writer, "Added", summary.Added.ToString(CultureInfo.InvariantCulture))
+        WriteChangeLine(writer, "Removed", summary.Removed.ToString(CultureInfo.InvariantCulture))
+        WriteChangeLine(writer, "Modified", summary.Modified.ToString(CultureInfo.InvariantCulture))
+        WriteChangeLine(writer, "Ambiguous", summary.Ambiguous.ToString(CultureInfo.InvariantCulture))
+        WriteChangeLine(writer, "Unchanged", summary.Unchanged.ToString(CultureInfo.InvariantCulture))
+        WriteChangeLine(writer, "Outside chosen pair", summary.OutsidePair.ToString(
+            CultureInfo.InvariantCulture))
+        WriteChangeLine(writer, "Rows exported", If(changesOnly,
+            summary.Changes, summary.Changes + summary.Unchanged).ToString(
+            CultureInfo.InvariantCulture))
+        WriteChangeLine(writer, "Interpretation",
+            "Modified = different reported values only. Equal paths or sizes do not prove identical file bytes.")
+        WriteChangeLine(writer, "Read-only", "No source images were modified")
+        writer.WriteLine()
+        WriteChangeLine(writer, "Change", "Kind", "Item",
+                        "Before (" & beforeLabel & ")",
+                        "After (" & afterLabel & ")", "Notes")
+        For Each entry In rows
+            If entry Is Nothing Then Continue For
+            Dim changeType = PairChangeType(entry, beforeIndex, afterIndex)
+            If changeType = "Outside pair" OrElse
+               (changesOnly AndAlso changeType = "Unchanged") Then Continue For
+            WriteChangeLine(writer, changeType, entry.Kind, entry.Name,
+                entry.At(beforeIndex), entry.At(afterIndex), entry.Notes)
+        Next
+    End Sub
+
+    Public Shared Function ToChangeCsv(result As Result,
+                  filteredRows As IEnumerable(Of Row), beforeIndex As Integer,
+                  afterIndex As Integer,
+                  Optional changesOnly As Boolean = True) As String
+        Using writer As New StringWriter(CultureInfo.InvariantCulture)
+            WriteChangeCsv(writer, result, filteredRows, beforeIndex,
+                           afterIndex, changesOnly)
+            Return writer.ToString()
+        End Using
     End Function
 
     Private Shared Function CsvCell(value As String) As String

@@ -693,6 +693,13 @@ internal static class LayoutSmoke
                         x.Present == 1 && x.Missing == 0 && x.Ambiguous == 1),
                 "Ambiguous duplicate rows must be counted for every affected index.");
 
+
+        Require(Wim360IndexComparer.PairChangeType(repeated.Rows.Single(), 1, 2)
+                    == "Ambiguous" &&
+                Wim360IndexComparer.PairChangeType(repeated.Rows.Single(), 2, 3)
+                    == "Unchanged",
+                "Duplicates in one index must not contaminate a different pair.");
+
         var folderComparison = Wim360IndexComparer.CompareRecords(report.ImageFile,
             "Mounted file paths / sizes", new[] { 1, 2, 3 }, new[] {
                 new Wim360IndexComparer.Item { Index=1, Kind="Folders", Key=@"Windows\Policy", Value="Present" },
@@ -712,6 +719,72 @@ internal static class LayoutSmoke
                 csv.Contains("\"'=HYPERLINK()\"") &&
                 csv.Contains("\"—\""),
                 "Index comparison CSV missing headers, absent-item markers or formula protection");
+
+        // Directional change reports intentionally classify a pair, not
+        // all selected indexes. Index 3-only paths are outside a 1 -> 2 pair.
+        var changes12 = Wim360IndexComparer.SummarizePairChanges(
+            comparison, comparison.Rows, 1, 2);
+        Require(changes12.RowsConsidered == 5 &&
+                changes12.Added == 0 && changes12.Removed == 1 &&
+                changes12.Modified == 1 && changes12.Unchanged == 2 &&
+                changes12.OutsidePair == 1 && changes12.Ambiguous == 0,
+                "Directional report must correctly compare index 1 -> 2.");
+        var changes23 = Wim360IndexComparer.SummarizePairChanges(
+            comparison, comparison.Rows, 2, 3);
+        Require(changes23.Added == 1 && changes23.Removed == 1 &&
+                changes23.Modified == 1 && changes23.Unchanged == 1 &&
+                changes23.OutsidePair == 1 && changes23.Changes == 3,
+                "Pairwise report must label Added, Removed and Modified relative to direction.");
+        var reversed = Wim360IndexComparer.SummarizePairChanges(
+            comparison, comparison.Rows, 3, 2);
+        Require(reversed.Added == changes23.Removed &&
+                reversed.Removed == changes23.Added &&
+                reversed.Modified == changes23.Modified,
+                "Reversing comparison direction must swap Added/Removed.");
+
+        var pairCsv = Wim360IndexComparer.ToChangeCsv(
+            comparison, comparison.Rows, 2, 3);
+        Require(pairCsv.Contains("\"Report\",\"WIM 360 - directional index changes\"") &&
+                pairCsv.Contains("\"Before\",\"Index 2\"") &&
+                pairCsv.Contains("\"After\",\"Index 3\"") &&
+                pairCsv.Contains("\"Added\",\"1\"") &&
+                pairCsv.Contains("\"Removed\",\"1\"") &&
+                pairCsv.Contains("\"Modified\",\"1\"") &&
+                pairCsv.Contains("\"Rows exported\",\"3\"") &&
+                pairCsv.Contains("\"Added\",\"Files\",\"Windows\\System32\\unique.dll\"") &&
+                pairCsv.Contains("\"Removed\",\"Files\",\"Windows\\System32\\missing.dll\"") &&
+                pairCsv.Contains("\"Modified\",\"Files\",\"Windows\\System32\\changed.dll\"") &&
+                !pairCsv.Contains("common.dll") && !pairCsv.Contains("=HYPERLINK()"),
+                "Directional CSV must include summary, before/after and only changed rows.");
+        var formulaCsv = Wim360IndexComparer.ToChangeCsv(
+            comparison, comparison.Rows, 1, 3);
+        Require(formulaCsv.Contains("\"'=HYPERLINK()\""),
+                "Directional CSV must escape spreadsheet formulas in file paths.");
+
+        var filterOnly = Wim360IndexComparer.Filter(comparison.Rows,
+            "Files", "Missing from Index 3", "", 3);
+        var filteredChanges = Wim360IndexComparer.SummarizePairChanges(
+            comparison, filterOnly, 1, 3);
+        Require(filteredChanges.Removed == 2 &&
+                filteredChanges.Changes == 2 &&
+                filteredChanges.RowsConsidered == 2,
+                "Directional report must honor the active Type/Result/Search filters.");
+        var noResults = Wim360IndexComparer.ToChangeCsv(
+            comparison, Array.Empty<Wim360IndexComparer.Row>(), 1, 2);
+        Require(noResults.Contains("\"Rows exported\",\"0\"") &&
+                noResults.Contains("\"Change\",\"Kind\",\"Item\""),
+                "An empty directional report must still include headers and zero totals.");
+        bool invalidChangePairRejected = false;
+        try { Wim360IndexComparer.ToChangeCsv(comparison, comparison.Rows, 2, 2); }
+        catch (ArgumentException) { invalidChangePairRejected = true; }
+        Require(invalidChangePairRejected,
+                "Directional report must reject identical before/after indexes.");
+        invalidChangePairRejected = false;
+        try { Wim360IndexComparer.ToChangeCsv(comparison, comparison.Rows, 1, 9); }
+        catch (ArgumentException) { invalidChangePairRejected = true; }
+        Require(invalidChangePairRejected,
+                "Directional report must refuse indexes outside the completed comparison.");
+
         report.Images[0].ServicingAudit = Wim360Servicing.Summarize(
             report.ImageFile, 1, @"C:\Mounted1",
             Array.Empty<DriverStudioEngine.DriverPackage>(),
@@ -782,6 +855,14 @@ internal static class LayoutSmoke
                 matrix.Columns.Count == 6 && matrix.RowCount == 5 &&
                 action is not null && action.Enabled, "Three-index comparison UI not initialized");
 
+        var exportAction = Find(dialog, "btn360IndexCompareCsv") as Button;
+        Require(exportAction is not null &&
+                exportAction.Text == "Export..." &&
+                exportAction.ContextMenuStrip is { Items.Count: 2 } exportMenu &&
+                exportMenu.Items[0].Name == "mnu360IndexCompareExportFiltered" &&
+                exportMenu.Items[1].Name == "mnu360IndexCompareExportChanges" &&
+                exportMenu.Items[1].Text.Contains("Before -> After"),
+                "Comparison GUI must offer both existing CSV export and directional change report.");
         var coverageLabel = Find(dialog, "lbl360IndexCompareSummary") as Label;
         Require(coverageLabel is not null &&
                 coverageLabel.Text.Contains("Missing 1:1, 2:2, 3:2") &&
