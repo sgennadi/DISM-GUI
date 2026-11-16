@@ -834,15 +834,45 @@ Public NotInheritable Class Wim360CompareIndexesForm
             comparison.Indexes.Count)
         grid.RowCount = visibleRows.Count
         UpdateHashButton()
-        Dim missing = visibleRows.Where(Function(x)
+        ' The row-wide Missing / Different filter is not a per-index count:
+        ' a row may exist in index 1 while it is absent from index 3.
+        ' Calculate per-index coverage from the exact visible/filtered rows.
+        Dim coverage = Wim360IndexComparer.SummarizeCoverage(
+            visibleRows, comparison.Indexes)
+        Dim missingRowCount = visibleRows.Count(Function(x)
             Return x.State = "Missing in some" OrElse
                    x.State.StartsWith("Only in Index ", StringComparison.Ordinal)
-        End Function).Count()
-        Dim changed = visibleRows.Where(Function(x) x.State = "Different").Count()
-        summaryLabel.Text = visibleRows.Count.ToString("N0") & " of " &
-            comparison.Rows.Count.ToString("N0") & " rows  |  " &
-            missing.ToString("N0") & " missing/unique  |  " &
-            changed.ToString("N0") & " different  |  Mode: " & comparison.Mode
+        End Function)
+        Dim changed = visibleRows.Count(Function(x)
+            Return x.State = "Different" OrElse x.State = "Ambiguous duplicates"
+        End Function)
+        Dim compact = String.Join(", ", coverage.Take(3).Select(Function(x)
+            Return x.Index.ToString() & ":" & x.Missing.ToString("N0")
+        End Function))
+        If coverage.Count > 3 Then
+            compact &= ", +" & (coverage.Count - 3).ToString() & " more"
+        End If
+        summaryLabel.Text = visibleRows.Count.ToString("N0") & "/" &
+            comparison.Rows.Count.ToString("N0") & " rows  |  Missing " &
+            compact & "  |  Different/ambiguous " & changed.ToString("N0")
+        ' All 2-8 indexes are available on hover, even when a compact DPI
+        ' layout cannot show every count in the single-line status label.
+        Dim detailed = String.Join(Environment.NewLine, coverage.Select(Function(x)
+            Return "Index " & x.Index.ToString() &
+                ": present " & x.Present.ToString("N0") &
+                ", missing " & x.Missing.ToString("N0") &
+                ", only here " & x.OnlyHere.ToString("N0") &
+                ", differing " & x.Different.ToString("N0") &
+                ", ambiguous " & x.Ambiguous.ToString("N0")
+        End Function))
+        detailsTip.SetToolTip(summaryLabel,
+            "Filtered rows: " & visibleRows.Count.ToString("N0") & " of " &
+            comparison.Rows.Count.ToString("N0") & ". " &
+            missingRowCount.ToString("N0") &
+            " rows are missing in at least one index." &
+            Environment.NewLine & detailed & Environment.NewLine &
+            "Different: value mismatch across indexes, not necessarily a " &
+            "specific index's fault. Ambiguous: duplicate identity.")
     End Sub
 
     Private Sub GridValueNeeded(sender As Object, e As DataGridViewCellValueEventArgs)
