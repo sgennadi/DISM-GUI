@@ -178,11 +178,23 @@ Public NotInheritable Class MountRecoveryWizardForm
             End Try
         End Sub
         AddHandler closeButton.Click, Sub(sender, e) Close()
+        ' Never reuse an earlier verification after the operator selects a
+        ' different WIM/index (or edits a path while an async scan is running).
+        AddHandler source.TextChanged, Sub(sender, e) InvalidateAssessment()
+        AddHandler indexBox.ValueChanged, Sub(sender, e) InvalidateAssessment()
         ModernTheme.MakeDialogScrollable(Me, root, 800, 640)
         WindowGeometry.Install(Me, "Software\DISMGUI\MountRecoveryWizard")
         AddHandler Me.Shown, Sub(sender, e)
             If source.Text.Length > 0 Then InspectClicked(sender, e)
         End Sub
+    End Sub
+
+    Private Sub InvalidateAssessment()
+        lastAssessment = Nothing
+        checkpointButton.Enabled = False
+        If Not busy Then
+            status.Text = "Source or index changed. Inspect again before recovery actions."
+        End If
     End Sub
 
     Private Sub SetBusy(value As Boolean)
@@ -206,6 +218,13 @@ Public NotInheritable Class MountRecoveryWizardForm
                 Return MountRecoverySession.Inspect(chosen, imageIndex)
             End Function)
             If IsDisposed Then Return
+            If Not String.Equals(source.Text.Trim(), chosen,
+                                 StringComparison.OrdinalIgnoreCase) OrElse
+               CInt(indexBox.Value) <> imageIndex Then
+                InvalidateAssessment()
+                status.Text = "WIM source or index changed during inspection; inspect again."
+                Return
+            End If
             lastAssessment = assessment
             report.Text = "Index " & assessment.Index.ToString() & " | " &
                 assessment.Status & Environment.NewLine &
