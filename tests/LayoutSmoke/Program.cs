@@ -2834,6 +2834,56 @@ internal static class LayoutSmoke
                             DriverDate="2026-11-03" }
                     }),
                     "Postflight installed driver verification must use source INF identity");
+            // Real ARM64 OEM fixture: INF DriverVer 1152.23.20.0605 is
+            // exposed by Get-WindowsDriver as normalized 1152.23.20.605.
+            // This must confirm the new package without weakening other
+            // identity fields or accepting an unparseable version.
+            var armRealtekInf = new DriverStudioEngine.DriverPackage {
+                InfName="rtu52cx22arm64sta.inf", Provider="Realtek",
+                ClassName="Net", Version="1152.23.20.0605",
+                DriverDate="06/05/2020"
+            };
+            var armRealtekStaged = new DriverStudioEngine.DriverPackage {
+                InfName="rtu52cx22arm64sta.inf", PublishedName="oem411.inf",
+                Provider="Realtek", ClassName="Net", Version="1152.23.20.605",
+                DriverDate="2020-06-05"
+            };
+            var armNormalizedInventory = new[] { armRealtekStaged };
+            Require(DriverStudioInstaller.IsPresentInInventory(
+                        armRealtekInf, armNormalizedInventory) &&
+                    DriverStudioInstaller.ValidateStagedBatchCheckpoint(
+                        Array.Empty<DriverStudioEngine.DriverPackage>(),
+                        armNormalizedInventory, armRealtekInf) ==
+                    DriverStudioInstaller.SnapshotInstalledInventory(armNormalizedInventory),
+                    "OEM ARM64 DriverVer 0605 to 605 normalization must survive staged verification.");
+            var armMismatch = new DriverStudioEngine.DriverPackage {
+                InfName=armRealtekStaged.InfName,
+                Provider=armRealtekStaged.Provider,
+                ClassName=armRealtekStaged.ClassName,
+                Version="1152.23.20.606", DriverDate=armRealtekStaged.DriverDate
+            };
+            Require(!DriverStudioInstaller.IsPresentInInventory(
+                        armRealtekInf, new[] { armMismatch }) &&
+                    !DriverStudioInstaller.IsPresentInInventory(
+                        armRealtekInf, new[] {
+                            new DriverStudioEngine.DriverPackage {
+                                InfName=armRealtekStaged.InfName,
+                                Provider="Other Vendor", ClassName="Net",
+                                Version=armRealtekStaged.Version,
+                                DriverDate=armRealtekStaged.DriverDate
+                            }}) &&
+                    !DriverStudioInstaller.IsPresentInInventory(
+                        armRealtekInf, new[] {
+                            new DriverStudioEngine.DriverPackage {
+                                InfName=armRealtekStaged.InfName,
+                                Provider=armRealtekStaged.Provider,
+                                ClassName=armRealtekStaged.ClassName,
+                                Version="1152.23.20.invalid",
+                                DriverDate=armRealtekStaged.DriverDate
+                            }}),
+                    "Numeric version normalization must not accept different versions, vendors or malformed data.");
+            Console.WriteLine("PASS OEM numeric DriverVer postflight identity and fail-closed guards");
+
             var mismatchedArchitecture = DriverStudioEngine.CompareCandidates(
                 new[] { armOnly }, Array.Empty<DriverStudioEngine.DriverPackage>(),
                 true, "x64");
