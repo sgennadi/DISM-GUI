@@ -2419,6 +2419,44 @@ internal static class LayoutSmoke
                     OperationWorkflow.LoadHistory().Count == 1,
                     "Unscoped mount health must warn rather than falsely imply a verified mount.");
 
+            var historyFile = System.IO.Path.Combine(scratch, "history.json");
+            var originalHistory = System.IO.File.ReadAllText(historyFile);
+            try {
+                var records = Enumerable.Range(0, 99).Select(i =>
+                    new OperationWorkflow.RunRecord {
+                        Id = "size-test-" + i, Profile = "Long diagnostics", Status = "PASS",
+                        Results = new System.Collections.Generic.List<OperationWorkflow.StepResult> {
+                            new() { Kind = "WimMetadata", Status = "PASS",
+                                    Detail = new string('x', 4500) + " אבג <>&" }
+                        }
+                    }).ToList();
+                var options = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+                var json = System.Text.Json.JsonSerializer.Serialize(records, options);
+                var padding = 524287 - System.Text.Encoding.UTF8.GetByteCount(json);
+                Require(padding > 0, "History fixture must fit just below the reader limit.");
+                records[0].Results[0].Detail += new string('x', padding);
+                json = System.Text.Json.JsonSerializer.Serialize(records, options);
+                System.IO.File.WriteAllText(historyFile, json, new System.Text.UTF8Encoding(false));
+                Require(new System.IO.FileInfo(historyFile).Length == 524287 &&
+                        OperationWorkflow.LoadHistory().Count == 99,
+                        "Near-limit history must be valid before adding a new run.");
+                var boundedRun = System.Threading.Tasks.Task.Run(() =>
+                    OperationWorkflow.RunAsync(runOnlyHealth, null,
+                        System.Threading.CancellationToken.None)).GetAwaiter().GetResult();
+                var boundedHistory = OperationWorkflow.LoadHistory();
+                Require(boundedRun.Status == "WARN" &&
+                        boundedHistory[0].Id == boundedRun.Id &&
+                        boundedHistory[0].Status == "WARN" &&
+                        new System.IO.FileInfo(historyFile).Length <= 524288 &&
+                        boundedHistory.All(x => x.Id != "size-test-98") &&
+                        boundedHistory.First(x => x.Id == "size-test-0").Results[0].Detail ==
+                            records[0].Results[0].Detail,
+                        "History retention must enforce bytes, remove oldest runs and retain complete diagnostics.");
+            } finally {
+                System.IO.File.WriteAllText(historyFile, originalHistory,
+                    new System.Text.UTF8Encoding(false));
+            }
+
             var boot = new DateTime(2026, 11, 16, 12, 0, 0, DateTimeKind.Utc);
             Require(!MountRecoverySession.RestartAppearsToHaveOccurred(boot,
                     boot.AddSeconds(10)) &&
