@@ -52,7 +52,10 @@ retain their separate interactive confirmations and image-operation locks.
 ## Stage 3 — Profiles and write checkpoints
 
 Profiles can contain at most 16 steps; the app retains at most 24
-profiles and the last 100 run entries. Local storage is under
+profiles and up to the last 100 run entries within a 512 KiB history budget.
+When the history reaches that budget, the oldest complete runs are removed;
+the newest run's checkpoint and diagnostic messages are retained intact.
+Local storage is under
 %LOCALAPPDATA%\DISMGUI\OperationCenter. Schema validation rejects
 unknown commands and overwrite destinations. Profile files NEVER
 store the approval for a write step.
