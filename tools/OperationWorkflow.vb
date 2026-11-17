@@ -16,6 +16,7 @@ Public NotInheritable Class OperationWorkflow
 
     Public Const SchemaVersion As Integer = 1
     Public Const MaxSteps As Integer = 16
+    Private Const MaxStoreBytes As Integer = 524288
 
     Public NotInheritable Class StepPlan
         Public Property Kind As String = "WimMetadata"
@@ -62,6 +63,10 @@ Public NotInheritable Class OperationWorkflow
     End Function
 
     Private Shared Sub AtomicSave(destinationPath As String, json As String)
+        ' Never replace a readable store with data that LoadJson would reject.
+        If Encoding.UTF8.GetByteCount(json) > MaxStoreBytes Then
+            Throw New InvalidDataException("Local store exceeds the safety limit.")
+        End If
         Dim folder = IO.Path.GetDirectoryName(destinationPath)
         Directory.CreateDirectory(folder)
         Dim temp = destinationPath & "." & Guid.NewGuid().ToString("N") & ".tmp"
@@ -76,7 +81,7 @@ Public NotInheritable Class OperationWorkflow
     Private Shared Function LoadJson(Of T)(name As String) As T
         Dim path = StoragePath(name)
         If Not File.Exists(path) Then Return Nothing
-        If New FileInfo(path).Length > 524288 Then
+        If New FileInfo(path).Length > MaxStoreBytes Then
             Throw New InvalidDataException("Local " & name & " exceeds the safety limit.")
         End If
         Return JsonSerializer.Deserialize(Of T)(File.ReadAllText(path),
@@ -238,9 +243,16 @@ Public NotInheritable Class OperationWorkflow
             Return String.Equals(x.Id, record.Id, StringComparison.OrdinalIgnoreCase)
         End Function)
         recent.Insert(0, record)
-        AtomicSave(StoragePath("history.json"),
-            JsonSerializer.Serialize(recent.Take(100).ToList(),
-                New JsonSerializerOptions With {.WriteIndented = True}))
+        recent = recent.Take(100).ToList()
+        Dim options As New JsonSerializerOptions With {.WriteIndented = True}
+        Dim json = JsonSerializer.Serialize(recent, options)
+        ' Retain complete newest runs within BOTH reader limits. Never truncate
+        ' the current write checkpoint, destination or diagnostic message.
+        While Encoding.UTF8.GetByteCount(json) > MaxStoreBytes AndAlso recent.Count > 1
+            recent.RemoveAt(recent.Count - 1)
+            json = JsonSerializer.Serialize(recent, options)
+        End While
+        AtomicSave(StoragePath("history.json"), json)
     End Sub
 
     Public Shared Function ValidateMountedIndex(report As Wim360Reader.WimReport,
