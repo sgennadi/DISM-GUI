@@ -36,6 +36,10 @@ internal static partial class RealOemIntegration
         public int DriverCountBefore { get; set; }
         public int DriverCountAfterStage { get; set; }
         public int DriverCountAfterCommit { get; set; }
+        // Local diagnostic snapshots only; not uploaded or treated as proof of success.
+        public List<string> StagedAddedEntries { get; set; } = new();
+        public List<string> StagedRemovedEntries { get; set; } = new();
+        public List<string> StagedSameInfEntries { get; set; } = new();
         public bool StagedConfirmed { get; set; }
         public bool StagedCheckpointVerified { get; set; }
         public bool CommittedConfirmed { get; set; }
@@ -276,6 +280,27 @@ internal static partial class RealOemIntegration
             Require(blocked, "Conflicting plan/execute flags were accepted.");
             Require(RequiredFreeBytes(wim, 1) >= 16L * 1024 * 1024 * 1024,
                     "Scratch capacity estimate must fail conservatively.");
+            var beforeDriver = new DriverStudioEngine.DriverPackage {
+                InfName = "existing.inf", PublishedName = "oem5.inf",
+                Provider = "Vendor A", ClassName = "Net",
+                Version = "1.0.0.0", DriverDate = "2020-06-05"
+            };
+            var insertedDriver = new DriverStudioEngine.DriverPackage {
+                InfName = "new.inf", PublishedName = "oem6.inf",
+                Provider = "Vendor B", ClassName = "Net",
+                Version = "1.0.0.0", DriverDate = "2020-06-05"
+            };
+            var addedRows = InventoryDelta(new[] { beforeDriver, beforeDriver },
+                new[] { beforeDriver, beforeDriver, insertedDriver });
+            // To list removals, compare after-state as the baseline against
+            // the original before-state (the same direction as production).
+            var removedRows = InventoryDelta(new[] { beforeDriver },
+                new[] { beforeDriver, insertedDriver });
+            Require(addedRows.Count == 1 && addedRows[0].Contains("new.inf") &&
+                    removedRows.Count == 1 && removedRows[0].Contains("new.inf") &&
+                    InventoryDelta(new[] { beforeDriver, beforeDriver },
+                        new[] { beforeDriver }).Count == 0,
+                "OEM driver delta must retain additions/removals and duplicate counts.");
             VerifyMatrixSelfTest(root, wim, inf, work);
             Console.WriteLine("PASS OEM test runner argument, path, matrix, opt-in and space guards.");
             return 0;
@@ -329,6 +354,48 @@ internal static partial class RealOemIntegration
                 "Insufficient local scratch space. Available " + free +
                 " bytes; conservative minimum " + required + " bytes.");
         return (wim, inf, workRoot, image, driver, audit, required);
+    }
+
+    // Preserve a bounded, duplicate-aware delta of the real structured
+    // Get-WindowsDriver output. This is evidence for the operator, not a
+    // substitute for ValidateStagedBatchCheckpoint or commit/remount checks.
+    private static string InventoryIdentity(DriverStudioEngine.DriverPackage p)
+    {
+        static string Clean(string? v) => (v ?? "").Replace('\r', ' ').Replace('\n', ' ').Trim();
+        return string.Join(" | ", new[] {
+            Clean(Path.GetFileName(p.InfName)), Clean(p.PublishedName),
+            Clean(p.Provider), Clean(p.ClassName),
+            Clean(p.Version), Clean(p.DriverDate),
+            p.IsInbox ? "Inbox" : "Third-party"
+        });
+    }
+
+    private static List<string> InventoryDelta(
+        IEnumerable<DriverStudioEngine.DriverPackage> original,
+        IEnumerable<DriverStudioEngine.DriverPackage> updated)
+    {
+        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in original)
+        {
+            var key = InventoryIdentity(p);
+            counts.TryGetValue(key, out var count);
+            counts[key] = count + 1;
+        }
+
+        var differences = new List<string>();
+        int hidden = 0;
+        foreach (var p in updated)
+        {
+            var key = InventoryIdentity(p);
+            if (counts.TryGetValue(key, out int count) && count > 0)
+                counts[key] = count - 1;
+            else if (differences.Count < 16)
+                differences.Add(key);
+            else
+                hidden++;
+        }
+        if (hidden > 0) differences.Add("... additional entries omitted: " + hidden);
+        return differences;
     }
 
     private static async Task<int> ExecuteAsync(Options options)
@@ -397,6 +464,8 @@ internal static partial class RealOemIntegration
 
             var outcome = await DriverStudioInstaller.AddOneAsync(
                 mount, approved.Single(), plan.Audit, plan.Image.Architecture);
+            report.Events.Add("Driver Studio Add-Driver: exit=" + outcome.ExitCode +
+                              " | INF=" + plan.Package.InfName);
             Require(outcome.Succeeded,
                 "DISM Add-Driver failed, exit=" + outcome.ExitCode + ": " + outcome.Details);
             Require(!outcome.RebootRequired,
@@ -405,6 +474,12 @@ internal static partial class RealOemIntegration
             var afterStage = await DriverStudioInventory.ReadMountedAsync(
                 copy, options.Index, mount, CancellationToken.None);
             report.DriverCountAfterStage = afterStage.Count;
+            report.StagedAddedEntries = InventoryDelta(before, afterStage);
+            report.StagedRemovedEntries = InventoryDelta(afterStage, before);
+            report.StagedSameInfEntries = afterStage.Where(p =>
+                string.Equals(Path.GetFileName(p.InfName),
+                              plan.Package.InfName, StringComparison.OrdinalIgnoreCase))
+                .Take(12).Select(InventoryIdentity).ToList();
             report.StagedConfirmed =
                 DriverStudioInstaller.IsPresentInInventory(plan.Package, afterStage);
             Require(report.StagedConfirmed,

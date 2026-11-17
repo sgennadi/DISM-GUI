@@ -223,6 +223,17 @@ Public NotInheritable Class DriverStudioInstaller
         }
     End Function
 
+    ' Get-WindowsDriver may normalize numeric DriverVer components (0605 -> 605).
+    ' Compare parsed numeric versions, not raw INF versus inventory text.
+    ' An unparseable version is never considered a match.
+    Private Shared Function SameDriverVersion(a As String, b As String) As Boolean
+        Dim parsedA As System.Version = Nothing
+        Dim parsedB As System.Version = Nothing
+        Return System.Version.TryParse(If(a, "").Trim(), parsedA) AndAlso
+               System.Version.TryParse(If(b, "").Trim(), parsedB) AndAlso
+               parsedA.Equals(parsedB)
+    End Function
+
     ' Postflight is an inventory check, not proof that PnP has selected
     ' this driver for a physical device. DISM may stage unused drivers.
     Public Shared Function IsPresentInInventory(
@@ -234,7 +245,7 @@ Public NotInheritable Class DriverStudioInstaller
                                  StringComparison.OrdinalIgnoreCase) AndAlso
                 String.Equals(p.Provider, package.Provider, StringComparison.OrdinalIgnoreCase) AndAlso
                 String.Equals(p.ClassName, package.ClassName, StringComparison.OrdinalIgnoreCase) AndAlso
-                String.Equals(p.Version, package.Version, StringComparison.OrdinalIgnoreCase) AndAlso
+                SameDriverVersion(p.Version, package.Version) AndAlso
                 SameDate(p.DriverDate, package.DriverDate)
         End Function)
     End Function
