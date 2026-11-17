@@ -9,8 +9,9 @@ driver is bundled with the repository.
 
 ## Scope and safety
 
-- Test **only** on an elevated, disposable Windows test machine with .NET 10
-  SDK, Windows DISM and sufficient local scratch disk space.
+- Test **only** on an elevated, disposable Windows test machine with Windows
+  DISM and sufficient local scratch disk space. The portable ZIP needs no SDK;
+  building/running from source requires the .NET 10 SDK.
 - The input may be a real Windows 11 / Windows Server **install.wim**
   (not .esd or .swm); choose one valid Windows OS index.
 - Use one extracted, **legitimately signed** OEM driver package. Point to its
@@ -35,11 +36,23 @@ driver is bundled with the repository.
 
 ## Windows setup
 
-Start an elevated Windows Terminal / PowerShell session. Either use a
+Start an elevated Windows Terminal / CMD session. Either use a
 repository checkout with **.NET 10 SDK** or download the self-contained
 **RealOemIntegration-win-x64** ZIP from this branch's successful GitHub
 Actions build (Artifacts). The latter requires no .NET SDK and is deliberately
 not included in DISM GUI's stable release.
+
+The portable ZIP includes `Invoke-FourStageAcceptance.cmd` and both acceptance
+guides alongside the EXE. Extract the entire archive into one folder. After
+preparing your matrix manifest and creating the local work directory, run from
+that folder in CMD (no PowerShell or SDK required):
+
+```cmd
+Invoke-FourStageAcceptance.cmd "C:\OEMTests\matrix.json" "D:\WIMTests"
+```
+
+This default invocation only probes and plans; it does not service images.
+Read `FOUR-STAGE-ACCEPTANCE.md` before explicitly requesting `TEST_COPY_ONLY`.
 
 For the portable executable, replace the dotnet-run project prefix in the
 examples below with .\RealOemIntegration.exe and use the same arguments.
