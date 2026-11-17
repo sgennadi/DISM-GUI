@@ -6,6 +6,14 @@ using DISM_GUI;
 
 internal static class LayoutSmoke
 {
+    private sealed class ImmediateOperationProgress : IProgress<OperationWorkflow.StepResult>
+    {
+        private readonly Action<OperationWorkflow.StepResult> callback;
+        public ImmediateOperationProgress(Action<OperationWorkflow.StepResult> callback)
+            => this.callback = callback;
+        public void Report(OperationWorkflow.StepResult value) => callback(value);
+    }
+
     private static Control? Find(Control parent, string name)
     {
         if (parent.Name == name) return parent;
@@ -2420,8 +2428,37 @@ internal static class LayoutSmoke
                     "Unscoped mount health must warn rather than falsely imply a verified mount.");
 
             var historyFile = System.IO.Path.Combine(scratch, "history.json");
+            bool overlapBlocked = false;
+            bool activeHistoryPreserved = false;
+            var concurrentObserver = new ImmediateOperationProgress(_ => {
+                activeHistoryPreserved = OperationWorkflow.LoadHistory()[0].Status == "RUNNING";
+                try {
+                    OperationWorkflow.RunAsync(runOnlyHealth, null,
+                        System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+                } catch (InvalidOperationException ex) {
+                    overlapBlocked = ex.Message.Contains("No new queue was started");
+                }
+            });
+            var guardedRun = System.Threading.Tasks.Task.Run(() =>
+                OperationWorkflow.RunAsync(runOnlyHealth, concurrentObserver,
+                    System.Threading.CancellationToken.None)).GetAwaiter().GetResult();
+            Require(overlapBlocked && activeHistoryPreserved && guardedRun.Status == "WARN" &&
+                    OperationWorkflow.LoadHistory().Count == 2,
+                    "An overlapping queue must not change history or mark the live owner interrupted.");
+            var nextRun = System.Threading.Tasks.Task.Run(() =>
+                OperationWorkflow.RunAsync(runOnlyHealth, null,
+                    System.Threading.CancellationToken.None)).GetAwaiter().GetResult();
+            Require(nextRun.Status == "WARN" && OperationWorkflow.LoadHistory().Count == 3,
+                    "Completing a queue must release the lock for the next run.");
             var originalHistory = System.IO.File.ReadAllText(historyFile);
             try {
+                var interrupted = new[] { new OperationWorkflow.RunRecord {
+                    Status = "RUNNING", Profile = "Interrupted owner"
+                }};
+                System.IO.File.WriteAllText(historyFile,
+                    System.Text.Json.JsonSerializer.Serialize(interrupted));
+                Require(OperationWorkflow.LoadHistory()[0].Status == "REVIEW_REQUIRED",
+                        "A leftover lock file must not hide an interrupted queue after the owner exits.");
                 var records = Enumerable.Range(0, 99).Select(i =>
                     new OperationWorkflow.RunRecord {
                         Id = "size-test-" + i, Profile = "Long diagnostics", Status = "PASS",
