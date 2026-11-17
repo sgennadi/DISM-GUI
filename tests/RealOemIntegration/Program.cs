@@ -462,6 +462,8 @@ internal static partial class RealOemIntegration
 
             var outcome = await DriverStudioInstaller.AddOneAsync(
                 mount, approved.Single(), plan.Audit, plan.Image.Architecture);
+            report.Events.Add("Driver Studio Add-Driver: exit=" + outcome.ExitCode +
+                              " | INF=" + plan.Package.InfName);
             Require(outcome.Succeeded,
                 "DISM Add-Driver failed, exit=" + outcome.ExitCode + ": " + outcome.Details);
             Require(!outcome.RebootRequired,
