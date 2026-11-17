@@ -6,6 +6,14 @@ using DISM_GUI;
 
 internal static class LayoutSmoke
 {
+    private sealed class ImmediateOperationProgress : IProgress<OperationWorkflow.StepResult>
+    {
+        private readonly Action<OperationWorkflow.StepResult> callback;
+        public ImmediateOperationProgress(Action<OperationWorkflow.StepResult> callback)
+            => this.callback = callback;
+        public void Report(OperationWorkflow.StepResult value) => callback(value);
+    }
+
     private static Control? Find(Control parent, string name)
     {
         if (parent.Name == name) return parent;
@@ -2418,6 +2426,73 @@ internal static class LayoutSmoke
                     result.Results[0].Detail.Contains("choose a WIM") &&
                     OperationWorkflow.LoadHistory().Count == 1,
                     "Unscoped mount health must warn rather than falsely imply a verified mount.");
+
+            var historyFile = System.IO.Path.Combine(scratch, "history.json");
+            bool overlapBlocked = false;
+            bool activeHistoryPreserved = false;
+            var concurrentObserver = new ImmediateOperationProgress(_ => {
+                activeHistoryPreserved = OperationWorkflow.LoadHistory()[0].Status == "RUNNING";
+                try {
+                    OperationWorkflow.RunAsync(runOnlyHealth, null,
+                        System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+                } catch (InvalidOperationException ex) {
+                    overlapBlocked = ex.Message.Contains("No new queue was started");
+                }
+            });
+            var guardedRun = System.Threading.Tasks.Task.Run(() =>
+                OperationWorkflow.RunAsync(runOnlyHealth, concurrentObserver,
+                    System.Threading.CancellationToken.None)).GetAwaiter().GetResult();
+            Require(overlapBlocked && activeHistoryPreserved && guardedRun.Status == "WARN" &&
+                    OperationWorkflow.LoadHistory().Count == 2,
+                    "An overlapping queue must not change history or mark the live owner interrupted.");
+            var nextRun = System.Threading.Tasks.Task.Run(() =>
+                OperationWorkflow.RunAsync(runOnlyHealth, null,
+                    System.Threading.CancellationToken.None)).GetAwaiter().GetResult();
+            Require(nextRun.Status == "WARN" && OperationWorkflow.LoadHistory().Count == 3,
+                    "Completing a queue must release the lock for the next run.");
+            var originalHistory = System.IO.File.ReadAllText(historyFile);
+            try {
+                var interrupted = new[] { new OperationWorkflow.RunRecord {
+                    Status = "RUNNING", Profile = "Interrupted owner"
+                }};
+                System.IO.File.WriteAllText(historyFile,
+                    System.Text.Json.JsonSerializer.Serialize(interrupted));
+                Require(OperationWorkflow.LoadHistory()[0].Status == "REVIEW_REQUIRED",
+                        "A leftover lock file must not hide an interrupted queue after the owner exits.");
+                var records = Enumerable.Range(0, 99).Select(i =>
+                    new OperationWorkflow.RunRecord {
+                        Id = "size-test-" + i, Profile = "Long diagnostics", Status = "PASS",
+                        Results = new System.Collections.Generic.List<OperationWorkflow.StepResult> {
+                            new() { Kind = "WimMetadata", Status = "PASS",
+                                    Detail = new string('x', 4500) + " אבג <>&" }
+                        }
+                    }).ToList();
+                var options = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+                var json = System.Text.Json.JsonSerializer.Serialize(records, options);
+                var padding = 524287 - System.Text.Encoding.UTF8.GetByteCount(json);
+                Require(padding > 0, "History fixture must fit just below the reader limit.");
+                records[0].Results[0].Detail += new string('x', padding);
+                json = System.Text.Json.JsonSerializer.Serialize(records, options);
+                System.IO.File.WriteAllText(historyFile, json, new System.Text.UTF8Encoding(false));
+                Require(new System.IO.FileInfo(historyFile).Length == 524287 &&
+                        OperationWorkflow.LoadHistory().Count == 99,
+                        "Near-limit history must be valid before adding a new run.");
+                var boundedRun = System.Threading.Tasks.Task.Run(() =>
+                    OperationWorkflow.RunAsync(runOnlyHealth, null,
+                        System.Threading.CancellationToken.None)).GetAwaiter().GetResult();
+                var boundedHistory = OperationWorkflow.LoadHistory();
+                Require(boundedRun.Status == "WARN" &&
+                        boundedHistory[0].Id == boundedRun.Id &&
+                        boundedHistory[0].Status == "WARN" &&
+                        new System.IO.FileInfo(historyFile).Length <= 524288 &&
+                        boundedHistory.All(x => x.Id != "size-test-98") &&
+                        boundedHistory.First(x => x.Id == "size-test-0").Results[0].Detail ==
+                            records[0].Results[0].Detail,
+                        "History retention must enforce bytes, remove oldest runs and retain complete diagnostics.");
+            } finally {
+                System.IO.File.WriteAllText(historyFile, originalHistory,
+                    new System.Text.UTF8Encoding(false));
+            }
 
             var boot = new DateTime(2026, 11, 16, 12, 0, 0, DateTimeKind.Utc);
             Require(!MountRecoverySession.RestartAppearsToHaveOccurred(boot,

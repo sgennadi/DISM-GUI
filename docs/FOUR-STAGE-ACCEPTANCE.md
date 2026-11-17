@@ -41,7 +41,12 @@ Available allowlisted steps:
   This step requires fresh, typed interactive approval on EVERY run.
 
 A full plan is checked before execution; steps run sequentially, stop on
-failure and record status locally. Cancellation may be deferred while
+failure and record status locally. One queue at a time may use the same
+local Operation Center store, including across application instances.
+The queue lock is held through final journal persistence and is released
+by Windows when its owning process exits; the persistent lock file is not
+itself evidence of an active queue. History refresh does not label a live
+queue as interrupted. Cancellation may be deferred while
 Windows is performing an operation; interrupted exports can leave a
 uniquely named .partial.wim for manual review.
 
@@ -52,7 +57,10 @@ retain their separate interactive confirmations and image-operation locks.
 ## Stage 3 — Profiles and write checkpoints
 
 Profiles can contain at most 16 steps; the app retains at most 24
-profiles and the last 100 run entries. Local storage is under
+profiles and up to the last 100 run entries within a 512 KiB history budget.
+When the history reaches that budget, the oldest complete runs are removed;
+the newest run's checkpoint and diagnostic messages are retained intact.
+Local storage is under
 %LOCALAPPDATA%\DISMGUI\OperationCenter. Schema validation rejects
 unknown commands and overwrite destinations. Profile files NEVER
 store the approval for a write step.

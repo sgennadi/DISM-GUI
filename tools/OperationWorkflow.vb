@@ -16,6 +16,7 @@ Public NotInheritable Class OperationWorkflow
 
     Public Const SchemaVersion As Integer = 1
     Public Const MaxSteps As Integer = 16
+    Private Const MaxStoreBytes As Integer = 524288
 
     Public NotInheritable Class StepPlan
         Public Property Kind As String = "WimMetadata"
@@ -61,7 +62,38 @@ Public NotInheritable Class OperationWorkflow
         Return Path.Combine(RootFolder(), name)
     End Function
 
+    Private Shared Function AcquireQueue() As FileStream
+        Directory.CreateDirectory(RootFolder())
+        Try
+            ' File locks survive Await and are released by Windows on process exit.
+            ' Keep the file: deleting it could allow overlapping owners.
+            Return New FileStream(StoragePath("queue.lock"), FileMode.OpenOrCreate,
+                                  FileAccess.ReadWrite, FileShare.None)
+        Catch ex As IOException
+            Throw New InvalidOperationException(
+                "Another Operation Center queue is active, or its lock is unavailable. " &
+                "No new queue was started.", ex)
+        End Try
+    End Function
+
+    Private Shared Function QueueIsActive() As Boolean
+        If Not File.Exists(StoragePath("queue.lock")) Then Return False
+        Try
+            Using probe As New FileStream(StoragePath("queue.lock"), FileMode.Open,
+                                          FileAccess.ReadWrite, FileShare.None)
+                Return False
+            End Using
+        Catch ex As IOException
+            ' An unavailable lock is not proof that the running owner crashed.
+            Return True
+        End Try
+    End Function
+
     Private Shared Sub AtomicSave(destinationPath As String, json As String)
+        ' Never replace a readable store with data that LoadJson would reject.
+        If Encoding.UTF8.GetByteCount(json) > MaxStoreBytes Then
+            Throw New InvalidDataException("Local store exceeds the safety limit.")
+        End If
         Dim folder = IO.Path.GetDirectoryName(destinationPath)
         Directory.CreateDirectory(folder)
         Dim temp = destinationPath & "." & Guid.NewGuid().ToString("N") & ".tmp"
@@ -76,7 +108,7 @@ Public NotInheritable Class OperationWorkflow
     Private Shared Function LoadJson(Of T)(name As String) As T
         Dim path = StoragePath(name)
         If Not File.Exists(path) Then Return Nothing
-        If New FileInfo(path).Length > 524288 Then
+        If New FileInfo(path).Length > MaxStoreBytes Then
             Throw New InvalidDataException("Local " & name & " exceeds the safety limit.")
         End If
         Return JsonSerializer.Deserialize(Of T)(File.ReadAllText(path),
@@ -206,8 +238,9 @@ Public NotInheritable Class OperationWorkflow
            End Function) Then
             Throw New InvalidDataException("Invalid local operation history.")
         End If
+        Dim activeQueue = QueueIsActive()
         For Each historyItem As RunRecord In runs
-            If historyItem.Status = "RUNNING" Then
+            If historyItem.Status = "RUNNING" AndAlso Not activeQueue Then
                 historyItem.Status = "REVIEW_REQUIRED"
                 Dim pending = historyItem.Results.FirstOrDefault(Function(x)
                     Return x.Status = "RUNNING"
@@ -238,9 +271,16 @@ Public NotInheritable Class OperationWorkflow
             Return String.Equals(x.Id, record.Id, StringComparison.OrdinalIgnoreCase)
         End Function)
         recent.Insert(0, record)
-        AtomicSave(StoragePath("history.json"),
-            JsonSerializer.Serialize(recent.Take(100).ToList(),
-                New JsonSerializerOptions With {.WriteIndented = True}))
+        recent = recent.Take(100).ToList()
+        Dim options As New JsonSerializerOptions With {.WriteIndented = True}
+        Dim json = JsonSerializer.Serialize(recent, options)
+        ' Retain complete newest runs within BOTH reader limits. Never truncate
+        ' the current write checkpoint, destination or diagnostic message.
+        While Encoding.UTF8.GetByteCount(json) > MaxStoreBytes AndAlso recent.Count > 1
+            recent.RemoveAt(recent.Count - 1)
+            json = JsonSerializer.Serialize(recent, options)
+        End While
+        AtomicSave(StoragePath("history.json"), json)
     End Sub
 
     Public Shared Function ValidateMountedIndex(report As Wim360Reader.WimReport,
@@ -357,6 +397,15 @@ Public NotInheritable Class OperationWorkflow
                                           Optional approveExport As Func(Of StepPlan, Task(Of Boolean)) = Nothing
                                           ) As Task(Of RunRecord)
         Validate(profile)
+        token.ThrowIfCancellationRequested()
+        Using queue = AcquireQueue()
+            Return Await RunExclusiveAsync(profile, progress, token, approveExport)
+        End Using
+    End Function
+
+    Private Shared Async Function RunExclusiveAsync(profile As Profile,
+            progress As IProgress(Of StepResult), token As CancellationToken,
+            approveExport As Func(Of StepPlan, Task(Of Boolean))) As Task(Of RunRecord)
         Dim run As New RunRecord With {
             .Profile = profile.Name,
             .StartedUtc = DateTime.UtcNow,
