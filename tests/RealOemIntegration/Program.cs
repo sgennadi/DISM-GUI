@@ -292,8 +292,10 @@ internal static partial class RealOemIntegration
             };
             var addedRows = InventoryDelta(new[] { beforeDriver, beforeDriver },
                 new[] { beforeDriver, beforeDriver, insertedDriver });
-            var removedRows = InventoryDelta(new[] { beforeDriver, insertedDriver },
-                new[] { beforeDriver });
+            // To list removals, compare after-state as the baseline against
+            // the original before-state (the same direction as production).
+            var removedRows = InventoryDelta(new[] { beforeDriver },
+                new[] { beforeDriver, insertedDriver });
             Require(addedRows.Count == 1 && addedRows[0].Contains("new.inf") &&
                     removedRows.Count == 1 && removedRows[0].Contains("new.inf") &&
                     InventoryDelta(new[] { beforeDriver, beforeDriver },
