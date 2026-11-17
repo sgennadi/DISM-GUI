@@ -340,7 +340,7 @@ internal static partial class RealOemIntegration
     // substitute for ValidateStagedBatchCheckpoint or commit/remount checks.
     private static string InventoryIdentity(DriverStudioEngine.DriverPackage p)
     {
-        static string Clean(string? v) => (v ?? "").Replace('\\r', ' ').Replace('\\n', ' ').Trim();
+        static string Clean(string? v) => (v ?? "").Replace('\r', ' ').Replace('\n', ' ').Trim();
         return string.Join(" | ", new[] {
             Clean(Path.GetFileName(p.InfName)), Clean(p.PublishedName),
             Clean(p.Provider), Clean(p.ClassName),
