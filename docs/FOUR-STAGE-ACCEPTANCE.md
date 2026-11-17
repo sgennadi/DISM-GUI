@@ -41,7 +41,12 @@ Available allowlisted steps:
   This step requires fresh, typed interactive approval on EVERY run.
 
 A full plan is checked before execution; steps run sequentially, stop on
-failure and record status locally. Cancellation may be deferred while
+failure and record status locally. One queue at a time may use the same
+local Operation Center store, including across application instances.
+The queue lock is held through final journal persistence and is released
+by Windows when its owning process exits; the persistent lock file is not
+itself evidence of an active queue. History refresh does not label a live
+queue as interrupted. Cancellation may be deferred while
 Windows is performing an operation; interrupted exports can leave a
 uniquely named .partial.wim for manual review.
 
