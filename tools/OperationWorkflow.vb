@@ -62,6 +62,33 @@ Public NotInheritable Class OperationWorkflow
         Return Path.Combine(RootFolder(), name)
     End Function
 
+    Private Shared Function AcquireQueue() As FileStream
+        Directory.CreateDirectory(RootFolder())
+        Try
+            ' File locks survive Await and are released by Windows on process exit.
+            ' Keep the file: deleting it could allow overlapping owners.
+            Return New FileStream(StoragePath("queue.lock"), FileMode.OpenOrCreate,
+                                  FileAccess.ReadWrite, FileShare.None)
+        Catch ex As IOException
+            Throw New InvalidOperationException(
+                "Another Operation Center queue is active, or its lock is unavailable. " &
+                "No new queue was started.", ex)
+        End Try
+    End Function
+
+    Private Shared Function QueueIsActive() As Boolean
+        If Not File.Exists(StoragePath("queue.lock")) Then Return False
+        Try
+            Using probe As New FileStream(StoragePath("queue.lock"), FileMode.Open,
+                                          FileAccess.ReadWrite, FileShare.None)
+                Return False
+            End Using
+        Catch ex As IOException
+            ' An unavailable lock is not proof that the running owner crashed.
+            Return True
+        End Try
+    End Function
+
     Private Shared Sub AtomicSave(destinationPath As String, json As String)
         ' Never replace a readable store with data that LoadJson would reject.
         If Encoding.UTF8.GetByteCount(json) > MaxStoreBytes Then
@@ -211,8 +238,9 @@ Public NotInheritable Class OperationWorkflow
            End Function) Then
             Throw New InvalidDataException("Invalid local operation history.")
         End If
+        Dim activeQueue = QueueIsActive()
         For Each historyItem As RunRecord In runs
-            If historyItem.Status = "RUNNING" Then
+            If historyItem.Status = "RUNNING" AndAlso Not activeQueue Then
                 historyItem.Status = "REVIEW_REQUIRED"
                 Dim pending = historyItem.Results.FirstOrDefault(Function(x)
                     Return x.Status = "RUNNING"
@@ -369,6 +397,15 @@ Public NotInheritable Class OperationWorkflow
                                           Optional approveExport As Func(Of StepPlan, Task(Of Boolean)) = Nothing
                                           ) As Task(Of RunRecord)
         Validate(profile)
+        token.ThrowIfCancellationRequested()
+        Using queue = AcquireQueue()
+            Return Await RunExclusiveAsync(profile, progress, token, approveExport)
+        End Using
+    End Function
+
+    Private Shared Async Function RunExclusiveAsync(profile As Profile,
+            progress As IProgress(Of StepResult), token As CancellationToken,
+            approveExport As Func(Of StepPlan, Task(Of Boolean))) As Task(Of RunRecord)
         Dim run As New RunRecord With {
             .Profile = profile.Name,
             .StartedUtc = DateTime.UtcNow,
