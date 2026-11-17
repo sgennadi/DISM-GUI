@@ -105,9 +105,10 @@ C. Supply authorized Windows 11, Server 2022 and Server 2025 install.wim
    Review all WIM indexes with DISM /Get-WimInfo and create matrix.json
    as documented in docs/REAL-WIM-OEM-INTEGRATION.md.
 
-D. In a test work folder, place the matching portable
-   RealOemIntegration.exe alongside this repository file:
-   tests/Acceptance/Invoke-FourStageAcceptance.cmd
+D. Extract the complete **RealOemIntegration-win-x64** artifact from the
+   matching successful CI run into a test tools folder. It includes
+   RealOemIntegration.exe, Invoke-FourStageAcceptance.cmd and both acceptance
+   guides together; no repository checkout, PowerShell or .NET SDK is required.
 
    First run read-only (CMD; no PowerShell required):
 

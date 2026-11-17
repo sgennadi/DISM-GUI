@@ -60,7 +60,15 @@ jobs:
           Get-ChildItem -LiteralPath 'artifacts/oem-runner' -File |
             Where-Object { $_.Extension -ieq '.pdb' } | Remove-Item -Force
           Copy-Item -LiteralPath docs/REAL-WIM-OEM-INTEGRATION.md -Destination artifacts/oem-runner/README-REAL-OEM.md
+          Copy-Item -LiteralPath docs/FOUR-STAGE-ACCEPTANCE.md -Destination artifacts/oem-runner/FOUR-STAGE-ACCEPTANCE.md
+          Copy-Item -LiteralPath tests/Acceptance/Invoke-FourStageAcceptance.cmd -Destination artifacts/oem-runner/Invoke-FourStageAcceptance.cmd
           Compress-Archive -Path 'artifacts/oem-runner/*' -DestinationPath 'artifacts/RealOemIntegration-win-x64.zip' -Force
+          $bundle = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path 'artifacts/RealOemIntegration-win-x64.zip'))
+          try {
+            foreach ($required in @('RealOemIntegration.exe', 'Invoke-FourStageAcceptance.cmd', 'README-REAL-OEM.md', 'FOUR-STAGE-ACCEPTANCE.md')) {
+              if ($null -eq $bundle.GetEntry($required)) { throw "Missing field acceptance bundle entry: $required" }
+            }
+          } finally { $bundle.Dispose() }
       - name: Upload opt-in OEM validation runner (x64, NOT a release)
         if: matrix.rid == 'win-x64'
         uses: actions/upload-artifact@v7
