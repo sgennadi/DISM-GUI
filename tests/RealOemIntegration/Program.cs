@@ -280,6 +280,25 @@ internal static partial class RealOemIntegration
             Require(blocked, "Conflicting plan/execute flags were accepted.");
             Require(RequiredFreeBytes(wim, 1) >= 16L * 1024 * 1024 * 1024,
                     "Scratch capacity estimate must fail conservatively.");
+            var beforeDriver = new DriverStudioEngine.DriverPackage {
+                InfName = "existing.inf", PublishedName = "oem5.inf",
+                Provider = "Vendor A", ClassName = "Net",
+                Version = "1.0.0.0", DriverDate = "2020-06-05"
+            };
+            var insertedDriver = new DriverStudioEngine.DriverPackage {
+                InfName = "new.inf", PublishedName = "oem6.inf",
+                Provider = "Vendor B", ClassName = "Net",
+                Version = "1.0.0.0", DriverDate = "2020-06-05"
+            };
+            var addedRows = InventoryDelta(new[] { beforeDriver, beforeDriver },
+                new[] { beforeDriver, beforeDriver, insertedDriver });
+            var removedRows = InventoryDelta(new[] { beforeDriver, insertedDriver },
+                new[] { beforeDriver });
+            Require(addedRows.Count == 1 && addedRows[0].Contains("new.inf") &&
+                    removedRows.Count == 1 && removedRows[0].Contains("new.inf") &&
+                    InventoryDelta(new[] { beforeDriver, beforeDriver },
+                        new[] { beforeDriver }).Count == 0,
+                "OEM driver delta must retain additions/removals and duplicate counts.");
             VerifyMatrixSelfTest(root, wim, inf, work);
             Console.WriteLine("PASS OEM test runner argument, path, matrix, opt-in and space guards.");
             return 0;
