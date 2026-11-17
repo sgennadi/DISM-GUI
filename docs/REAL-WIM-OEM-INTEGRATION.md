@@ -34,6 +34,32 @@ driver is bundled with the repository.
 - **No upload** occurs. The local report contains source paths; inspect it
   before sharing. The universal updater and diagnostic upload remain separate.
 
+## Investigating a successful DISM exit with failed INF confirmation
+
+Get-WindowsDriver may normalize numeric DriverVer fields while enumerating
+the mounted image. For example, a source INF containing
+`1152.23.20.0605` can be returned as `1152.23.20.605`.
+Postflight therefore parses and compares numeric version components, while
+still requiring the original INF name, provider, driver class and date to
+match. A successful DISM exit, increased driver count, or version-only match
+**never** proves driver installation or triggers Commit.
+
+The local `oem-validation-report.json` now records bounded,
+duplicate-aware `StagedAddedEntries`, `StagedRemovedEntries`, and
+`StagedSameInfEntries` diagnostics (maximum 16 delta records per direction
+plus an overflow count). This helps distinguish normalized metadata from
+an unexpected added package. These fields come from the actual DISM image
+inventory, are kept locally, and can contain OEM package metadata; review
+the report before sharing.
+
+If `StagedConfirmed` remains false, the test stops before Commit and
+discards its own writable test mount, retaining the isolated test copy
+and report. `DriverCountAfterCommit=0` in a stopped pre-Commit run means
+the committed inventory was **not checked**, not that the WIM has no drivers.
+A successful run still requires a complete stage checkpoint, Commit, and a
+read-only remount that verifies the full inventory fingerprint. Do not
+mistake driver-store staging for physical Plug and Play device selection.
+
 ## Windows setup
 
 Start an elevated Windows Terminal / CMD session. Either use a
