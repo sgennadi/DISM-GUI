@@ -443,13 +443,15 @@ Public NotInheritable Class DriverStudioPanel
         }
         detailsLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         detailsLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
-            CInt(Math.Ceiling(185 * layoutScale))))
+            CInt(Math.Ceiling(162 * layoutScale))))
         detailsLayout.RowStyles.Add(New RowStyle(SizeType.Absolute,
             CInt(Math.Ceiling(46 * layoutScale))))
         detailsLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         rootLayout.Controls.Add(detailsLayout, 0, 6)
+        ' Keep this header short at 175-200% scaling; Copy comparison is
+        ' placed in its own right column, not over the heading.
         detailsLayout.Controls.Add(WriteLabel(If(stackSource,
-                                              "PACKAGE DETAILS", "DRIVER PACKAGE  |  DETAILS"),
+                                              "INF DETAILS", "PACKAGE DETAILS"),
                                               9.2F, True, ModernTheme.Blue), 0, 0)
         detailBox = New TextBox With {
             .Name = "txtStudioDetails", .Multiline = True, .ReadOnly = True,
