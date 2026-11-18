@@ -3893,7 +3893,8 @@ internal static class LayoutSmoke
             Require(dismountAction.BackColor != ModernTheme.Red,
                 "Dismount action must not be red like an error state");
 
-            foreach (var size in new[] { new Size(900, 650), new Size(1180, 760) })
+            // Screenshot regression: Choose folder clipped at compact 765px width.
+            foreach (var size in new[] { new Size(765, 580), new Size(900, 650), new Size(1180, 760) })
             {
                 var allowed = Screen.PrimaryScreen!.WorkingArea;
                 var effective = new Size(Math.Min(size.Width, allowed.Width - 40),
@@ -3904,6 +3905,28 @@ internal static class LayoutSmoke
                 Require(index!.Width >= 75, $"Numeric image index too narrow at {size}");
                 Require(browseWim.Width >= 110 && browseMount.Width >= 110,
                     $"Browse actions too narrow at {size}");
+                Require(browseWim is Button && browseMount is Button &&
+                        browseWim.Text == "Choose WIM" &&
+                        browseMount.Text == "Choose folder",
+                    "Mount image/mount folder chooser captions are unexpected.");
+                VerifyReadableButton((Button)browseWim, $"Mount Choose WIM at {effective}");
+                VerifyReadableButton((Button)browseMount, $"Mount Choose folder at {effective}");
+                var mountRoot = Find(page, "MountResponsiveRoot") as TableLayoutPanel;
+                var mountActions = Find(page, "MountActionButtons") as TableLayoutPanel;
+                Require(mountRoot is not null && mountRoot.ColumnStyles.Count == 2 &&
+                        mountActions is not null,
+                    "Mount responsive layout and its action host are missing.");
+                var stackedMount = mountRoot!.ColumnStyles[1].Width <= 1;
+                Require(stackedMount
+                    ? (page.AutoScroll && mountRoot.RowStyles[1].Height >= 120 &&
+                       mountActions!.ColumnCount == 2 && mountActions.RowCount == 2)
+                    : (mountRoot.ColumnStyles[1].Width >= 208 &&
+                       mountActions!.ColumnCount == 1),
+                    "Mount must stack actions into two columns below full-width source fields when cramped.");
+                var browseRight = browseMount.RectangleToScreen(browseMount.ClientRectangle).Right;
+                var visibleRight = page.RectangleToScreen(page.ClientRectangle).Right;
+                Require(browseRight <= visibleRight + 3,
+                    $"Choose folder escapes visible Mount page at {effective}: {browseRight} > {visibleRight}");
                 NoOverlap(wim, browseWim, "WIM text / Browse WIM");
                 NoOverlap(mount, browseMount, "Mount path / Browse folder");
                 NoOverlap(mountAction, dismountAction, "Mount / Dismount");

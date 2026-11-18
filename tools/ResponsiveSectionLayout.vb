@@ -1,6 +1,7 @@
 Imports System
 Imports System.Collections.Generic
 Imports System.Drawing
+Imports System.Linq
 Imports System.Windows.Forms
 
 ' Resizes legacy sections while preserving their original DISM event handlers.
@@ -66,6 +67,24 @@ Public NotInheritable Class ResponsiveSectionLayout
         Dim dismountButton = DirectCast(Take(page, "btnDismount"), Button)
         Dim openMounted = DirectCast(Take(page, "btnOpenFolder"), Button)
 
+        ' These controls retain their original browse handlers. Their cells
+        ' must be measured from the current UI font, not fixed 157px widths.
+        Dim wimBrowse = DirectCast(chooseWim, Button)
+        Dim mountBrowse = DirectCast(chooseMount, Button)
+        wimBrowse.Text = "Choose WIM"
+        mountBrowse.Text = "Choose folder"
+        ModernTheme.StyleButton(wimBrowse, "browse")
+        ModernTheme.StyleButton(mountBrowse, "browse")
+        wimBrowse.AutoEllipsis = False
+        mountBrowse.AutoEllipsis = False
+        mountBrowse.AccessibleDescription =
+            "Choose an empty folder for WIM mounting. Selecting a folder does not mount the image."
+        Dim browseCellWidth = Math.Max(157,
+            Math.Max(ModernTheme.RecommendedButtonSize(wimBrowse, 110).Width +
+                        7 + 7 + 8,
+                     ModernTheme.RecommendedButtonSize(mountBrowse, 120).Width +
+                        7 + 7 + 8))
+
         ' Remove original fixed-position labels, replacing them with measured
         ' grid labels. Names are not used by the existing DISM command handlers.
         For Each name In {"Label1", "Label2", "Label3"}
@@ -79,16 +98,18 @@ Public NotInheritable Class ResponsiveSectionLayout
         page.AutoScroll = False
         Dim root As New TableLayoutPanel With {
             .Name = "MountResponsiveRoot",
-            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 1,
+            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 2,
             .Padding = New Padding(17, 18, 14, 13),
             .Margin = Padding.Empty, .BackColor = Color.White
         }
         root.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         root.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 208))
         root.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        root.RowStyles.Add(New RowStyle(SizeType.Absolute, 0))
         page.Controls.Add(root)
 
         Dim left As New TableLayoutPanel With {
+            .Name = "MountSourceFields",
             .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 7,
             .Margin = New Padding(0, 0, 22, 0), .Padding = Padding.Empty,
             .BackColor = Color.White
@@ -107,7 +128,7 @@ Public NotInheritable Class ResponsiveSectionLayout
         }
         fileRow.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         fileRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        fileRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 157))
+        fileRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, browseCellWidth))
         left.Controls.Add(fileRow, 0, 1)
         fileRow.Controls.Add(wim, 0, 0)
         chooseWim.Margin = New Padding(7, 3, 0, 4)
@@ -168,16 +189,17 @@ Public NotInheritable Class ResponsiveSectionLayout
         }
         mountRow.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         mountRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        mountRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 157))
+        mountRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, browseCellWidth))
         left.Controls.Add(mountRow, 0, 4)
         mountRow.Controls.Add(mount, 0, 0)
-        chooseMount.Margin = New Padding(7, 3, 12, 4)
+        chooseMount.Margin = New Padding(7, 3, 7, 4)
         mountRow.Controls.Add(chooseMount, 1, 0)
 
         readOnlyCheckbox.Margin = New Padding(3, 12, 0, 6)
         left.Controls.Add(readOnlyCheckbox, 0, 5)
 
         Dim actions As New TableLayoutPanel With {
+            .Name = "MountActionButtons",
             .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 5,
             .Margin = New Padding(0, 25, 0, 0), .Padding = Padding.Empty,
             .BackColor = Color.White
@@ -211,7 +233,100 @@ Public NotInheritable Class ResponsiveSectionLayout
         info.Margin = New Padding(0, 4, 0, 8)
         actions.Controls.Add(info, 0, 3)
 
+        ' Keep right-hand Mount/Dismount/Info captions fully visible too;
+        ' the column should never silently squeeze a button.
+        Dim actionButtons As Button() = {mountButton, dismountButton, openMounted,
+                                         DirectCast(info, Button)}
+        Dim actionWidth = Math.Max(208, actionButtons.Max(Function(button)
+            Return ModernTheme.RecommendedButtonSize(button, 120).Width +
+                   button.Margin.Horizontal + 12
+        End Function))
+        root.ColumnStyles(1).Width = actionWidth
+
+        ' At compact/high-DPI widths the two fixed-width columns would crush
+        ' txtWIM/txtMount to a 1px line. Move the actions BELOW the source
+        ' rows (2x2) instead of allowing any WIM path to overlap Choose folder.
+        Dim requiredSideBySideWidth = root.Padding.Horizontal +
+            left.Margin.Right + actionWidth + browseCellWidth + 190
+        Dim lastCompact As Boolean? = Nothing
+        Dim arrange As Action = Sub()
+            If page.IsDisposed OrElse root.IsDisposed OrElse page.ClientSize.Width < 100 Then Return
+            Dim compact = page.ClientSize.Width < requiredSideBySideWidth
+            If lastCompact.HasValue AndAlso lastCompact.Value = compact Then Return
+            lastCompact = compact
+            page.SuspendLayout()
+            root.SuspendLayout()
+            actions.SuspendLayout()
+            Try
+                If compact Then
+                    page.AutoScroll = True
+                    root.Dock = DockStyle.Top
+                    root.ColumnStyles(1).Width = 0
+                    root.RowStyles(0).SizeType = SizeType.Absolute
+                    root.RowStyles(0).Height = 285
+                    root.RowStyles(1).SizeType = SizeType.Absolute
+                    root.RowStyles(1).Height = 139
+                    root.Height = 285 + 139 + root.Padding.Vertical
+                    root.SetColumnSpan(actions, 2)
+                    root.SetCellPosition(actions,
+                        New TableLayoutPanelCellPosition(0, 1))
+                    actions.Margin = New Padding(0, 8, 0, 0)
+                    actions.ColumnCount = 2
+                    actions.RowCount = 2
+                    actions.ColumnStyles.Clear()
+                    actions.RowStyles.Clear()
+                    actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
+                    actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
+                    actions.RowStyles.Add(New RowStyle(SizeType.Absolute, 64))
+                    actions.RowStyles.Add(New RowStyle(SizeType.Absolute, 64))
+                    For i As Integer = 0 To actionButtons.Length - 1
+                        actions.SetCellPosition(actionButtons(i),
+                            New TableLayoutPanelCellPosition(i Mod 2, i \ 2))
+                        actionButtons(i).Margin = New Padding(4, 4, 8, 6)
+                    Next
+                Else
+                    root.SetColumnSpan(actions, 1)
+                    root.SetCellPosition(actions,
+                        New TableLayoutPanelCellPosition(1, 0))
+                    root.ColumnStyles(1).Width = actionWidth
+                    root.RowStyles(0).SizeType = SizeType.Percent
+                    root.RowStyles(0).Height = 100
+                    root.RowStyles(1).SizeType = SizeType.Absolute
+                    root.RowStyles(1).Height = 0
+                    actions.ColumnCount = 1
+                    actions.RowCount = 5
+                    actions.ColumnStyles.Clear()
+                    actions.RowStyles.Clear()
+                    actions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+                    For i As Integer = 0 To 3
+                        actions.RowStyles.Add(New RowStyle(SizeType.Absolute, 61))
+                        actions.SetCellPosition(actionButtons(i),
+                            New TableLayoutPanelCellPosition(0, i))
+                        actionButtons(i).Margin = New Padding(0, 4, 0, 8)
+                    Next
+                    actions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+                    actions.Margin = New Padding(0, 25, 0, 0)
+                    page.AutoScroll = False
+                    root.Dock = DockStyle.Fill
+                End If
+            Finally
+                actions.ResumeLayout(True)
+                root.ResumeLayout(True)
+                page.ResumeLayout(True)
+            End Try
+        End Sub
+        AddHandler page.ClientSizeChanged, Sub(sender, e) arrange()
+        AddHandler page.VisibleChanged, Sub(sender, e)
+            If page.Visible Then arrange()
+        End Sub
         page.ResumeLayout(True)
+        If page.IsHandleCreated Then
+            page.BeginInvoke(New MethodInvoker(Sub() arrange()))
+        Else
+            AddHandler page.HandleCreated, Sub(sender, e)
+                page.BeginInvoke(New MethodInvoker(Sub() arrange()))
+            End Sub
+        End If
     End Sub
 
     Public Shared Sub Install(tabs As TabControl)
