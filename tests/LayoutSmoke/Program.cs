@@ -1272,6 +1272,83 @@ internal static class LayoutSmoke
                 Index = 2, Name = "Synthetic WIM 2",
                 MountFolder = mount, MountStatus = "Mounted (read-only)"
             });
+            // The observed 0xC1420127 field case: a WIM/index registered as
+            // Invalid must never reach DISM /Mount-WIM, even if folder is empty.
+            var mountPreflight = new Wim360Reader.WimReport { ImageFile = imagePath };
+            mountPreflight.Images.Add(new Wim360Reader.ImageInfo {
+                Index = 1, Name = "Synthetic WIM",
+                MountStatus = "Not mounted"
+            });
+            var noRegistrations = Array.Empty<Wim360Reader.MountedImageRegistration>();
+            Require(WimMountSafety.ValidateNewMountTarget(
+                mountPreflight, 1, mount, false, noRegistrations) == mount,
+                "Healthy unmounted index with a vacant folder should pass the read-only preflight.");
+            mountPreflight.Images[0].MountStatus = "Invalid / check mount";
+            mountPreflight.Images[0].MountFolder = mount;
+            bool invalidRepeatBlocked = false;
+            try { WimMountSafety.ValidateNewMountTarget(
+                    mountPreflight, 1, mount, false, noRegistrations); }
+            catch (InvalidOperationException ex) {
+                invalidRepeatBlocked = ex.Message.Contains("Invalid") &&
+                                       ex.Message.Contains("Mount health") &&
+                                       ex.Message.Contains("0xC1420127");
+            }
+            Require(invalidRepeatBlocked,
+                "An Invalid registered WIM index must block Mount-WIM before DISM.");
+            mountPreflight.Images[0].MountStatus = "Mounted (R/W)";
+            bool validRepeatBlocked = false;
+            try { WimMountSafety.ValidateNewMountTarget(
+                    mountPreflight, 1, mount, false, noRegistrations); }
+            catch (InvalidOperationException) { validRepeatBlocked = true; }
+            Require(validRepeatBlocked,
+                "A healthy already-mounted index must not be mounted twice.");
+            mountPreflight.Images[0].MountStatus = "Not mounted";
+            mountPreflight.Images[0].MountFolder = "";
+            var occupied = new[] { new Wim360Reader.MountedImageRegistration {
+                ImageFile = System.IO.Path.Combine(temp, "other.wim"),
+                ImageIndex = 1, MountFolder = mount,
+                Status = "Invalid / check mount", IsReadWrite = true
+            }};
+            bool occupiedFolderBlocked = false;
+            try { WimMountSafety.ValidateNewMountTarget(
+                    mountPreflight, 1, mount, false, occupied); }
+            catch (InvalidOperationException) { occupiedFolderBlocked = true; }
+            Require(occupiedFolderBlocked,
+                "Another WIM's mount registration reserves the folder even when empty.");
+            var otherMount = System.IO.Path.Combine(temp, "other-mount");
+            System.IO.Directory.CreateDirectory(otherMount);
+            var sameImageDifferentFolder = new[] {
+                new Wim360Reader.MountedImageRegistration {
+                    ImageFile = imagePath, ImageIndex = 1,
+                    MountFolder = otherMount,
+                    Status = "Invalid / check mount", IsReadWrite = true
+                }
+            };
+            bool staleIndexBlocked = false;
+            try { WimMountSafety.ValidateNewMountTarget(
+                    mountPreflight, 1, mount, false, sameImageDifferentFolder); }
+            catch (InvalidOperationException) { staleIndexBlocked = true; }
+            Require(staleIndexBlocked,
+                "Same WIM/index registered elsewhere must block a new mount.");
+            mountPreflight.MountScanWarning = "WIMGAPI unavailable";
+            bool unknownMountBlocked = false;
+            try { WimMountSafety.ValidateNewMountTarget(
+                    mountPreflight, 1, mount, false, noRegistrations); }
+            catch (InvalidOperationException) { unknownMountBlocked = true; }
+            Require(unknownMountBlocked,
+                "Unverified WIMGAPI registration must fail closed.");
+            mountPreflight.MountScanWarning = "";
+            var child = System.IO.Path.Combine(mount, "keep-file.txt");
+            System.IO.File.WriteAllText(child, "Do not delete on collision.");
+            bool nonemptyBlocked = false;
+            try { WimMountSafety.ValidateNewMountTarget(
+                    mountPreflight, 1, mount, false, noRegistrations); }
+            catch (InvalidOperationException) { nonemptyBlocked = true; }
+            Require(nonemptyBlocked && System.IO.File.Exists(child),
+                "Nonempty mount folder must block Mount without deleting content.");
+            System.IO.File.Delete(child);
+            Console.WriteLine("PASS existing/Invalid WIM index Mount-WIM collision preflight (0xC1420127)");
+
             var writable = WimMountSafety.ValidateRegisteredTarget(report, 1,
                 mount, true);
             Require(writable.Commit && writable.ImageIndex == 1 &&

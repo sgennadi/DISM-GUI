@@ -54,6 +54,16 @@ Public NotInheritable Class Wim360Reader
         End Property
     End Class
 
+    ' Read-only snapshot of ALL system-wide WIMGAPI mount registrations.
+    ' Used to prevent collisions with the same WIM/index or mount directory.
+    Public NotInheritable Class MountedImageRegistration
+        Public Property ImageFile As String = ""
+        Public Property ImageIndex As Integer
+        Public Property MountFolder As String = ""
+        Public Property Status As String = ""
+        Public Property IsReadWrite As Boolean
+    End Class
+
     <StructLayout(LayoutKind.Sequential, CharSet:=CharSet.Unicode)>
     Private Structure MountInfoNative
         <MarshalAs(UnmanagedType.ByValTStr, SizeConst:=260)>
@@ -278,6 +288,16 @@ Public NotInheritable Class Wim360Reader
             Return If((flags And WIM_READ_WRITE) <> 0, "Mounted (R/W)", "Mounted (read-only)")
         End If
         Return "Unknown mount state"
+    End Function
+
+    Public Shared Function MountedImageRegistrations() As List(Of MountedImageRegistration)
+        Return GetMounts().Select(Function(m) New MountedImageRegistration With {
+            .ImageFile = If(m.ImagePath, ""),
+            .ImageIndex = CInt(m.ImageIndex),
+            .MountFolder = If(m.MountPath, ""),
+            .Status = MountStatus(m.MountFlags),
+            .IsReadWrite = (m.MountFlags And WIM_READ_WRITE) <> 0UI
+        }).ToList()
     End Function
 
     Private Shared Sub FillMountState(report As WimReport)

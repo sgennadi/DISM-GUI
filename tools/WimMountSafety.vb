@@ -108,6 +108,111 @@ Public NotInheritable Class WimMountSafety
         }
     End Function
 
+    ' Prevent repeat /Mount-WIM before launching DISM. The folder may be
+    ' empty even while an Invalid WIMMount registration still exists.
+    ' No registry mutations, WIM writes, cleanup or recovery are performed.
+    ' Injectable inventory permits regression tests without mounting a WIM.
+    Public Shared Function ValidateNewMountTarget(
+        report As Wim360Reader.WimReport, index As Integer, mountFolder As String,
+        mountReadOnly As Boolean,
+        registrations As IEnumerable(Of Wim360Reader.MountedImageRegistration)
+    ) As String
+        If report Is Nothing Then Throw New ArgumentNullException(NameOf(report))
+        If registrations Is Nothing Then Throw New ArgumentNullException(NameOf(registrations))
+        If report.IsSplitSet Then Throw New InvalidOperationException(
+            "A split SWM set cannot be mounted with this action.")
+        If Not String.IsNullOrWhiteSpace(report.MountScanWarning) Then
+            Throw New InvalidOperationException(
+                "Cannot verify existing mounts: " & report.MountScanWarning &
+                ". DISM Mount was NOT started.")
+        End If
+        Dim selected = report.Images.SingleOrDefault(Function(x) x.Index = index)
+        If index < 1 OrElse selected Is Nothing Then
+            Throw New InvalidOperationException(
+                "The selected WIM index is missing. Refresh WIM 360 before mounting.")
+        End If
+        Dim wimPath = NormalizeFile(report.ImageFile)
+        Dim folder = NormalizeFolder(mountFolder)
+        If Not String.Equals(selected.MountStatus, "Not mounted",
+                             StringComparison.Ordinal) Then
+            Throw New InvalidOperationException(
+                "This WIM index is already registered: " & selected.MountStatus &
+                If(String.IsNullOrWhiteSpace(selected.MountFolder), "",
+                   " | Mount directory: " & selected.MountFolder) &
+                ". DISM Mount was NOT started (0xC1420127 guard). " &
+                "Open WIM 360 > Mount health / Recovery; an Invalid registration " &
+                "must not be deleted or discarded automatically.")
+        End If
+
+        ' Inspect all WIM registrations: another image can reserve this folder,
+        ' or the same WIM can have a conflicting R/W or invalid index.
+        For Each entry As Wim360Reader.MountedImageRegistration In registrations
+            If entry Is Nothing OrElse String.IsNullOrWhiteSpace(entry.ImageFile) OrElse
+               String.IsNullOrWhiteSpace(entry.MountFolder) Then
+                Throw New InvalidOperationException(
+                    "Incomplete system WIMMount registration. Mount blocked; review Mount health.")
+            End If
+            Dim registeredWim = NormalizeFile(entry.ImageFile)
+            Dim registeredFolder = NormalizeFolder(entry.MountFolder)
+            Dim sameWim = String.Equals(wimPath, registeredWim,
+                                        StringComparison.OrdinalIgnoreCase)
+            If String.Equals(folder, registeredFolder,
+                             StringComparison.OrdinalIgnoreCase) Then
+                Throw New InvalidOperationException(
+                    "The selected mount folder is reserved by a WIMMount registration " &
+                    "(index " & entry.ImageIndex.ToString(CultureInfo.InvariantCulture) &
+                    ", " & entry.Status & "). DISM Mount was NOT started. " &
+                    "Open WIM 360 > Mount health.")
+            End If
+            If sameWim AndAlso entry.ImageIndex = index Then
+                Throw New InvalidOperationException(
+                    "The same WIM/index already has a registered mount at " &
+                    registeredFolder & " (" & entry.Status & "). " &
+                    "Do not mount again; inspect WIM 360 > Mount health.")
+            End If
+            If sameWim AndAlso (entry.IsReadWrite OrElse Not mountReadOnly OrElse
+                                Not String.Equals(entry.Status, "Mounted (read-only)",
+                                                  StringComparison.Ordinal)) Then
+                Throw New InvalidOperationException(
+                    "The same WIM has another R/W or non-healthy registered index " &
+                    "(" & entry.Status & "). Verify its state in Mount health " &
+                    "before starting another mount.")
+            End If
+        Next
+        If Not Directory.Exists(folder) Then
+            Throw New DirectoryNotFoundException(
+                "Mount folder does not exist: " & folder)
+        End If
+        If (File.GetAttributes(folder) And FileAttributes.ReparsePoint) =
+           FileAttributes.ReparsePoint Then
+            Throw New InvalidOperationException(
+                "Mount directory is a symlink/junction. Select an ordinary empty folder.")
+        End If
+        If Directory.EnumerateFileSystemEntries(folder).Any() Then
+            Throw New InvalidOperationException(
+                "Mount folder is not empty. Do not erase its contents; " &
+                "select a new empty folder after verifying mount registrations.")
+        End If
+        Return folder
+    End Function
+
+    Public Shared Function ValidateNewMount(wimPath As String, indexText As String,
+                                            mountFolder As String,
+                                            mountReadOnly As Boolean) As String
+        Dim index As Integer
+        If Not Integer.TryParse(If(indexText, "").Trim(), NumberStyles.None,
+                                CultureInfo.InvariantCulture, index) OrElse index < 1 Then
+            Throw New ArgumentException("Select a valid numeric WIM index.")
+        End If
+        Dim source = NormalizeFile(wimPath)
+        If Not File.Exists(source) Then
+            Throw New FileNotFoundException("WIM file was not found.", source)
+        End If
+        Dim report = Wim360Reader.Inspect(source)
+        Return ValidateNewMountTarget(report, index, mountFolder, mountReadOnly,
+                                      Wim360Reader.MountedImageRegistrations())
+    End Function
+
     Public Shared Function ValidateDismount(wimPath As String, indexText As String,
                                             mountFolder As String,
                                             commit As Boolean) As Target
