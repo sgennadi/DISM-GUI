@@ -698,13 +698,7 @@ Public NotInheritable Class ModernTheme
                 Dim mount = TryCast(tabs.TabPages(0).Controls.Find(
                     "txtMount", True).FirstOrDefault(), TextBox)
                 Return If(mount Is Nothing, "", mount.Text)
-            End Function,
-            Sub(folderPath)
-                Dim source = TryCast(tabs.TabPages(1).Controls.Find(
-                    "txtDriverLocation", True).FirstOrDefault(), TextBox)
-                If source IsNot Nothing Then source.Text = folderPath
-                tabs.SelectedIndex = 1
-            End Sub)
+            End Function)
         studioPage.Controls.Add(driverStudio)
         tabs.TabPages.Add(studioPage)
         Dim studioPageIndex = tabs.TabPages.Count - 1
@@ -895,24 +889,11 @@ Public NotInheritable Class ModernTheme
         workspaceHeader.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         content.Controls.Add(workspaceHeader, 0, 0)
         workspaceHeader.Controls.Add(pageHeading, 0, 0)
-        ' A fixed top-level shortcut stays visible on compact 175% screens
-        ' even if the Driver Studio source row needs vertical scrolling.
-        ' It delegates to the original ScanClicked handler, never clones it.
-        studioScanShortcut = New Button With {
-            .Name = "btnStudioScanQuick",
-            .Text = "Scan INF",
-            .Dock = DockStyle.Fill, .Margin = New Padding(5, 3, 0, 3),
-            .Visible = False,
-            .AccessibleDescription = "Scan INF files in the Driver Studio source folder"
-        }
-        StyleButton(studioScanShortcut, "primary")
-        AddHandler studioScanShortcut.Click, Sub(sender, e)
-            Dim originalScan = TryCast(driverStudio.Controls.Find(
-                "btnStudioScan", True).FirstOrDefault(), Button)
-            If originalScan IsNot Nothing AndAlso originalScan.Enabled Then
-                originalScan.PerformClick()
-            End If
-        End Sub
+        ' One visible Scan / Refresh action. Its handler and disabled/busy
+        ' state belong to Driver Studio; the workspace header keeps it visible
+        ' even when the source list is scrolled at 175-200% DPI.
+        studioScanShortcut = driverStudio.ScanAction
+        studioScanShortcut.Visible = False
         workspaceHeader.Controls.Add(studioScanShortcut, 1, 0)
 
         Dim tabHost As New Panel With {
