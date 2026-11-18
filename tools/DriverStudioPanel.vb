@@ -118,8 +118,8 @@ Public NotInheritable Class DriverStudioPanel
         heading.RowStyles.Add(New RowStyle(SizeType.Percent, 42))
         rootLayout.Controls.Add(heading, 0, 0)
         heading.Controls.Add(WriteLabel(If(stackSource,
-                                         "DRIVER STUDIO  |  VERSION CHECK",
-                                         "DRIVER STUDIO  |  SMART VERSION DETECTION"),
+                                         "DRIVER COMPARISON",
+                                         "OFFLINE DRIVER COMPARISON"),
                                         12.4F, True, ModernTheme.TextInk), 0, 0)
         heading.Controls.Add(WriteLabel("Compare versions safely. Adding drivers to WIM is optional.",
                                         9.1F, False, ModernTheme.Muted), 0, 1)
@@ -127,7 +127,7 @@ Public NotInheritable Class DriverStudioPanel
         Dim sourceRow As New TableLayoutPanel With {
             .Name = "DriverStudioSourceRow",
             .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 0, 6),
-            .ColumnCount = If(stackSource, 2, 3),
+            .ColumnCount = 2,
             .RowCount = If(stackSource, 2, 1), .BackColor = Color.White
         }
         If stackSource Then
@@ -139,7 +139,6 @@ Public NotInheritable Class DriverStudioPanel
             sourceRow.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
             sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
             sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(176 * layoutScale))))
-            sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(128 * layoutScale))))
         End If
         rootLayout.Controls.Add(sourceRow, 0, 1)
         sourceBox = New TextBox With {
@@ -172,23 +171,26 @@ Public NotInheritable Class DriverStudioPanel
                 End If
             End Using
         End Sub
-        sourceRow.Controls.Add(browse, If(stackSource, 0, 1), If(stackSource, 1, 0))
+        sourceRow.Controls.Add(browse, 1, If(stackSource, 1, 0))
 
+        ' One Scan / Refresh button is hosted in the always-visible workspace header.
+        ' Do not duplicate it in the scrollable source row at 175-200% DPI.
         scanButton = New Button With {
-            .Name = "btnStudioScan", .Text = "Scan INF",
-            .Dock = DockStyle.Fill, .Margin = New Padding(2, 6, 8, 7)
+            .Name = "btnStudioScanQuick", .Text = "Scan / Refresh",
+            .Dock = DockStyle.Fill, .Margin = New Padding(5, 3, 0, 3),
+            .AccessibleDescription =
+                "Read INF files and automatically compare them with the mounted WIM " &
+                "when that exact image and index are available. Read-only."
         }
         ModernTheme.StyleButton(scanButton, "primary")
         scanButton.AutoEllipsis = False
         AddHandler scanButton.Click, AddressOf ScanClicked
-        sourceRow.Controls.Add(scanButton, If(stackSource, 1, 2), If(stackSource, 1, 0))
 
         Dim settings As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 1,
+            .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 1,
             .Margin = Padding.Empty, .BackColor = Color.White
         }
         settings.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        settings.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 195))
         settings.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         rootLayout.Controls.Add(settings, 0, 2)
         recursive = New CheckBox With {
@@ -198,15 +200,6 @@ Public NotInheritable Class DriverStudioPanel
             .Margin = New Padding(3, 3, 6, 3)
         }
         settings.Controls.Add(recursive, 0, 0)
-        compareButton = New Button With {
-            .Name = "btnStudioCompare", .Text = "Compare with mounted index",
-            .Dock = DockStyle.Fill, .Margin = New Padding(1, 3, 0, 4)
-        }
-        ModernTheme.StyleButton(compareButton, "secondary")
-        compareButton.AutoEllipsis = False
-        AddHandler compareButton.Click, AddressOf CompareClicked
-        settings.Controls.Add(compareButton, 1, 0)
-
         Dim metrics As New TableLayoutPanel With {
             .Name = "DriverStudioMetrics", .Dock = DockStyle.Fill,
             .ColumnCount = 3, .RowCount = 1, .Margin = New Padding(0, 7, 0, 7),
@@ -509,6 +502,12 @@ Public NotInheritable Class DriverStudioPanel
     ' Transfer only the selected source folder to legacy Driver tools.
     ' A single INF selection maps to its parent folder. This never authorizes
     ' adding drivers or enables the legacy "Add drivers" action.
+    Public ReadOnly Property ScanAction As Button
+        Get
+            Return scanButton
+        End Get
+    End Property
+
     Public Function SelectedSourceFolderForDriverTools() As String
         Dim selected = sourceBox.Text.Trim().Trim(""""c)
         If selected.Length = 0 Then Return ""
@@ -535,7 +534,7 @@ Public NotInheritable Class DriverStudioPanel
         targetLabel.Text = "Target: " & If(String.IsNullOrWhiteSpace(currentWim()),
             "No WIM selected", Path.GetFileName(currentWim())) &
             "  |  Index " & currentIndex().ToString() &
-            "  |  Mount not verified (use Compare)"
+            "  |  WIM comparison pending"
         targetLabel.AccessibleDescription = "Selected mount folder: " &
             If(String.IsNullOrWhiteSpace(currentMount()), "Not set", currentMount())
         ' A successful Mount does not re-run an earlier INF-only scan.
@@ -626,8 +625,8 @@ Public NotInheritable Class DriverStudioPanel
 
     Private Sub SelectAllEligibleClicked(sender As Object, e As EventArgs)
         If Not comparisonVerified Then
-            statusLabel.Text = "Mount and Compare with WIM first. " &
-                "Audit all INF checks source packages without a mount."
+            statusLabel.Text = "Selected WIM index is not verified. Mount it, " &
+                "then return here or click Scan / Refresh. Audit all is read-only."
             Return
         End If
         ApplyBulkSelection(True)
