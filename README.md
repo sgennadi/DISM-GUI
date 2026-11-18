@@ -33,8 +33,12 @@ not mounted, every unverified candidate is labeled **Not checked**.
 **Same version** means the same INF name, provider, class, version and
 date; this does not guarantee identical signed driver files. Driver Studio
 flags per-model DriverVer directives and version/date ranking conflicts as
-**Review**. After comparing a **read/write-mounted** index, select the desired **New** or
-**Newer** packages and use **Install selected INF**. Driver Studio confirms
+**Review**. Comparison is **read-only** and leaves **zero packages selected**.
+For optional offline-image changes, use **Select New / Newer** to mark eligible
+packages (or mark individual rows), **Audit selected**, then
+**Add selected to WIM...** on a **read/write-mounted** index. The action does
+not install drivers in the running Windows installation and does not remove
+older driver versions. Driver Studio confirms
 the WIM path and index, re-checks mount status, the installed-driver inventory
 and source INF hashes, then invokes DISM separately for each selected INF.
 **Same version, Older, Review, Duplicate source** and **Not checked** are
@@ -53,9 +57,13 @@ device ranking. An imported package may not be selected by PnP at boot.
 
 ### Driver Studio source package integrity audit (4.3.15)
 
-Driver Studio has a new **Audit selected** action in the package-details header.
-After comparing drivers with an already-mounted image, select up to 30
-**New / Newer** INF files and audit them. The scan is read-only; it collects
+Driver Studio places **Audit selected** beside **Audit all INF**, directly
+above the comparison table. **Audit selected** checks the marked INF packages,
+or the highlighted INF if no rows are marked; **Audit all INF** checks all
+source packages in a bounded batch. Neither audit changes a WIM or the
+running PC. After comparing drivers with an already-mounted image, select up
+to 30 **New / Newer** INF files and audit them before a WIM import.
+The scan is read-only; it collects
 SHA-256 checksums for the **complete source directory tree**, including
 INF, CAT, SYS, DLL and all other files, and combines relative paths,
 lengths and hashes into a reproducible package manifest SHA-256. To avoid
@@ -67,7 +75,7 @@ The audit chooses the INF's generic or target-architecture-decorated
 `CatalogFile` and verifies its **Authenticode signature** via Windows.
 An absent catalog, invalid/untrusted signature, mismatch between the INF's
 explicit architecture hint and the WIM, or changed source files blocks
-**Install selected INF**. Windows DISM remains responsible for complete
+**Add selected to WIM...**. Windows DISM remains responsible for complete
 signed-package membership, servicing compatibility and installation;
 a valid CAT signature alone does **not** guarantee all driver payloads are
 correct, or that a specific physical device will use the staged driver.

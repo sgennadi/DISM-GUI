@@ -3571,31 +3571,44 @@ internal static class LayoutSmoke
                 Array.Empty<DriverStudioEngine.DriverPackage>(), true);
             studioPanel.PreviewForTest(newStudio);
             Application.DoEvents();
-            Require(installStudio.Enabled && !studioGrid.Rows[0].Cells[0].ReadOnly,
-                    "Verified New INF must enable selective install");
+            Require(!installStudio.Enabled && !newStudio[0].Selected &&
+                    !studioGrid.Rows[0].Cells[0].ReadOnly &&
+                    !(bool)studioGrid.Rows[0].Cells[0].Value!,
+                    "Verified New/Newer INF must remain unchecked until explicit user action.");
             var selectAllEligible = Find(studioPanel, "btnStudioSelectAllEligible") as Button;
             var clearAllInf = Find(studioPanel, "btnStudioClearAll") as Button;
             var auditAllInf = Find(studioPanel, "btnStudioAuditAll") as Button;
             var selectedCount = Find(studioPanel, "lblStudioSelection") as Label;
             Require(selectAllEligible is not null && clearAllInf is not null &&
                     auditAllInf is not null && selectedCount is not null &&
-                    selectAllEligible.Enabled && clearAllInf.Enabled && auditAllInf.Enabled &&
-                    selectedCount.Text == "1 selected",
-                    "Driver Studio needs visible Select all eligible/Clear/Audit all controls.");
-            VerifyReadableButton(selectAllEligible!, "Driver Studio select all eligible");
-            VerifyReadableButton(auditAllInf!, "Driver Studio audit all INF");
-            clearAllInf!.PerformClick();
+                    selectAllEligible.Enabled && !clearAllInf.Enabled && auditAllInf.Enabled &&
+                    selectedCount.Text == "0 selected",
+                    "Read-only Driver Studio preview must show no selected drivers but offer explicit selection and audit.");
+            Require(selectAllEligible!.Text == "Select New / Newer" &&
+                    installStudio.Text == "Add selected to WIM..." &&
+                    integrityAudit!.Parent == auditAllInf!.Parent &&
+                    integrityAudit.Parent == selectAllEligible.Parent,
+                    "WIM import must be clearly optional, with both Audit commands together.");
+            VerifyReadableButton(selectAllEligible, "Driver Studio explicit New/Newer selector");
+            VerifyReadableButton(auditAllInf, "Driver Studio audit all INF");
+            selectAllEligible.PerformClick();
+            Application.DoEvents();
+            Require(installStudio.Enabled && newStudio[0].Selected &&
+                    (bool)studioGrid.Rows[0].Cells[0].Value! &&
+                    clearAllInf.Enabled && selectedCount.Text == "1 selected",
+                    "Select New/Newer must only mark eligible drivers; installation stays a separate action.");
+            clearAllInf.PerformClick();
             Application.DoEvents();
             Require(!installStudio.Enabled && !newStudio[0].Selected &&
                     !(bool)studioGrid.Rows[0].Cells[0].Value! &&
                     !clearAllInf.Enabled && selectedCount.Text == "0 selected",
-                    "Clear must uncheck all plan entries and disable installation.");
-            selectAllEligible!.PerformClick();
+                    "Clear must uncheck all plan entries and disable WIM write.");
+            selectAllEligible.PerformClick();
             Application.DoEvents();
             Require(installStudio.Enabled && newStudio[0].Selected &&
                     (bool)studioGrid.Rows[0].Cells[0].Value! &&
                     selectedCount.Text == "1 selected",
-                    "Select all eligible must select only verified New or Newer drivers.");
+                    "Explicit Select New/Newer must restore the chosen WIM plan.");
             var studioSource = Find(studioPanel, "txtStudioSource") as TextBox;
             Require(studioSource is not null, "Driver Studio source path entry missing");
             studioSource!.Text = @"C:\ChangedDrivers";
