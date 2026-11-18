@@ -481,8 +481,9 @@ Public NotInheritable Class DriverStudioPanel
         End Sub
         importActions.Controls.Add(stopButton, 1, 0)
 
-        Dim importNote = WriteLabel("OPTIONAL WIM change. Requires R/W mount; no automatic Commit.",
+        Dim importNote = WriteLabel("Optional WIM write (R/W). Commit is manual.",
                                     8.4F, False, ModernTheme.Muted)
+        importNote.AccessibleDescription = "Optional: adds selected packages only to the offline WIM after auditing and confirmation. No drivers installed on this PC. No automatic Commit or Discard."
         importNote.TextAlign = ContentAlignment.MiddleRight
         importActions.Controls.Add(importNote, 2, 0)
 
@@ -802,7 +803,7 @@ Public NotInheritable Class DriverStudioPanel
         sameMetric.Text = sameCount.ToString()
         statusLabel.Text = If(results.Count = 0,
             "No INF files found. Select a folder with driver INF packages.",
-            "Read-only preview. No drivers selected. Click Select New / Newer only if you intend to modify this WIM.")
+            "Read-only preview: no drivers selected, no WIM changes.")
         copyButton.Enabled = results.Count > 0
         transferButton.Enabled = results.Count > 0
         auditButton.Enabled = results.Count > 0
