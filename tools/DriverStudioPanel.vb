@@ -101,13 +101,23 @@ Public NotInheritable Class DriverStudioPanel
         viewport.Controls.Add(rootLayout)
         Dim resizeStudio As Action = Sub()
             If viewport.IsDisposed OrElse rootLayout.IsDisposed Then Return
-            ' Protect action captions while retaining horizontal scrolling only
-            ' in truly narrow/high-DPI viewports.
-            Dim actionMin = CInt(Math.Ceiling(
-                (198 + 88 + 145 + 122 + 225 + 100) * layoutScale)) +
-                rootLayout.Padding.Horizontal
-            Dim minimum = Math.Max(If(stackSource, 660,
-                CInt(Math.Ceiling(800 * layoutScale))), actionMin)
+            ' Wide windows get one compact action row. At small widths or
+            ' high DPI, distribute selection/audits and the WIM write across
+            ' three readable rows rather than clipping Audit selected.
+            Dim compactActions = viewport.ClientSize.Width <
+                CInt(Math.Ceiling(920 * layoutScale))
+            Dim actionBar = TryCast(rootLayout.Controls.Find(
+                "DriverStudioSelectionBar", True).FirstOrDefault(), TableLayoutPanel)
+            Dim gridArea = TryCast(rootLayout.Controls.Find(
+                "DriverStudioGridArea", True).FirstOrDefault(), TableLayoutPanel)
+            If actionBar IsNot Nothing AndAlso gridArea IsNot Nothing Then
+                ArrangeSelectionToolbar(actionBar, gridArea, compactActions, layoutScale)
+            End If
+
+            Dim minimum = If(compactActions,
+                CInt(Math.Ceiling(300 * layoutScale)) + rootLayout.Padding.Horizontal,
+                CInt(Math.Ceiling((198 + 88 + 145 + 122 + 225 + 100) * layoutScale)) +
+                    rootLayout.Padding.Horizontal)
             Dim wanted = Math.Max(minimum, viewport.ClientSize.Width - 1)
             If rootLayout.Width <> wanted Then rootLayout.Width = wanted
 
@@ -118,7 +128,8 @@ Public NotInheritable Class DriverStudioPanel
             For Each rowIndex As Integer In {0, 1, 2, 3, 5}
                 fixedHeight += CInt(Math.Ceiling(rootLayout.RowStyles(rowIndex).Height))
             Next
-            Dim minGrid = CInt(Math.Ceiling(260 * layoutScale))
+            Dim minGrid = CInt(Math.Ceiling(
+                If(compactActions, 330, 260) * layoutScale))
             Dim minDetails = CInt(Math.Ceiling(154 * layoutScale))
             Dim extra = Math.Max(0, viewport.ClientSize.Height -
                                   fixedHeight - minGrid - minDetails - 1)
@@ -332,10 +343,12 @@ Public NotInheritable Class DriverStudioPanel
 
         Dim selectionBar As New TableLayoutPanel With {
             .Name = "DriverStudioSelectionBar", .Dock = DockStyle.Fill,
-            .RowCount = 1, .ColumnCount = 6,
+            .RowCount = 3, .ColumnCount = 6,
             .Margin = New Padding(0, 0, 0, 3), .BackColor = Color.White
         }
         selectionBar.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        selectionBar.RowStyles.Add(New RowStyle(SizeType.Absolute, 0))
+        selectionBar.RowStyles.Add(New RowStyle(SizeType.Absolute, 0))
         For Each columnWidth As Integer In {198, 88, 145, 122}
             selectionBar.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
                 CInt(Math.Ceiling(columnWidth * layoutScale))))
@@ -493,6 +506,71 @@ Public NotInheritable Class DriverStudioPanel
         AddHandler recursive.CheckedChanged, Sub(sender, e)
             If Not isWorking Then InvalidateComparison()
         End Sub
+        ' Initial children are now available for responsive toolbar layout.
+        resizeStudio()
+    End Sub
+
+    Private Sub ArrangeSelectionToolbar(bar As TableLayoutPanel,
+                                        gridArea As TableLayoutPanel,
+                                        compact As Boolean,
+                                        layoutScale As Single)
+        If TypeOf bar.Tag Is Boolean AndAlso CBool(bar.Tag) = compact Then Return
+        ' Mark early to avoid recursive ClientSizeChanged reflow.
+        bar.Tag = compact
+        bar.SuspendLayout()
+        gridArea.SuspendLayout()
+        Try
+            Dim positions As (Button As Control, Column As Integer, Row As Integer)()
+            If compact Then
+                For i As Integer = 0 To 5
+                    bar.ColumnStyles(i).SizeType = If(i < 2,
+                        SizeType.Percent, SizeType.Absolute)
+                    bar.ColumnStyles(i).Width = If(i < 2, 50.0F, 0.0F)
+                Next
+                For i As Integer = 0 To 2
+                    bar.RowStyles(i).SizeType = SizeType.Percent
+                    bar.RowStyles(i).Height = 100.0F / 3.0F
+                Next
+                positions = {
+                    (selectEligibleButton, 0, 0), (clearSelectionButton, 1, 0),
+                    (auditButton, 0, 1), (auditAllButton, 1, 1),
+                    (selectionLabel, 0, 2), (importActions, 1, 2)
+                }
+            Else
+                For i As Integer = 0 To 3
+                    bar.ColumnStyles(i).SizeType = SizeType.Absolute
+                Next
+                For i As Integer = 0 To 3
+                    bar.ColumnStyles(i).Width = CSng(Math.Ceiling(
+                        ({198, 88, 145, 122})(i) * layoutScale))
+                Next
+                bar.ColumnStyles(4).SizeType = SizeType.Percent
+                bar.ColumnStyles(4).Width = 100
+                bar.ColumnStyles(5).SizeType = SizeType.Absolute
+                bar.ColumnStyles(5).Width = CSng(Math.Ceiling(225 * layoutScale))
+                bar.RowStyles(0).SizeType = SizeType.Percent
+                bar.RowStyles(0).Height = 100
+                For i As Integer = 1 To 2
+                    bar.RowStyles(i).SizeType = SizeType.Absolute
+                    bar.RowStyles(i).Height = 0
+                Next
+                positions = {
+                    (selectEligibleButton, 0, 0), (clearSelectionButton, 1, 0),
+                    (auditButton, 2, 0), (auditAllButton, 3, 0),
+                    (selectionLabel, 4, 0), (importActions, 5, 0)
+                }
+            End If
+            For Each placement In positions
+                bar.SetCellPosition(placement.Button,
+                    New TableLayoutPanelCellPosition(
+                        placement.Column, placement.Row))
+            Next
+            gridArea.RowStyles(0).Height = CSng(Math.Ceiling(
+                If(compact, 147, 45) * layoutScale))
+        Finally
+            gridArea.ResumeLayout(True)
+            bar.ResumeLayout(True)
+        End Try
     End Sub
 
     Private Shared Function WriteLabel(value As String, size As Single,
