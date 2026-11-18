@@ -41,7 +41,13 @@ flags per-model DriverVer directives and version/date ranking conflicts as
 **Review**. Comparison is **read-only** and leaves **zero packages selected**.
 For optional offline-image changes, use **Select New / Newer** to mark eligible
 packages (or mark individual rows), **Audit selected**, then
-**Add selected to WIM...** on a **read/write-mounted** index. The action does
+**Add selected to WIM...** in the same action bar above the INF table on a
+**read/write-mounted** index. When all eligible INF packages are checked,
+the selector becomes **Deselect New / Newer**, so pressing it again clears
+those checkboxes without first clicking a table row. **Clear** also clears
+the entire selection. **Copy comparison** is alongside Package details.
+The driver grid and detail pane expand to fill freed space rather than
+reserving two detached footer rows. The Add action does
 not install drivers in the running Windows installation and does not remove
 older driver versions. Driver Studio confirms
 the WIM path and index, re-checks mount status, the installed-driver inventory
