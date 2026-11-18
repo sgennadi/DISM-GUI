@@ -34,6 +34,7 @@ Public NotInheritable Class DriverStudioPanel
     Private ReadOnly auditAllButton As Button
     Private ReadOnly selectionLabel As Label
     Private bulkSelectionUpdate As Boolean
+    Private lastAutoCompareSignature As String = ""
     Private ReadOnly targetLabel As Label
     Private ReadOnly statusLabel As Label
     Private ReadOnly totalMetric As Label
@@ -536,6 +537,24 @@ Public NotInheritable Class DriverStudioPanel
             "  |  Mount not verified (use Compare)"
         targetLabel.AccessibleDescription = "Selected mount folder: " &
             If(String.IsNullOrWhiteSpace(currentMount()), "Not set", currentMount())
+        ' A successful Mount does not re-run an earlier INF-only scan.
+        ' When returning from Mount to Driver Studio, automatically attempt ONE
+        ' read-only comparison if the source was already scanned and Windows
+        ' exists in the selected mount. WIMGAPI still validates exact WIM/index.
+        If isWorking OrElse comparisonVerified OrElse decisions.Count = 0 OrElse
+           String.IsNullOrWhiteSpace(sourceBox.Text.Trim()) Then Return
+        Dim wim = If(currentWim(), "").Trim()
+        Dim mount = If(currentMount(), "").Trim()
+        If wim.Length = 0 OrElse mount.Length = 0 OrElse Not File.Exists(wim) Then Return
+        If Not Directory.Exists(Path.Combine(mount, "Windows")) Then Return
+        Dim signature = wim.ToUpperInvariant() & "|" & currentIndex().ToString() &
+                        "|" & mount.ToUpperInvariant() & "|" &
+                        sourceBox.Text.Trim().ToUpperInvariant()
+        If String.Equals(signature, lastAutoCompareSignature,
+                         StringComparison.Ordinal) Then Return
+        lastAutoCompareSignature = signature
+        statusLabel.Text = "Mounted Windows folder detected. Comparing INF versions..."
+        CompareClicked(Me, EventArgs.Empty)
     End Sub
 
     Private Sub InvalidateComparison()
@@ -552,6 +571,7 @@ Public NotInheritable Class DriverStudioPanel
         newMetric.Text = "—"
         sameMetric.Text = "—"
         lastTarget = "Not checked"
+        lastAutoCompareSignature = ""
         statusLabel.Text = "Folder changed. Scan INF before comparing installed versions."
     End Sub
 
