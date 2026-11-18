@@ -1,57 +1,61 @@
-# DISM GUI 4.3.26 — Stable
+# DISM GUI 4.3.27 — Stable
 
-Portable Windows builds for x86, x64 and ARM64, with Visual Studio 2026
-and self-contained .NET 10. Maintenance update to Driver Studio's source
-file selection controls, following operator screenshots from v4.3.25.
+Portable x86, x64 and ARM64 Windows builds using Visual Studio 2026
+and self-contained .NET 10. Maintenance release for the **Mount**
+workspace following operator screenshots showing the Choose folder
+caption clipped in a small window, while preserving the v4.3.26
+Driver Studio chooser/scan swap.
 
-## Driver Studio: intuitive source workflow
+## Mount: readable paths and actions on compact / high-DPI screens
 
-- **Choose folder** moved into the upper-right Driver Studio workspace
-  header. The button width is calculated from its actual font/caption
-  rather than assuming a fixed size, and the workspace header adapts to
-  larger UI fonts to avoid truncation.
-- **Scan / Refresh** moved to the editable INF source path row. At a normal
-  window width, the path field and the single Scan button sit together.
-  At higher display scaling, the path spans the top row and the Scan
-  action sits directly below at the right. There are no duplicate Scan
-  controls and no separate manual Compare action.
-- The source field has a readable minimum height and smaller margins
-  to avoid appearing as a cropped line in a compact window.
-- Browsing is disabled while a scan/driver import is in progress, so
-  the source cannot be changed through the chooser mid-operation.
-- Existing selection/audit buttons, adaptive high-DPI selection
-  toolbar, INF details, and optional **Add selected to WIM...** controls
-  from v4.3.25 remain as-is.
+- Removed fixed 157px width assumptions for **Choose WIM** and
+  **Choose folder**. Their layout cells are measured from the
+  actual button captions and current UI font.
+- The right **Mount WIM**, **Dismount WIM**, **Open folder** and
+  **Display WIM info** action area also sizes for full captions.
+- At narrow window widths and/or large text scaling, keeping two
+  side-by-side columns could shrink the WIM path textbox to 1px and
+  overlap its Browse button. The Mount workspace now adapts:
+  WIM path, image index and mount folder occupy the upper full-width
+  source area; the four existing actions move below in a readable
+  two-column/two-row layout, with vertical scrolling when needed.
+- Wide windows keep the familiar actions column on the right.
+- The original DISM button instances, click handlers, selected path,
+  image index, read-only option and Mount/Dismount confirmations
+  remain unchanged.
 
-## Safety and behavior
+## Driver Studio (included from 4.3.26)
 
-- Choosing a folder only fills in the source path; it does not install
-  drivers or change a WIM.
-- Scan / Refresh is read-only. It examines source INF files and performs
-  automatic comparison only against an already-mounted image verified
-  for the exact WIM path/index/mount directory by WIMGAPI.
-- New/Newer INF are not checked by scanning. Import is an explicit,
-  independently confirmed write to the **mounted offline WIM**, never
-  the running Windows installation. No automatic Commit/Discard,
-  mount recovery, driver removal or force-unsigned operation is added.
-- Signature audit, installed-driver inventory validation, WIM
-  architecture and image writer lease, and postflight validation
-  remain unchanged from v4.3.25.
+- **Choose folder** is at the top-right workspace header and
+  **Scan / Refresh** is adjacent to the source INF field (or directly
+  below on high-DPI/narrow screens). The path box has adequate height.
+- Scan/Refresh remains read-only, automatically comparing verified
+  already-mounted WIM indexes; no automatic import, Mount, Commit or
+  Discard occurs.
 
 ## Validation
 
-- Windows x86 / x64 / ARM64 CI, plus signed OEM/WIM verification on
-  a hosted Windows VM: PASS for the source-change PR.
-- Real read-only WIM mount smoke tests and WinForms control checks: PASS.
-- Simulated font scaling 125%, 150%, 175%, 200%: PASS, including
-  full captions, header placement, path-field height and no
-  source/scan control overlap. These tests do not replace manual
-  testing on a physical Windows system.
+- Windows x86/x64/ARM64 builds: PASS.
+- Hosted x64 real WIM and WinForms layout smoke: PASS.
+- Actual simulated client-size tests of **765×580**, 900×650 and
+  1180×760, each at standard and simulated 125%, 150%, 175%, 200%
+  UI font scaling: PASS. Test asserts readable Choose WIM / Choose
+  folder captions, no overlapping WIM and mount folder fields, and
+  responsive Mount controls inside the viewport.
+- OEM signed driver execution and Windows WIM servicing code are
+  unchanged. The separate hosted OEM VM workflow is intentionally
+  path-filtered for DriverStudio/OEM changes and is not triggered by
+  this layout-only Mount update.
+- The test scaling is simulated; manual verification on the user's
+  actual Windows display remains recommended.
 
-## Rollback
+## Safety and rollback
 
-The original, unchanged portable release
-[DISM GUI v4.3.25](https://github.com/sgennadi/DISM-GUI/releases/tag/v4.3.25)
-remains published with x86, x64 and ARM64 downloads.
+The fix changes only layout and accessibility. No alteration to
+WIMMount registry operations, driver addition/removal, COMMIT/DISCARD,
+admin authorization, image safety checks or fallback recovery.
 
-Original upstream attribution and project licensing are retained.
+The original [DISM GUI 4.3.26](https://github.com/sgennadi/DISM-GUI/releases/tag/v4.3.26)
+stable ZIP files remain published for rollback.
+
+Upstream attribution and licensing remain intact.
