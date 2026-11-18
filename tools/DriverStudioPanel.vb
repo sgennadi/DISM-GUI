@@ -101,9 +101,37 @@ Public NotInheritable Class DriverStudioPanel
         viewport.Controls.Add(rootLayout)
         Dim resizeStudio As Action = Sub()
             If viewport.IsDisposed OrElse rootLayout.IsDisposed Then Return
-            Dim minimum = If(stackSource, 660, CInt(Math.Ceiling(800 * layoutScale)))
+            ' Protect action captions while retaining horizontal scrolling only
+            ' in truly narrow/high-DPI viewports.
+            Dim actionMin = CInt(Math.Ceiling(
+                (198 + 88 + 145 + 122 + 225 + 100) * layoutScale)) +
+                rootLayout.Padding.Horizontal
+            Dim minimum = Math.Max(If(stackSource, 660,
+                CInt(Math.Ceiling(800 * layoutScale))), actionMin)
             Dim wanted = Math.Max(minimum, viewport.ClientSize.Width - 1)
             If rootLayout.Width <> wanted Then rootLayout.Width = wanted
+
+            ' Reuse the vertical space released by the old Copy and Add
+            ' footer rows. The comparison grid gets two thirds of any extra
+            ' height and the INF details receive the remaining third.
+            Dim fixedHeight As Integer = rootLayout.Padding.Vertical + 8
+            For Each rowIndex As Integer In {0, 1, 2, 3, 5}
+                fixedHeight += CInt(Math.Ceiling(rootLayout.RowStyles(rowIndex).Height))
+            Next
+            Dim minGrid = CInt(Math.Ceiling(260 * layoutScale))
+            Dim minDetails = CInt(Math.Ceiling(154 * layoutScale))
+            Dim extra = Math.Max(0, viewport.ClientSize.Height -
+                                  fixedHeight - minGrid - minDetails - 1)
+            Dim gridHeight = minGrid + CInt(Math.Floor(extra * 0.67))
+            Dim detailHeight = minDetails + extra - CInt(Math.Floor(extra * 0.67))
+            If CInt(rootLayout.RowStyles(4).Height) <> gridHeight Then
+                rootLayout.RowStyles(4).Height = gridHeight
+            End If
+            If CInt(rootLayout.RowStyles(6).Height) <> detailHeight Then
+                rootLayout.RowStyles(6).Height = detailHeight
+            End If
+            Dim newHeight = fixedHeight + gridHeight + detailHeight
+            If rootLayout.Height <> newHeight Then rootLayout.Height = newHeight
         End Sub
         AddHandler viewport.ClientSizeChanged, Sub(sender, e) resizeStudio()
         AddHandler Me.VisibleChanged, Sub(sender, e)
@@ -614,7 +642,7 @@ Public NotInheritable Class DriverStudioPanel
     Private Sub UpdateInstallReady()
         Dim eligibleCount = decisions.Count(
             Function(d) DriverStudioInstaller.IsAllowed(d))
-        Dim selectedCount = decisions.Count(Function(d) d.Selected)
+        Dim selectedCount = decisions.Where(Function(d) d.Selected).Count()
         Dim allEligibleSelected = comparisonVerified AndAlso eligibleCount > 0 AndAlso
             decisions.All(Function(d)
                 Return Not DriverStudioInstaller.IsAllowed(d) OrElse d.Selected
@@ -665,7 +693,7 @@ Public NotInheritable Class DriverStudioPanel
                 "then return here or click Scan / Refresh. Audit all is read-only."
             Return
         End If
-        Dim eligibleCount = decisions.Count(Function(d) DriverStudioInstaller.IsAllowed(d))
+        Dim eligibleCount = decisions.Where(Function(d) DriverStudioInstaller.IsAllowed(d)).Count()
         If eligibleCount = 0 Then Return
         Dim allSelected = decisions.All(Function(d)
             Return Not DriverStudioInstaller.IsAllowed(d) OrElse d.Selected
@@ -675,7 +703,7 @@ Public NotInheritable Class DriverStudioPanel
             statusLabel.Text = "Deselected New/Newer INF packages. WIM unchanged."
         Else
             statusLabel.Text = "Marked " &
-                decisions.Count(Function(d) d.Selected).ToString() &
+                decisions.Where(Function(d) d.Selected).Count().ToString() &
                 " New/Newer INF(s). Nothing written; audit before Add to WIM."
         End If
     End Sub
