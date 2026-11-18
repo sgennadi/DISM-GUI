@@ -3378,6 +3378,7 @@ internal static class LayoutSmoke
                     studioScanQuick.Text == "Scan / Refresh" &&
                     studioScanQuick.Height >= 26,
                 "Driver Studio must expose its single read-only Scan / Refresh action in the header");
+            VerifyReadableButton(studioScanQuick, "Driver Studio single Scan / Refresh at high DPI");
             var quickBounds = studioScanQuick.RectangleToScreen(studioScanQuick.ClientRectangle);
             var formBounds = form.RectangleToScreen(form.ClientRectangle);
             Require(quickBounds.Top >= formBounds.Top &&
