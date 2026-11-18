@@ -188,7 +188,8 @@ Public NotInheritable Class DriverStudioPanel
         sourceBox = New TextBox With {
             .Name = "txtStudioSource", .Dock = DockStyle.Fill,
             .PlaceholderText = "Driver folder or .inf file",
-            .BorderStyle = BorderStyle.FixedSingle,
+            .BorderStyle = BorderStyle.FixedSingle, .AutoSize = False,
+            .MinimumSize = New Size(0, CInt(Math.Ceiling(26 * layoutScale))),
             .Font = ModernTheme.UiFont(9.7F), .BackColor = Color.White,
             .Margin = New Padding(1, If(stackSource, 5, 8), 7,
                                   If(stackSource, 3, 5))
@@ -727,6 +728,7 @@ Public NotInheritable Class DriverStudioPanel
         scanButton.Enabled = Not busy
         auditButton.Enabled = Not busy AndAlso decisions.Count > 0
         recursive.Enabled = Not busy
+        browseButton.Enabled = Not busy
         sourceBox.ReadOnly = busy
         grid.ReadOnly = busy
         Dim showStop = busy AndAlso isInstalling
