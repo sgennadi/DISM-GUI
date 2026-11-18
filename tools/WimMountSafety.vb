@@ -183,8 +183,8 @@ Public NotInheritable Class WimMountSafety
             Throw New DirectoryNotFoundException(
                 "Mount folder does not exist: " & folder)
         End If
-        If (File.GetAttributes(folder) And FileAttributes.ReparsePoint) <> 
-           CType(0, FileAttributes) Then
+        If (File.GetAttributes(folder) And FileAttributes.ReparsePoint) =
+           FileAttributes.ReparsePoint Then
             Throw New InvalidOperationException(
                 "Mount directory is a symlink/junction. Select an ordinary empty folder.")
         End If
