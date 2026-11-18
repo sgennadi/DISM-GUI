@@ -47,7 +47,9 @@ the selector becomes **Deselect New / Newer**, so pressing it again clears
 those checkboxes without first clicking a table row. **Clear** also clears
 the entire selection. **Copy comparison** is alongside Package details.
 The driver grid and detail pane expand to fill freed space rather than
-reserving two detached footer rows. The Add action does
+reserving two detached footer rows. On narrow windows or 175–200% DPI,
+the action bar wraps into three legible rows rather than hiding Audit
+buttons off the right edge. The Add action does
 not install drivers in the running Windows installation and does not remove
 older driver versions. Driver Studio confirms
 the WIM path and index, re-checks mount status, the installed-driver inventory
