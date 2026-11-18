@@ -3654,6 +3654,42 @@ internal static class LayoutSmoke
                 Require(studioSource.Width >= 200,
                     "Driver Studio source path was squeezed under high font scaling");
             Snapshot(form, "DISM-GUI-Driver-Studio");
+            // Regression: navigating from Driver Studio to Driver tools through
+            // the SIDEBAR must carry the selected INF source folder.
+            // No Add-Driver handler is invoked by navigation.
+            var legacyDriverSource = Find(tabs.TabPages[1], "txtDriverLocation") as TextBox;
+            Require(legacyDriverSource is not null,
+                    "Legacy Drivers source field must exist for Studio handoff");
+            var studioFolder = System.IO.Path.GetTempPath()
+                .TrimEnd(System.IO.Path.DirectorySeparatorChar);
+            studioSource.Text = studioFolder;
+            tabs.SelectedIndex = 1;
+            Application.DoEvents();
+            Require(string.Equals(legacyDriverSource!.Text,
+                    System.IO.Path.GetFullPath(studioFolder),
+                    StringComparison.OrdinalIgnoreCase),
+                    "Driver tools sidebar failed to retain Driver Studio folder.");
+            tabs.SelectedIndex = 10;
+            Application.DoEvents();
+
+            // Single-INF source should transfer its parent folder, not the
+            // INF filename into a field that only accepts directories.
+            var temporaryInf = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "DISMGUI-Studio-Handoff-" + Guid.NewGuid().ToString("N") + ".inf");
+            try {
+                System.IO.File.WriteAllText(temporaryInf, "test-only source");
+                studioSource.Text = temporaryInf;
+                tabs.SelectedIndex = 1;
+                Application.DoEvents();
+                Require(string.Equals(legacyDriverSource.Text,
+                        System.IO.Path.GetDirectoryName(temporaryInf),
+                        StringComparison.OrdinalIgnoreCase),
+                        "A single INF source should hand its directory to Driver tools.");
+            } finally {
+                System.IO.File.Delete(temporaryInf);
+            }
+            Console.WriteLine("PASS Driver Studio sidebar source folder handoff (folder and INF)");
             tabs.SelectedIndex = 0;
             Application.DoEvents();
             Console.WriteLine("PASS embedded Driver Studio preview and safe comparison UI");
