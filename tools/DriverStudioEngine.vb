@@ -320,8 +320,11 @@ Public NotInheritable Class DriverStudioEngine
             Else
                 d.Status = "Newer"
                 d.Selected = True
-                d.Detail = "Incoming version is newer. Windows may still choose " &
-                           "another package based on driver ranking."
+                d.Detail = "Incoming version is newer than the matching INF in this WIM. " &
+                           "DISM Add-Driver STAGES an additional package; it does NOT " &
+                           "remove or overwrite the older driver. At boot, Windows PnP " &
+                           "chooses a driver based on ranking, signature and device match. " &
+                           "Removing an older oem*.inf requires a separate, explicit operation."
             End If
         ElseIf difference < 0 Then
             d.Status = "Older"

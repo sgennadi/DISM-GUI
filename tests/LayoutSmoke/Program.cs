@@ -3573,12 +3573,76 @@ internal static class LayoutSmoke
             Application.DoEvents();
             Require(installStudio.Enabled && !studioGrid.Rows[0].Cells[0].ReadOnly,
                     "Verified New INF must enable selective install");
+            var selectAllEligible = Find(studioPanel, "btnStudioSelectAllEligible") as Button;
+            var clearAllInf = Find(studioPanel, "btnStudioClearAll") as Button;
+            var auditAllInf = Find(studioPanel, "btnStudioAuditAll") as Button;
+            var selectedCount = Find(studioPanel, "lblStudioSelection") as Label;
+            Require(selectAllEligible is not null && clearAllInf is not null &&
+                    auditAllInf is not null && selectedCount is not null &&
+                    selectAllEligible.Enabled && clearAllInf.Enabled && auditAllInf.Enabled &&
+                    selectedCount.Text == "1 selected",
+                    "Driver Studio needs visible Select all eligible/Clear/Audit all controls.");
+            VerifyReadableButton(selectAllEligible!, "Driver Studio select all eligible");
+            VerifyReadableButton(auditAllInf!, "Driver Studio audit all INF");
+            clearAllInf!.PerformClick();
+            Application.DoEvents();
+            Require(!installStudio.Enabled && !newStudio[0].Selected &&
+                    !(bool)studioGrid.Rows[0].Cells[0].Value! &&
+                    !clearAllInf.Enabled && selectedCount.Text == "0 selected",
+                    "Clear must uncheck all plan entries and disable installation.");
+            selectAllEligible!.PerformClick();
+            Application.DoEvents();
+            Require(installStudio.Enabled && newStudio[0].Selected &&
+                    (bool)studioGrid.Rows[0].Cells[0].Value! &&
+                    selectedCount.Text == "1 selected",
+                    "Select all eligible must select only verified New or Newer drivers.");
             var studioSource = Find(studioPanel, "txtStudioSource") as TextBox;
             Require(studioSource is not null, "Driver Studio source path entry missing");
             studioSource!.Text = @"C:\ChangedDrivers";
             Application.DoEvents();
             Require(!installStudio.Enabled,
                     "Changing the driver source must invalidate the install plan");
+            // Field screenshot: after /Discard, the selected mount directory
+            // was empty. A source INF scan may still flag two conflicting
+            // versions as Review, while all other rows remain Not checked.
+            var unverifiedRows = DriverStudioEngine.CompareCandidates(
+                new[] { driverFixture.Source },
+                Array.Empty<DriverStudioEngine.DriverPackage>(), false);
+            studioPanel.PreviewForTest(unverifiedRows, verified: false);
+            Application.DoEvents();
+            var studioDetails = Find(studioPanel, "txtStudioDetails") as TextBox;
+            Require(studioGrid.Rows.Count == 1 &&
+                    Convert.ToString(studioGrid.Rows[0].Cells[4].Value) == "Not checked" &&
+                    studioGrid.Rows[0].Cells[4].ToolTipText.Contains("WIM inventory NOT checked") &&
+                    studioDetails is not null &&
+                    studioDetails.Text.Contains("WIM inventory: NOT verified") &&
+                    !installStudio.Enabled && !selectAllEligible.Enabled &&
+                    auditAllInf!.Enabled && !unverifiedRows[0].Selected &&
+                    studioGrid.Rows[0].Cells[0].ReadOnly &&
+                    !(bool)studioGrid.Rows[0].Cells[0].Value!,
+                    "Unverified image inventory must display explicit tooltip and block import.");
+            var conflictVersion = new DriverStudioEngine.DriverPackage {
+                InfName = driverFixture.Source.InfName,
+                FilePath = driverFixture.Source.FilePath + "-alternate",
+                Provider = driverFixture.Source.Provider,
+                ClassName = driverFixture.Source.ClassName,
+                Version = "99.1.0.0",
+                DriverDate = driverFixture.Source.DriverDate,
+                Sha256 = new string('F', 64)
+            };
+            var sourceReviewRows = DriverStudioEngine.CompareCandidates(
+                new[] { driverFixture.Source, conflictVersion },
+                Array.Empty<DriverStudioEngine.DriverPackage>(), false);
+            studioPanel.PreviewForTest(sourceReviewRows, verified: false);
+            Application.DoEvents();
+            Require(studioGrid.Rows.Count == 2 &&
+                    sourceReviewRows.All(x => x.Status == "Review" && !x.Selected) &&
+                    studioGrid.Rows.Cast<DataGridViewRow>().All(row =>
+                        row.Cells[4].ToolTipText.Contains("Review SOURCE INF")) &&
+                    studioGrid.Columns[4].HeaderCell.ToolTipText.Contains("Not checked") &&
+                    !installStudio.Enabled,
+                    "Review must disclose SOURCE ambiguity, even with unmounted WIM; no import.");
+            Console.WriteLine("PASS Driver Studio Review source/Not checked WIM status clarity");
             studioPanel.PreviewForTest(studioPreview);
             Application.DoEvents();
             var visibleScan = (Button)Find(studioPanel, "btnStudioScan")!;
@@ -3590,6 +3654,42 @@ internal static class LayoutSmoke
                 Require(studioSource.Width >= 200,
                     "Driver Studio source path was squeezed under high font scaling");
             Snapshot(form, "DISM-GUI-Driver-Studio");
+            // Regression: navigating from Driver Studio to Driver tools through
+            // the SIDEBAR must carry the selected INF source folder.
+            // No Add-Driver handler is invoked by navigation.
+            var legacyDriverSource = Find(tabs.TabPages[1], "txtDriverLocation") as TextBox;
+            Require(legacyDriverSource is not null,
+                    "Legacy Drivers source field must exist for Studio handoff");
+            var studioFolder = System.IO.Path.GetTempPath()
+                .TrimEnd(System.IO.Path.DirectorySeparatorChar);
+            studioSource.Text = studioFolder;
+            tabs.SelectedIndex = 1;
+            Application.DoEvents();
+            Require(string.Equals(legacyDriverSource!.Text,
+                    System.IO.Path.GetFullPath(studioFolder),
+                    StringComparison.OrdinalIgnoreCase),
+                    "Driver tools sidebar failed to retain Driver Studio folder.");
+            tabs.SelectedIndex = 10;
+            Application.DoEvents();
+
+            // Single-INF source should transfer its parent folder, not the
+            // INF filename into a field that only accepts directories.
+            var temporaryInf = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "DISMGUI-Studio-Handoff-" + Guid.NewGuid().ToString("N") + ".inf");
+            try {
+                System.IO.File.WriteAllText(temporaryInf, "test-only source");
+                studioSource.Text = temporaryInf;
+                tabs.SelectedIndex = 1;
+                Application.DoEvents();
+                Require(string.Equals(legacyDriverSource.Text,
+                        System.IO.Path.GetDirectoryName(temporaryInf),
+                        StringComparison.OrdinalIgnoreCase),
+                        "A single INF source should hand its directory to Driver tools.");
+            } finally {
+                System.IO.File.Delete(temporaryInf);
+            }
+            Console.WriteLine("PASS Driver Studio sidebar source folder handoff (folder and INF)");
             tabs.SelectedIndex = 0;
             Application.DoEvents();
             Console.WriteLine("PASS embedded Driver Studio preview and safe comparison UI");

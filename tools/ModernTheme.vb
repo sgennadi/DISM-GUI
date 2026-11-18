@@ -849,7 +849,23 @@ Public NotInheritable Class ModernTheme
                                    side.Padding.Right - 13)
             Next
         End Sub
+        ' Keep Driver Studio and legacy Driver tools source directories aligned
+        ' when the operator uses the sidebar. Do not overwrite a manually
+        ' selected Drivers folder when navigating from unrelated workspaces.
+        Dim previousWorkspaceIndex As Integer = tabs.SelectedIndex
         AddHandler tabs.SelectedIndexChanged, Sub(sender, e)
+            Dim fromIndex = previousWorkspaceIndex
+            previousWorkspaceIndex = tabs.SelectedIndex
+            If fromIndex = studioPageIndex AndAlso tabs.SelectedIndex = 1 Then
+                Dim studioFolder = driverStudio.SelectedSourceFolderForDriverTools()
+                If studioFolder.Length > 0 Then
+                    Dim legacyDriverFolder = TryCast(tabs.TabPages(1).Controls.Find(
+                        "txtDriverLocation", True).FirstOrDefault(), TextBox)
+                    If legacyDriverFolder IsNot Nothing Then
+                        legacyDriverFolder.Text = studioFolder
+                    End If
+                End If
+            End If
             setActive(Math.Max(0, tabs.SelectedIndex))
             If tabs.SelectedIndex = wimPageIndex Then wim360.ActivateFromMount()
             If tabs.SelectedIndex = studioPageIndex Then

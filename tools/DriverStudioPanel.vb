@@ -29,6 +29,12 @@ Public NotInheritable Class DriverStudioPanel
     Private ReadOnly installButton As Button
     Private ReadOnly stopButton As Button
     Private ReadOnly auditButton As Button
+    Private ReadOnly selectEligibleButton As Button
+    Private ReadOnly clearSelectionButton As Button
+    Private ReadOnly auditAllButton As Button
+    Private ReadOnly selectionLabel As Label
+    Private bulkSelectionUpdate As Boolean
+    Private lastAutoCompareSignature As String = ""
     Private ReadOnly targetLabel As Label
     Private ReadOnly statusLabel As Label
     Private ReadOnly totalMetric As Label
@@ -89,7 +95,7 @@ Public NotInheritable Class DriverStudioPanel
         Dim layoutScale As Single = Math.Max(1.0F, Me.Font.Height / 16.0F)
         Dim stackSource As Boolean = layoutScale > 1.15F
         ' Reserve TWO full rows for the source and Scan INF at higher DPI.
-        For Each h As Integer In {60, If(stackSource, 116, 64), 52, 42, 235, 72, 155, 74, 80}
+        For Each h As Integer In {60, If(stackSource, 116, 64), 52, 42, 283, 72, 155, 74, 80}
             rootLayout.RowStyles.Add(New RowStyle(SizeType.Absolute,
                 CInt(Math.Ceiling(h * layoutScale))))
         Next
@@ -277,14 +283,89 @@ Public NotInheritable Class DriverStudioPanel
                 DataGridViewDataErrorContexts.Commit)
         End Sub
         AddHandler grid.CellValueChanged, Sub(sender, e)
-            If e.RowIndex >= 0 AndAlso e.RowIndex < decisions.Count AndAlso
-               e.ColumnIndex = 0 Then
-                Dim value = grid.Rows(e.RowIndex).Cells(0).Value
-                decisions(e.RowIndex).Selected = TypeOf value Is Boolean AndAlso CBool(value)
-                UpdateInstallReady()
+            If bulkSelectionUpdate OrElse e.ColumnIndex <> 0 OrElse
+               e.RowIndex < 0 OrElse e.RowIndex >= decisions.Count Then Return
+            Dim value = grid.Rows(e.RowIndex).Cells(0).Value
+            Dim checked = TypeOf value Is Boolean AndAlso CBool(value)
+            Dim eligible = comparisonVerified AndAlso
+                DriverStudioInstaller.IsAllowed(decisions(e.RowIndex))
+            decisions(e.RowIndex).Selected = checked AndAlso eligible
+            If checked AndAlso Not eligible Then
+                bulkSelectionUpdate = True
+                Try
+                    grid.Rows(e.RowIndex).Cells(0).Value = False
+                Finally
+                    bulkSelectionUpdate = False
+                End Try
             End If
+            UpdateInstallReady()
         End Sub
-        rootLayout.Controls.Add(grid, 0, 4)
+
+        Dim driverGridArea As New TableLayoutPanel With {
+            .Name = "DriverStudioGridArea", .Dock = DockStyle.Fill,
+            .RowCount = 2, .ColumnCount = 1,
+            .BackColor = Color.White, .Margin = Padding.Empty
+        }
+        driverGridArea.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+        driverGridArea.RowStyles.Add(New RowStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(45 * layoutScale))))
+        driverGridArea.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        rootLayout.Controls.Add(driverGridArea, 0, 4)
+
+        Dim selectionBar As New TableLayoutPanel With {
+            .Name = "DriverStudioSelectionBar", .Dock = DockStyle.Fill,
+            .RowCount = 1, .ColumnCount = 4,
+            .Margin = New Padding(0, 0, 0, 3), .BackColor = Color.White
+        }
+        selectionBar.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        selectionBar.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(169 * layoutScale))))
+        selectionBar.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(104 * layoutScale))))
+        selectionBar.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(142 * layoutScale))))
+        selectionBar.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+        driverGridArea.Controls.Add(selectionBar, 0, 0)
+
+        selectEligibleButton = New Button With {
+            .Name = "btnStudioSelectAllEligible", .Text = "Select all eligible",
+            .Dock = DockStyle.Fill, .Enabled = False,
+            .Margin = New Padding(0, 3, 7, 4)
+        }
+        ModernTheme.StyleButton(selectEligibleButton, "secondary")
+        AddHandler selectEligibleButton.Click, AddressOf SelectAllEligibleClicked
+        selectEligibleButton.AccessibleDescription =
+            "Select every New or Newer INF only AFTER mounted WIM comparison."
+        selectionBar.Controls.Add(selectEligibleButton, 0, 0)
+
+        clearSelectionButton = New Button With {
+            .Name = "btnStudioClearAll", .Text = "Clear",
+            .Dock = DockStyle.Fill, .Enabled = False,
+            .Margin = New Padding(0, 3, 7, 4)
+        }
+        ModernTheme.StyleButton(clearSelectionButton, "neutral")
+        AddHandler clearSelectionButton.Click, Sub(sender, e)
+            ApplyBulkSelection(False)
+            statusLabel.Text = "Driver import plan cleared."
+        End Sub
+        selectionBar.Controls.Add(clearSelectionButton, 1, 0)
+
+        auditAllButton = New Button With {
+            .Name = "btnStudioAuditAll", .Text = "Audit all INF",
+            .Dock = DockStyle.Fill, .Enabled = False,
+            .Margin = New Padding(0, 3, 7, 4)
+        }
+        ModernTheme.StyleButton(auditAllButton, "browse")
+        AddHandler auditAllButton.Click, AddressOf AuditAllClicked
+        auditAllButton.AccessibleDescription =
+            "Read-only source package and CAT signature audit, maximum 30 INF per run."
+        selectionBar.Controls.Add(auditAllButton, 2, 0)
+
+        selectionLabel = WriteLabel("0 selected", 8.8F, False, ModernTheme.Muted)
+        selectionLabel.Name = "lblStudioSelection"
+        selectionLabel.TextAlign = ContentAlignment.MiddleRight
+        selectionBar.Controls.Add(selectionLabel, 3, 0)
+        driverGridArea.Controls.Add(grid, 0, 1)
 
         Dim detailsLayout As New TableLayoutPanel With {
             .Dock = DockStyle.Fill, .RowCount = 2, .ColumnCount = 2,
@@ -443,16 +524,56 @@ Public NotInheritable Class DriverStudioPanel
         Return value
     End Function
 
+    ' Transfer only the selected source folder to legacy Driver tools.
+    ' A single INF selection maps to its parent folder. This never authorizes
+    ' adding drivers or enables the legacy "Add drivers" action.
+    Public Function SelectedSourceFolderForDriverTools() As String
+        Dim selected = sourceBox.Text.Trim().Trim(""""c)
+        If selected.Length = 0 Then Return ""
+        Try
+            If Directory.Exists(selected) Then Return Path.GetFullPath(selected)
+            If File.Exists(selected) AndAlso
+               selected.EndsWith(".inf", StringComparison.OrdinalIgnoreCase) Then
+                Return Path.GetDirectoryName(Path.GetFullPath(selected))
+            End If
+        Catch ex As ArgumentException
+        Catch ex As NotSupportedException
+        Catch ex As PathTooLongException
+        End Try
+        Return ""
+    End Function
+
     Public Sub ActivateFromDrivers()
         If Not isWorking AndAlso String.IsNullOrWhiteSpace(sourceBox.Text) Then
             Dim path = currentSource()
             If Not String.IsNullOrWhiteSpace(path) Then sourceBox.Text = path.Trim()
         End If
+        ' A selected folder is NOT proof that Windows still mounts the image.
+        ' An earlier /Discard or /Cleanup-Mountpoints may have removed it.
         targetLabel.Text = "Target: " & If(String.IsNullOrWhiteSpace(currentWim()),
             "No WIM selected", Path.GetFileName(currentWim())) &
             "  |  Index " & currentIndex().ToString() &
-            "  |  Mount: " & If(String.IsNullOrWhiteSpace(currentMount()),
-                "Not set", currentMount())
+            "  |  Mount not verified (use Compare)"
+        targetLabel.AccessibleDescription = "Selected mount folder: " &
+            If(String.IsNullOrWhiteSpace(currentMount()), "Not set", currentMount())
+        ' A successful Mount does not re-run an earlier INF-only scan.
+        ' When returning from Mount to Driver Studio, automatically attempt ONE
+        ' read-only comparison if the source was already scanned and Windows
+        ' exists in the selected mount. WIMGAPI still validates exact WIM/index.
+        If isWorking OrElse comparisonVerified OrElse decisions.Count = 0 OrElse
+           String.IsNullOrWhiteSpace(sourceBox.Text.Trim()) Then Return
+        Dim wim = If(currentWim(), "").Trim()
+        Dim mount = If(currentMount(), "").Trim()
+        If wim.Length = 0 OrElse mount.Length = 0 OrElse Not File.Exists(wim) Then Return
+        If Not Directory.Exists(Path.Combine(mount, "Windows")) Then Return
+        Dim signature = wim.ToUpperInvariant() & "|" & currentIndex().ToString() &
+                        "|" & mount.ToUpperInvariant() & "|" &
+                        sourceBox.Text.Trim().ToUpperInvariant()
+        If String.Equals(signature, lastAutoCompareSignature,
+                         StringComparison.Ordinal) Then Return
+        lastAutoCompareSignature = signature
+        statusLabel.Text = "Mounted Windows folder detected. Comparing INF versions..."
+        CompareClicked(Me, EventArgs.Empty)
     End Sub
 
     Private Sub InvalidateComparison()
@@ -469,6 +590,7 @@ Public NotInheritable Class DriverStudioPanel
         newMetric.Text = "—"
         sameMetric.Text = "—"
         lastTarget = "Not checked"
+        lastAutoCompareSignature = ""
         statusLabel.Text = "Folder changed. Scan INF before comparing installed versions."
     End Sub
 
@@ -486,8 +608,53 @@ Public NotInheritable Class DriverStudioPanel
     End Sub
 
     Private Sub UpdateInstallReady()
-        installButton.Enabled = Not isWorking AndAlso comparisonVerified AndAlso
+        Dim eligible = comparisonVerified AndAlso decisions.Any(
+            Function(d) DriverStudioInstaller.IsAllowed(d))
+        installButton.Enabled = Not isWorking AndAlso eligible AndAlso
             decisions.Any(Function(d) d.Selected AndAlso DriverStudioInstaller.IsAllowed(d))
+        selectEligibleButton.Enabled = Not isWorking AndAlso eligible
+        clearSelectionButton.Enabled = Not isWorking AndAlso
+            decisions.Any(Function(d) d.Selected)
+        auditAllButton.Enabled = Not isWorking AndAlso decisions.Count > 0
+        selectionLabel.Text = decisions.Where(Function(d) d.Selected).Count().ToString() &
+            " selected"
+    End Sub
+
+    Private Sub ApplyBulkSelection(selectEligible As Boolean)
+        If isWorking OrElse decisions.Count = 0 Then Return
+        Dim eligibleCount = decisions.Where(Function(d)
+            Return comparisonVerified AndAlso DriverStudioInstaller.IsAllowed(d)
+        End Function).Count()
+        If selectEligible AndAlso eligibleCount > 200 Then
+            statusLabel.Text = "Import limit: 200 INF per batch. Narrow the source first."
+            Return
+        End If
+        bulkSelectionUpdate = True
+        grid.SuspendLayout()
+        Try
+            For i As Integer = 0 To decisions.Count - 1
+                Dim selected = selectEligible AndAlso comparisonVerified AndAlso
+                    DriverStudioInstaller.IsAllowed(decisions(i))
+                decisions(i).Selected = selected
+                grid.Rows(i).Cells(0).Value = selected
+            Next
+        Finally
+            grid.ResumeLayout(False)
+            bulkSelectionUpdate = False
+        End Try
+        UpdateInstallReady()
+    End Sub
+
+    Private Sub SelectAllEligibleClicked(sender As Object, e As EventArgs)
+        If Not comparisonVerified Then
+            statusLabel.Text = "Mount and Compare with WIM first. " &
+                "Audit all INF checks source packages without a mount."
+            Return
+        End If
+        ApplyBulkSelection(True)
+        statusLabel.Text = "Selected " &
+            decisions.Where(Function(d) d.Selected).Count().ToString() &
+            " eligible New/Newer INF(s). Review and audit before import."
     End Sub
 
     Private Async Sub ScanClicked(sender As Object, e As EventArgs)
@@ -503,6 +670,8 @@ Public NotInheritable Class DriverStudioPanel
             Dim results = DriverStudioEngine.CompareCandidates(
                 sourceItems, New List(Of DriverStudioEngine.DriverPackage)(), False)
             ShowDecisions(results, "Image inventory not checked")
+            statusLabel.Text = "INF scanned: " & results.Count.ToString() &
+                ". No WIM comparison. Review = source conflict; Not checked = needs mount."
         Catch ex As Exception
             If IsDisposed Then Return
             RuntimeDiagnostics.RecordException("Driver Studio scan", ex)
@@ -553,6 +722,9 @@ Public NotInheritable Class DriverStudioPanel
             comparedRecurse = includeSubfolders
             ShowDecisions(results, Path.GetFileName(imagePath) & " / Index " &
                           index.ToString() & " / " & mount, True)
+            targetLabel.Text = "Target: " & Path.GetFileName(imagePath) &
+                " | Index " & index.ToString() & " | WIM inventory verified"
+            targetLabel.AccessibleDescription = "Verified mount folder: " & mount
             statusLabel.Text = "Compared " & results.Count.ToString() &
                                " INF(s) against " & installed.Count.ToString() &
                                " installed driver entries. No changes made."
@@ -565,14 +737,22 @@ Public NotInheritable Class DriverStudioPanel
             Dim results = DriverStudioEngine.CompareCandidates(
                 sourceItems, New List(Of DriverStudioEngine.DriverPackage)(), False)
             ShowDecisions(results, "Inventory NOT verified")
-            statusLabel.Text = "Not checked: " & ex.Message
+            targetLabel.Text = "Target: " & If(String.IsNullOrWhiteSpace(imagePath),
+                "No WIM selected", Path.GetFileName(imagePath)) &
+                " | Index " & index.ToString() & " | Mount NOT verified"
+            targetLabel.AccessibleDescription = "Last selected folder: " & mount
+            statusLabel.Text = "WIM NOT verified. INF scan only; mount this index, then Compare."
+            statusLabel.AccessibleDescription = ex.Message
         Finally
             If Not IsDisposed Then WorkState(False)
         End Try
     End Sub
 
-    Public Sub PreviewForTest(items As IEnumerable(Of DriverStudioEngine.Decision))
-        ShowDecisions(items.ToList(), "CI fixture - mounted index verified", True)
+    Public Sub PreviewForTest(items As IEnumerable(Of DriverStudioEngine.Decision),
+                              Optional verified As Boolean = True)
+        ShowDecisions(items.ToList(),
+                      If(verified, "CI fixture - mounted index verified",
+                         "CI fixture - INF-only scan; WIM not verified"), verified)
     End Sub
 
     Private Sub ShowDecisions(results As List(Of DriverStudioEngine.Decision),
@@ -583,15 +763,27 @@ Public NotInheritable Class DriverStudioPanel
         packageAudits.Clear()
         lastTarget = comparisonTarget
         decisions = results
+        grid.ShowCellToolTips = True
+        grid.Columns(4).HeaderCell.ToolTipText =
+            "Review = source INF metadata/conflict. Not checked = mounted WIM inventory unavailable."
         grid.SuspendLayout()
         Try
             grid.Rows.Clear()
             For Each d In results
+                Dim canSelect = verified AndAlso DriverStudioInstaller.IsAllowed(d)
+                If Not canSelect Then d.Selected = False
                 Dim number = grid.Rows.Add(d.Selected, d.Candidate.InfName,
                     d.Candidate.Version, d.InstalledVersion, d.Status)
-                grid.Rows(number).Cells(0).ReadOnly =
-                    Not DriverStudioInstaller.IsAllowed(d)
+                grid.Rows(number).Cells(0).ReadOnly = Not canSelect
+                grid.Rows(number).Cells(0).ToolTipText = If(canSelect,
+                    "Include this New/Newer INF in the installation plan.",
+                    "Not eligible for import; review or compare WIM first.")
                 Dim cell = grid.Rows(number).Cells(4)
+                cell.ToolTipText = If(Not verified AndAlso d.Status = "Review",
+                    "Review SOURCE INF (no WIM comparison). " & d.Detail,
+                    If(Not verified AndAlso d.Status = "Not checked",
+                       "WIM inventory NOT checked. " & d.Detail,
+                       d.Detail))
                 If d.Status = "Same version" OrElse d.Status = "Duplicate source" Then
                     cell.Style.ForeColor = ModernTheme.Muted
                 ElseIf d.Status = "New" OrElse d.Status = "Newer" Then
@@ -632,7 +824,10 @@ Public NotInheritable Class DriverStudioPanel
            grid.SelectedRows(0).Index >= decisions.Count Then Return
         Dim d = decisions(grid.SelectedRows(0).Index)
         Dim src = d.Candidate
-        detailBox.Text = d.Status & " — " & d.Detail & Environment.NewLine &
+        detailBox.Text = "WIM inventory: " &
+            If(comparisonVerified, "verified", "NOT verified (source INF scan only)") &
+            Environment.NewLine &
+            d.Status & " — " & d.Detail & Environment.NewLine &
             "INF: " & src.FilePath & Environment.NewLine &
             "Provider: " & src.Provider & "   Class: " & src.ClassName &
             "   Version: " & src.Version & "   Date: " & src.DriverDate & Environment.NewLine &
@@ -656,41 +851,56 @@ Public NotInheritable Class DriverStudioPanel
     ' otherwise the highlighted INF can be inspected individually.
     Private Async Sub AuditClicked(sender As Object, e As EventArgs)
         If isWorking OrElse decisions.Count = 0 Then Return
-        Dim selected = decisions.Where(Function(d) d.Selected).
+        Dim chosen = decisions.Where(Function(d) d.Selected).
             Select(Function(d) d.Candidate).ToList()
-        If selected.Count = 0 AndAlso grid.SelectedRows.Count > 0 Then
+        If chosen.Count = 0 AndAlso grid.SelectedRows.Count > 0 Then
             Dim rowIndex = grid.SelectedRows(0).Index
             If rowIndex >= 0 AndAlso rowIndex < decisions.Count Then
-                selected.Add(decisions(rowIndex).Candidate)
+                chosen.Add(decisions(rowIndex).Candidate)
             End If
         End If
-        If selected.Count = 0 Then Return
-        If selected.Count > 30 Then
+        Await AuditPackagesAsync(chosen)
+    End Sub
+
+    Private Async Sub AuditAllClicked(sender As Object, e As EventArgs)
+        If isWorking OrElse decisions.Count = 0 Then Return
+        ' Audit is READ-ONLY and can inspect INF/CAT even when the WIM
+        ' inventory was not verified. It never selects drivers for install.
+        Await AuditPackagesAsync(decisions.Select(Function(d) d.Candidate).ToList())
+    End Sub
+
+    Private Async Function AuditPackagesAsync(
+        packages As List(Of DriverStudioEngine.DriverPackage)) As Task
+        If isWorking OrElse packages.Count = 0 Then Return
+        If packages.Count > 30 Then
             MessageBox.Show(Me.FindForm(),
-                "Audit up to 30 INF packages at a time. Narrow your selected plan.",
+                "Audit up to 30 INF packages at a time. Narrow the source folder.",
                 "Driver Studio - Package audit", MessageBoxButtons.OK,
                 MessageBoxIcon.Information)
             Return
         End If
         Dim targetArchitecture = If(comparisonVerified, comparedArchitecture, "")
         WorkState(True)
-        Dim verifiedCount As Integer = 0
+        Dim trusted As Integer = 0
         Try
-            For Each package In selected
-                statusLabel.Text = "Auditing " & (verifiedCount + 1).ToString() &
-                    "/" & selected.Count.ToString() & ": " & package.InfName
+            For i As Integer = 0 To packages.Count - 1
+                Dim package = packages(i)
+                statusLabel.Text = "Auditing " & (i + 1).ToString() &
+                    "/" & packages.Count.ToString() & ": " & package.InfName
                 Dim report = Await Task.Run(Function()
                     Return DriverStudioPackageAudit.Audit(
                         package, targetArchitecture, True)
                 End Function)
                 If IsDisposed Then Return
                 packageAudits(package.FilePath) = report
-                If report.CanInstall Then verifiedCount += 1
+                If report.CanInstall Then trusted += 1
                 detailBox.Text = report.Summary
             Next
-            statusLabel.Text = "Package audit: " & verifiedCount.ToString() & "/" &
-                selected.Count.ToString() & " trusted. " &
-                "Unverified CAT files cannot be installed by Driver Studio."
+            statusLabel.Text = "Package audit: " & trusted.ToString() & "/" &
+                packages.Count.ToString() & " trusted. " &
+                If(comparisonVerified,
+                   "WIM compared; install still requires R/W mount and approval.",
+                   "WIM not compared. Mount the image and run Compare for versions.")
             ShowSelected()
         Catch ex As Exception
             RuntimeDiagnostics.RecordException("Driver Studio package audit", ex)
@@ -700,7 +910,7 @@ Public NotInheritable Class DriverStudioPanel
         Finally
             If Not IsDisposed Then WorkState(False)
         End Try
-    End Sub
+    End Function
 
     ' Explicit controlled write path. The preview is never an authorization to
     ' install a folder: only checked, still-verified New/Newer INF files can run.
