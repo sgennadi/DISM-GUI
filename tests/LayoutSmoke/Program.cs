@@ -3706,6 +3706,51 @@ internal static class LayoutSmoke
                 System.IO.File.Delete(temporaryInf);
             }
             Console.WriteLine("PASS Driver Studio sidebar source folder handoff (folder and INF)");
+            // Exercise the actual asynchronous one-click scan entrypoint with no
+            // mounted image. Merely selecting an INF may never create a "New"
+            // install plan or launch DISM servicing.
+            var uiScanRoot = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                "DISMGUI-OneScan-" + Guid.NewGuid().ToString("N"));
+            System.IO.Directory.CreateDirectory(uiScanRoot);
+            try {
+                System.IO.File.WriteAllText(System.IO.Path.Combine(uiScanRoot, "smoke.inf"),
+                    string.Join("\r\n", new[] {
+                        "[Version]", "Signature=\"$Windows NT$\"",
+                        "Class=Net", "Provider=%Contoso%",
+                        "DriverVer=11/03/2026,2.1.4.0",
+                        "CatalogFile=smoke.cat", "",
+                        "[Manufacturer]", "%Contoso%=ContosoModels,NTamd64",
+                        "[ContosoModels.NTamd64]",
+                        "%Device%=Install,PCI\\VEN_1234&DEV_4567", "",
+                        "[Strings]", "Contoso=\"Contoso Corporation\"",
+                        "Device=\"Contoso Ethernet\""
+                    }));
+                System.IO.File.WriteAllText(
+                    System.IO.Path.Combine(uiScanRoot, "smoke.cat"), "unsigned smoke CAT");
+                studioSource.Text = uiScanRoot;
+                Application.DoEvents();
+                var scanStatus = Find(studioPanel, "lblStudioStatus") as Label;
+                Require(scanStatus is not null && visibleScan.Visible &&
+                        visibleScan.Enabled && studioGrid.Rows.Count == 0,
+                        "Changing source must invalidate previous verified comparison.");
+                visibleScan.PerformClick();
+                var scanDeadline = DateTime.UtcNow.AddSeconds(25);
+                while (DateTime.UtcNow < scanDeadline &&
+                       !scanStatus!.Text.Contains("WIM not mounted", StringComparison.OrdinalIgnoreCase) &&
+                       !scanStatus.Text.Contains("INF scan failed", StringComparison.OrdinalIgnoreCase)) {
+                    Application.DoEvents();
+                    System.Threading.Thread.Sleep(20);
+                }
+                Require(scanStatus!.Text.Contains("WIM not mounted", StringComparison.OrdinalIgnoreCase) &&
+                        studioGrid.Rows.Count == 1 &&
+                        Convert.ToString(studioGrid.Rows[0].Cells[4].Value) == "Not checked" &&
+                        studioGrid.Rows[0].Cells[0].ReadOnly &&
+                        !installStudio.Enabled,
+                        "One-click Scan / Refresh without mounted WIM must be read-only and unverified.");
+                Console.WriteLine("PASS actual Scan / Refresh source-only invocation without mounted WIM");
+            } finally {
+                System.IO.Directory.Delete(uiScanRoot, recursive: true);
+            }
             // A previously verified result must never survive an unmount:
             // when the operator returns, versions are unverified and ineligible.
             studioPanel.PreviewForTest(newStudio, verified: true);
