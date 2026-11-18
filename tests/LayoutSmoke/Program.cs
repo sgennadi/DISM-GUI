@@ -3351,11 +3351,12 @@ internal static class LayoutSmoke
             var mountSubnav = Find(form, "navWimMount") as Button;
             var driverSubnav = Find(form, "navDriverCommands") as Button;
             var studioScanQuick = Find(form, "btnStudioScanQuick") as Button;
+            var studioBrowseQuick = Find(form, "btnStudioBrowse") as Button;
             var packagesNav = Find(form, "nav2") as Button;
             var featuresNav = Find(form, "nav3") as Button;
             var applyNav = Find(form, "nav8") as Button;
             Require(mountSubnav is not null && driverSubnav is not null &&
-                    studioScanQuick is not null &&
+                    studioScanQuick is not null && studioBrowseQuick is not null &&
                     mountSubnav.Text.Trim() == "Mount" &&
                     driverSubnav.Text.Trim() == "Driver tools" &&
                     packagesNav?.Text.TrimStart().StartsWith("01  Packages") == true &&
@@ -3374,20 +3375,38 @@ internal static class LayoutSmoke
             Require(tabs.SelectedIndex == 2, "Renumbered Packages must still navigate to original TabPage 2");
             tabs.SelectedIndex = 10;
             Application.DoEvents();
+            var studioSourceRow = Find(tabs.TabPages[10], "DriverStudioSourceRow")
+                as TableLayoutPanel;
+            var studioInputQuick = Find(tabs.TabPages[10], "txtStudioSource") as TextBox;
+            var workspaceHeader = Find(form, "WorkspaceHeaderControls")
+                as TableLayoutPanel;
             Require(studioScanQuick!.Visible && studioScanQuick.Enabled &&
                     studioScanQuick.Text == "Scan / Refresh" &&
-                    studioScanQuick.Height >= 26,
-                "Driver Studio must expose its single read-only Scan / Refresh action in the header");
-            VerifyReadableButton(studioScanQuick, "Driver Studio single Scan / Refresh at high DPI");
-            var quickBounds = studioScanQuick.RectangleToScreen(studioScanQuick.ClientRectangle);
+                    studioScanQuick.Parent == studioSourceRow &&
+                    studioSourceRow is not null && studioInputQuick is not null &&
+                    studioSourceRow.GetColumn(studioScanQuick) == 1,
+                "Scan / Refresh must sit beside/below the source path, not in the header.");
+            Require(studioBrowseQuick!.Visible && studioBrowseQuick.Enabled &&
+                    studioBrowseQuick.Text == "Choose folder" &&
+                    studioBrowseQuick.Parent == workspaceHeader &&
+                    workspaceHeader is not null &&
+                    workspaceHeader.GetColumn(studioBrowseQuick) == 1,
+                "Choose folder must live in the always-visible workspace header.");
+            VerifyReadableButton(studioBrowseQuick, "Driver Studio Choose folder header action at high DPI");
+            VerifyReadableButton(studioScanQuick, "Driver Studio source-row Scan / Refresh at high DPI");
+            var browseBounds = studioBrowseQuick.RectangleToScreen(studioBrowseQuick.ClientRectangle);
+            var scanBounds = studioScanQuick.RectangleToScreen(studioScanQuick.ClientRectangle);
+            var sourceBounds = studioInputQuick.RectangleToScreen(studioInputQuick.ClientRectangle);
             var formBounds = form.RectangleToScreen(form.ClientRectangle);
-            Require(quickBounds.Top >= formBounds.Top &&
-                    quickBounds.Bottom <= formBounds.Bottom,
-                "Driver Studio Scan / Refresh must remain onscreen at high DPI");
+            Require(browseBounds.Top >= formBounds.Top &&
+                    browseBounds.Bottom <= formBounds.Bottom &&
+                    !Rectangle.Intersect(scanBounds, sourceBounds).IntersectsWith(scanBounds) &&
+                    studioInputQuick.Height >= studioInputQuick.Font.Height + 4,
+                "Choose folder and Scan / Refresh must be readable, distinct from the source field at high DPI.");
             tabs.SelectedIndex = 9;
             Application.DoEvents();
-            Require(!studioScanQuick.Visible,
-                "Driver Studio Scan / Refresh must not cover the WIM 360 header");
+            Require(!studioBrowseQuick.Visible && !studioScanQuick.Visible,
+                "Driver Studio Choose folder and Scan / Refresh must not cover WIM 360.");
             var dashboard = Find(tabs.TabPages[9], "Wim360Dashboard") as Wim360Dashboard;
             Require(dashboard is not null &&
                     Find(dashboard, "Wim360Layout") is TableLayoutPanel &&

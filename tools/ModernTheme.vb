@@ -769,8 +769,8 @@ Public NotInheritable Class ModernTheme
         Dim pageHeading = TextLabel(sectionNames(0).ToUpperInvariant(), UiFont(12.0F, True), TextInk)
         pageHeading.Dock = DockStyle.Fill
         pageHeading.TextAlign = ContentAlignment.MiddleLeft
-        Dim studioScanShortcut As Button = Nothing
-        Dim studioScanColumn As ColumnStyle = Nothing
+        Dim studioBrowseShortcut As Button = Nothing
+        Dim studioBrowseColumn As ColumnStyle = Nothing
         Dim setActive As Action(Of Integer) = Sub(index)
             For n As Integer = 0 To navButtons.Count - 1
                 Dim b = navButtons(n)
@@ -805,10 +805,13 @@ Public NotInheritable Class ModernTheme
                                      If(index = wimPageIndex, "WIM 360",
                                         If(index = studioPageIndex, "DRIVER STUDIO",
                                            sectionNames(Math.Min(index, 8)).ToUpperInvariant()))))
-            If studioScanShortcut IsNot Nothing Then
-                Dim showScan = index = studioPageIndex
-                studioScanColumn.Width = If(showScan, 190, 0)
-                studioScanShortcut.Visible = showScan
+            If studioBrowseShortcut IsNot Nothing Then
+                Dim showBrowse = index = studioPageIndex
+                Dim recommended = RecommendedButtonSize(studioBrowseShortcut, 150)
+                studioBrowseColumn.Width = If(showBrowse,
+                    Math.Max(165, recommended.Width +
+                             studioBrowseShortcut.Margin.Horizontal + 12), 0)
+                studioBrowseShortcut.Visible = showBrowse
             End If
         End Sub
 
@@ -887,17 +890,21 @@ Public NotInheritable Class ModernTheme
             .BackColor = Backdrop
         }
         workspaceHeader.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        studioScanColumn = New ColumnStyle(SizeType.Absolute, 0)
-        workspaceHeader.ColumnStyles.Add(studioScanColumn)
+        studioBrowseColumn = New ColumnStyle(SizeType.Absolute, 0)
+        workspaceHeader.ColumnStyles.Add(studioBrowseColumn)
         workspaceHeader.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         content.Controls.Add(workspaceHeader, 0, 0)
         workspaceHeader.Controls.Add(pageHeading, 0, 0)
-        ' One visible Scan / Refresh action. Its handler and disabled/busy
-        ' state belong to Driver Studio; the workspace header keeps it visible
-        ' even when the source list is scrolled at 175-200% DPI.
-        studioScanShortcut = driverStudio.ScanAction
-        studioScanShortcut.Visible = False
-        workspaceHeader.Controls.Add(studioScanShortcut, 1, 0)
+        ' Folder browsing belongs to the header; scanning lives immediately
+        ' beside the driver source field. Size this caption from its font so
+        ' Choose folder cannot truncate at 125-200% Windows text scaling.
+        studioBrowseShortcut = driverStudio.ChooseFolderAction
+        studioBrowseShortcut.Visible = False
+        workspaceHeader.Controls.Add(studioBrowseShortcut, 1, 0)
+        content.RowStyles(0).Height = Math.Max(
+            content.RowStyles(0).Height,
+            RecommendedButtonSize(studioBrowseShortcut, 140).Height +
+            studioBrowseShortcut.Margin.Vertical + 4)
 
         Dim tabHost As New Panel With {
             .Dock = DockStyle.Fill, .Margin = Padding.Empty,
