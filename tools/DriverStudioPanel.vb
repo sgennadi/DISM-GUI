@@ -640,8 +640,8 @@ Public NotInheritable Class DriverStudioPanel
     End Sub
 
     Private Sub UpdateInstallReady()
-        Dim eligibleCount = decisions.Count(
-            Function(d) DriverStudioInstaller.IsAllowed(d))
+        Dim eligibleCount = decisions.Where(
+            Function(d) DriverStudioInstaller.IsAllowed(d)).Count()
         Dim selectedCount = decisions.Where(Function(d) d.Selected).Count()
         Dim allEligibleSelected = comparisonVerified AndAlso eligibleCount > 0 AndAlso
             decisions.All(Function(d)
