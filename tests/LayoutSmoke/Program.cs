@@ -3591,6 +3591,8 @@ internal static class LayoutSmoke
             Require(studioGrid.Rows.Count == 1 &&
                     Convert.ToString(studioGrid.Rows[0].Cells[4].Value) == "Not checked" &&
                     studioGrid.Rows[0].Cells[4].ToolTipText.Contains("WIM inventory NOT checked") &&
+                    studioDetails is not null &&
+                    studioDetails.Text.Contains("WIM inventory: NOT verified") &&
                     !installStudio.Enabled,
                     "Unverified image inventory must display explicit tooltip and block import.");
             var conflictVersion = new DriverStudioEngine.DriverPackage {
