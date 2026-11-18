@@ -622,6 +622,10 @@ Public NotInheritable Class DriverStudioPanel
         lastAutoCompareSignature = ""
         targetLabel.Text = "WIM comparison pending. Use Scan / Refresh."
         statusLabel.Text = "Source changed. Scan / Refresh to read INF and compare automatically."
+        ' Expired comparisons must clear ALL action states immediately, not
+        ' only the Add button; never rely on a later click in the INF grid.
+        auditButton.Enabled = False
+        UpdateInstallReady()
     End Sub
 
     Private Sub WorkState(busy As Boolean)
