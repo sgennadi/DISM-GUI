@@ -3541,13 +3541,18 @@ internal static class LayoutSmoke
                     "Driver Studio must expose a discoverable read-only package integrity audit");
             VerifyReadableButton(integrityAudit!, "Driver Studio package audit high-DPI button");
             var auditHeading = AllControls(studioPanel).OfType<Label>().FirstOrDefault(l =>
-                l.Text == "PACKAGE DETAILS" || l.Text == "DRIVER PACKAGE  |  DETAILS");
+                l.Text == "PACKAGE DETAILS" || l.Text == "INF DETAILS" ||
+                l.Text == "DRIVER PACKAGE  |  DETAILS");
             Require(auditHeading is not null, "Driver Studio package details heading missing");
             var auditHeadingText = TextRenderer.MeasureText(auditHeading!.Text,
                 auditHeading.Font, new Size(2000, 100),
                 TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
+            Console.WriteLine($"Driver Studio package heading: text={auditHeadingText.Width}, " +
+                $"available={auditHeading.ClientSize.Width}, " +
+                $"details={auditHeading.Parent?.ClientSize.Width}, " +
+                $"copy={copyStudio?.Width}");
             Require(auditHeadingText.Width + 4 <= auditHeading.ClientSize.Width,
-                "Driver Studio package details heading clipped beside Audit selected");
+                "Driver Studio INF details heading clipped beside Copy comparison");
             var auditScroll = Find(studioPanel, "DriverStudioViewport") as Panel;
             Require(auditScroll is not null && auditScroll.AutoScroll,
                     "Driver Studio audit controls need a scrollable viewport");
