@@ -28,6 +28,34 @@ Cleanup-Mountpoints returned 0 but DISM still reported Invalid.
 The on-host result after an actual Windows Restart is NOT available.
 The wizard does not claim to resolve that mount.
 
+### Existing-mount collision (0xC1420127)
+
+A later real field test of `boot.wim`, index 1, reported
+`0xC1420127` on a duplicate R/W mount. The read-only
+`DISM /English /Get-MountedWimInfo` output identified the same WIM/index
+and folder, `Mounted Read/Write : Yes`, `Status : Invalid`.
+This is NOT a new blank mount and is NOT a recovered WIM.
+
+The main Mount button now checks WIMGAPI for the exact WIM/index and
+system-wide registered mount directories before launching DISM, including
+one final recheck in its worker. A normal existing mount or an
+Invalid/Needs Remount/Mounting registration blocks the command and offers
+read-only WIM 360 Mount health. No automatic unmount, remount, registry
+cleanup, folder deletion or write action is performed. Mounting a WIM
+into another image's reserved mount folder is also blocked.
+
+Operator sequence: preserve the WIM and folder, close programs using
+the mount, retain the DISM log, inspect state before/after a proper
+Windows Restart, and use the Recovery Assistant only for read-only
+assessment until the state and any uncommitted changes are understood.
+Microsoft's documented `/Remount-Image` and `/Cleanup-Mountpoints`
+are separate actions, not automatic recovery; `/Cleanup-Mountpoints`
+can remove corrupt mount resources and must not be run blindly when
+uncommitted changes might need preserving.
+
+Official Microsoft reference:
+https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/dism-image-management-command-line-options-s14
+
 ## Stage 2 — Operation Center and Smart Preflight
 
 Tools -> Operation Center (also accessible from WIM 360).
