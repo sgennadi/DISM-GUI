@@ -812,41 +812,56 @@ Public NotInheritable Class DriverStudioPanel
     ' otherwise the highlighted INF can be inspected individually.
     Private Async Sub AuditClicked(sender As Object, e As EventArgs)
         If isWorking OrElse decisions.Count = 0 Then Return
-        Dim selected = decisions.Where(Function(d) d.Selected).
+        Dim chosen = decisions.Where(Function(d) d.Selected).
             Select(Function(d) d.Candidate).ToList()
-        If selected.Count = 0 AndAlso grid.SelectedRows.Count > 0 Then
+        If chosen.Count = 0 AndAlso grid.SelectedRows.Count > 0 Then
             Dim rowIndex = grid.SelectedRows(0).Index
             If rowIndex >= 0 AndAlso rowIndex < decisions.Count Then
-                selected.Add(decisions(rowIndex).Candidate)
+                chosen.Add(decisions(rowIndex).Candidate)
             End If
         End If
-        If selected.Count = 0 Then Return
-        If selected.Count > 30 Then
+        Await AuditPackagesAsync(chosen)
+    End Sub
+
+    Private Async Sub AuditAllClicked(sender As Object, e As EventArgs)
+        If isWorking OrElse decisions.Count = 0 Then Return
+        ' Audit is READ-ONLY and can inspect INF/CAT even when the WIM
+        ' inventory was not verified. It never selects drivers for install.
+        Await AuditPackagesAsync(decisions.Select(Function(d) d.Candidate).ToList())
+    End Sub
+
+    Private Async Function AuditPackagesAsync(
+        packages As List(Of DriverStudioEngine.DriverPackage)) As Task
+        If isWorking OrElse packages.Count = 0 Then Return
+        If packages.Count > 30 Then
             MessageBox.Show(Me.FindForm(),
-                "Audit up to 30 INF packages at a time. Narrow your selected plan.",
+                "Audit up to 30 INF packages at a time. Narrow the source folder.",
                 "Driver Studio - Package audit", MessageBoxButtons.OK,
                 MessageBoxIcon.Information)
             Return
         End If
         Dim targetArchitecture = If(comparisonVerified, comparedArchitecture, "")
         WorkState(True)
-        Dim verifiedCount As Integer = 0
+        Dim trusted As Integer = 0
         Try
-            For Each package In selected
-                statusLabel.Text = "Auditing " & (verifiedCount + 1).ToString() &
-                    "/" & selected.Count.ToString() & ": " & package.InfName
+            For i As Integer = 0 To packages.Count - 1
+                Dim package = packages(i)
+                statusLabel.Text = "Auditing " & (i + 1).ToString() &
+                    "/" & packages.Count.ToString() & ": " & package.InfName
                 Dim report = Await Task.Run(Function()
                     Return DriverStudioPackageAudit.Audit(
                         package, targetArchitecture, True)
                 End Function)
                 If IsDisposed Then Return
                 packageAudits(package.FilePath) = report
-                If report.CanInstall Then verifiedCount += 1
+                If report.CanInstall Then trusted += 1
                 detailBox.Text = report.Summary
             Next
-            statusLabel.Text = "Package audit: " & verifiedCount.ToString() & "/" &
-                selected.Count.ToString() & " trusted. " &
-                "Unverified CAT files cannot be installed by Driver Studio."
+            statusLabel.Text = "Package audit: " & trusted.ToString() & "/" &
+                packages.Count.ToString() & " trusted. " &
+                If(comparisonVerified,
+                   "WIM compared; install still requires R/W mount and approval.",
+                   "WIM not compared. Mount the image and run Compare for versions.")
             ShowSelected()
         Catch ex As Exception
             RuntimeDiagnostics.RecordException("Driver Studio package audit", ex)
@@ -856,7 +871,7 @@ Public NotInheritable Class DriverStudioPanel
         Finally
             If Not IsDisposed Then WorkState(False)
         End Try
-    End Sub
+    End Function
 
     ' Explicit controlled write path. The preview is never an authorization to
     ' install a folder: only checked, still-verified New/Newer INF files can run.
