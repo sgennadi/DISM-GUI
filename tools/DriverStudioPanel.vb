@@ -17,15 +17,12 @@ Public NotInheritable Class DriverStudioPanel
     Private ReadOnly currentWim As Func(Of String)
     Private ReadOnly currentIndex As Func(Of Integer)
     Private ReadOnly currentMount As Func(Of String)
-    Private ReadOnly openDrivers As Action(Of String)
     Private ReadOnly viewport As Panel
     Private ReadOnly rootLayout As TableLayoutPanel
     Private ReadOnly sourceBox As TextBox
     Private ReadOnly recursive As CheckBox
     Private ReadOnly scanButton As Button
-    Private ReadOnly compareButton As Button
     Private ReadOnly copyButton As Button
-    Private ReadOnly transferButton As Button
     Private ReadOnly installButton As Button
     Private ReadOnly stopButton As Button
     Private ReadOnly auditButton As Button
@@ -62,13 +59,11 @@ Public NotInheritable Class DriverStudioPanel
     Public Sub New(getSource As Func(Of String),
                    getWim As Func(Of String),
                    getIndex As Func(Of Integer),
-                   getMount As Func(Of String),
-                   useSourceInDrivers As Action(Of String))
+                   getMount As Func(Of String))
         currentSource = getSource
         currentWim = getWim
         currentIndex = getIndex
         currentMount = getMount
-        openDrivers = useSourceInDrivers
 
         Me.Name = "DriverStudioPanel"
         Me.Dock = DockStyle.Fill
@@ -401,12 +396,11 @@ Public NotInheritable Class DriverStudioPanel
         detailsLayout.Controls.Add(detailBox, 0, 1)
 
         Dim footer As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 3, .RowCount = 1,
+            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 1,
             .Margin = New Padding(0, 11, 0, 0), .BackColor = Color.White
         }
         footer.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(185 * layoutScale))))
-        footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(235 * layoutScale))))
         footer.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         rootLayout.Controls.Add(footer, 0, 7)
         copyButton = New Button With {
@@ -429,20 +423,8 @@ Public NotInheritable Class DriverStudioPanel
             End Try
         End Sub
         footer.Controls.Add(copyButton, 0, 0)
-        transferButton = New Button With {
-            .Name = "btnStudioGoDrivers", .Text = "Open Drivers section",
-            .Dock = DockStyle.Fill, .Enabled = False,
-            .Margin = New Padding(0, 3, 10, 4)
-        }
-        ModernTheme.StyleButton(transferButton, "neutral")
-        transferButton.AutoEllipsis = False
-        AddHandler transferButton.Click, AddressOf OpenDriversClicked
-        footer.Controls.Add(transferButton, 1, 0)
-        Dim warning = WriteLabel("No automatic Commit / Discard",
-                                  8.5F, False, ModernTheme.Muted)
-        warning.TextAlign = ContentAlignment.MiddleRight
-        footer.Controls.Add(warning, 2, 0)
-
+        ' Copy comparison remains available without a second route to Driver tools.
+        ' Driver tools is already accessible through the left navigation.
         Dim importActions As New TableLayoutPanel With {
             .Name = "DriverStudioImportActions",
             .Dock = DockStyle.Fill, .ColumnCount = 3, .RowCount = 1,
@@ -585,7 +567,6 @@ Public NotInheritable Class DriverStudioPanel
         decisions.Clear()
         grid.Rows.Clear()
         copyButton.Enabled = False
-        transferButton.Enabled = False
         totalMetric.Text = "—"
         newMetric.Text = "—"
         sameMetric.Text = "—"
@@ -597,12 +578,10 @@ Public NotInheritable Class DriverStudioPanel
     Private Sub WorkState(busy As Boolean)
         isWorking = busy
         scanButton.Enabled = Not busy
-        compareButton.Enabled = Not busy
         auditButton.Enabled = Not busy AndAlso decisions.Count > 0
         recursive.Enabled = Not busy
         sourceBox.ReadOnly = busy
         grid.ReadOnly = busy
-        transferButton.Enabled = Not busy AndAlso decisions.Count > 0
         stopButton.Enabled = busy AndAlso isInstalling AndAlso Not stopAfterCurrent
         UpdateInstallReady()
     End Sub
@@ -805,7 +784,6 @@ Public NotInheritable Class DriverStudioPanel
             "No INF files found. Select a folder with driver INF packages.",
             "Read-only preview: no drivers selected, no WIM changes.")
         copyButton.Enabled = results.Count > 0
-        transferButton.Enabled = results.Count > 0
         auditButton.Enabled = results.Count > 0
         UpdateInstallReady()
         If results.Count > 0 Then
@@ -1171,73 +1149,4 @@ Public NotInheritable Class DriverStudioPanel
         End Try
     End Sub
 
-    Private Sub OpenDriversClicked(sender As Object, e As EventArgs)
-        If decisions.Count = 0 Then Return
-        Dim folderPath = sourceBox.Text.Trim()
-        If File.Exists(folderPath) Then folderPath = Path.GetDirectoryName(folderPath)
-        If Not Directory.Exists(folderPath) Then Return
-        ' This command only navigates; it never imports drivers by itself.
-        Dim prompt = "Open this source folder in the Drivers section?" &
-                     Environment.NewLine & Environment.NewLine &
-                     "The standard Add Drivers command imports the entire folder," &
-                     Environment.NewLine &
-                     "including same-version or older drivers." &
-                     Environment.NewLine &
-                     "Smart Version Detection does not filter that command."
-        Using confirm As New Form With {
-            .Text = "Open Drivers section",
-            .StartPosition = FormStartPosition.CenterParent,
-            .FormBorderStyle = FormBorderStyle.Sizable,
-            .MaximizeBox = False, .MinimizeBox = False,
-            .ShowInTaskbar = False, .AutoScaleMode = AutoScaleMode.Font,
-            .Font = ModernTheme.UiFont(10.0F),
-            .MinimumSize = New Size(590, 245),
-            .ClientSize = New Size(650, 255)
-        }
-            Dim message As New Label With {
-                .Dock = DockStyle.Fill, .Text = prompt,
-                .Font = ModernTheme.UiFont(10.0F),
-                .ForeColor = ModernTheme.TextInk,
-                .Padding = New Padding(12), .AutoSize = False
-            }
-            Dim popupScale As Single = Math.Max(1.0F, confirm.Font.Height / 18.0F)
-            Dim actions As New FlowLayoutPanel With {
-                .Dock = DockStyle.Fill,
-                .FlowDirection = FlowDirection.RightToLeft,
-                .Padding = New Padding(8), .WrapContents = False
-            }
-            Dim cancel As New Button With {
-                .Text = "Cancel", .DialogResult = DialogResult.Cancel,
-                .Width = 112, .Height = 34
-            }
-            Dim proceed As New Button With {
-                .Text = "Open Drivers", .DialogResult = DialogResult.OK,
-                .Width = 145, .Height = 34
-            }
-            ModernTheme.StyleButton(cancel, "neutral")
-            ModernTheme.StyleButton(proceed, "primary")
-            cancel.Size = New Size(CInt(Math.Ceiling(120 * popupScale)),
-                                   CInt(Math.Ceiling(36 * popupScale)))
-            proceed.Size = New Size(CInt(Math.Ceiling(150 * popupScale)),
-                                    CInt(Math.Ceiling(36 * popupScale)))
-            actions.Controls.Add(cancel)
-            actions.Controls.Add(proceed)
-            Dim dialogLayout As New TableLayoutPanel With {
-                .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 2,
-                .Padding = New Padding(8, 8, 8, 8)
-            }
-            dialogLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-            dialogLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-            dialogLayout.RowStyles.Add(New RowStyle(SizeType.Absolute,
-                CInt(Math.Ceiling(60 * popupScale))))
-            dialogLayout.Controls.Add(message, 0, 0)
-            dialogLayout.Controls.Add(actions, 0, 1)
-            confirm.Controls.Add(dialogLayout)
-            confirm.AcceptButton = proceed
-            confirm.CancelButton = cancel
-            If confirm.ShowDialog(Me.FindForm()) = DialogResult.OK Then
-                openDrivers(folderPath)
-            End If
-        End Using
-    End Sub
 End Class
