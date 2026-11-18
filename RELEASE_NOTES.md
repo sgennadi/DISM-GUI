@@ -1,63 +1,72 @@
-# DISM GUI 4.3.23 — Stable
+# DISM GUI 4.3.24 — Stable
 
-Portable, self-contained .NET 10 / Visual Studio 2026 builds for
-Windows x86, x64 and ARM64. This maintenance release improves
-Driver Studio workflow clarity and safety following operator feedback
-on stable 4.3.22.
+Portable Windows release for x86, x64 and ARM64, built using Visual
+Studio 2026 and self-contained .NET 10. This maintenance release
+simplifies Driver Studio after feedback on stable 4.3.23.
 
-## Driver Studio: read-only comparison by default
+## Simplified Driver Studio
 
-- **No automatically selected INF packages.** After Scan/Compare, all
-  import checkboxes start unchecked, including New and Newer packages.
-  Scanning and comparing drivers never creates a WIM write plan.
-- **Select New / Newer** marks eligible driver packages only when you
-  explicitly request it, then **Clear** can remove all checks.
-- **Audit selected** and **Audit all INF** are grouped side by side
-  above the comparison table. Both actions are read-only.
-  Audit selected checks marked INF packages (or the highlighted INF
-  when none are marked); Audit all checks source packages, up to 30
-  INF packages per audit batch.
-- **Add selected to WIM...** replaces the misleading button text
-  *Install selected INF*. It is an OPTIONAL, separately confirmed
-  write operation that stages selected, audited packages inside a
-  mounted **read/write offline WIM**, not in the currently running
-  Windows PC.
-- Existing OEM driver versions are not deleted or overwritten by
-  DISM Add-Driver; Windows PnP selects a driver using matching and
-  ranking, not strictly the highest version string.
-- Same version, Older, Review and Not checked packages remain
-  ineligible for this selective import. Package signature and full
-  source-manifest audit, WIM registration, architecture and inventory
-  checks still fail safely. No automatic Mount, Commit, Discard,
-  Remove-Driver or ForceUnsigned actions are introduced.
-- The Package details area no longer hosts a detached Audit button,
-  leaving more room for long INF details, especially at high DPI.
+- Removed **Open Drivers section** and its confirmation dialog. The
+  existing **Driver tools** sidebar item performs that navigation
+  and automatically carries over the selected driver source folder.
+- Removed the separate **Compare with mounted index** command.
+  One always-visible **Scan / Refresh** button reads the source INF
+  files and automatically compares versions whenever the selected
+  WIM file/index is already mounted at the expected path.
+- Only the exact WIMGAPI-verified WIM/index/mount registration can
+  supply an installed-driver inventory. If a WIM is not mounted,
+  Scan / Refresh still scans INF sources but labels results
+  **Not checked** or **Review**. It never assumes missing installed
+  drivers or marks packages eligible for import.
+- Returning from **Mount** to Driver Studio rechecks a previously
+  scanned source automatically. Even if the same WIM is mounted
+  again at the same path, the prior comparison is not trusted.
+  If an image is unmounted or discarded, previously verified
+  results are invalidated, and checkboxes are disabled until a
+  new verified comparison completes.
+- Removed the redundant second **Scan INF** button. The single
+  **Scan / Refresh** action remains visible in the workspace header,
+  with sufficient width for simulated 125–200% DPI.
+- **Stop after current** is displayed only during an active
+  selective WIM driver import. Removed redundant Commit/Discard
+  warning text, retaining one concise optional-write note.
+- The read-only **Copy comparison** action remains separate from
+  the application's **Copy log**, since they export different data.
 
-## Validation
+## What remains intentionally explicit
 
-- Tested on Windows x86, x64 and ARM64 build runners, including
-  pre-build checks and portable EXE packaging.
-- x64 Windows WIM and WinForms smoke tests, including explicit
-  zero-selected default, opt-in New/Newer selection, Clear behavior,
-  both audit commands grouped and simulated 125–200% font scaling.
-- Signed OEM servicing on a hosted disposable Windows VM.
-- The earlier signed Realtek ARM64 copy-only field acceptance from
-  v4.3.22 remains valid; this release does not change OEM integration.
+- **Select New / Newer** only marks eligible INF entries if the
+  user requests it; default selection is empty.
+- **Clear** removes the selection; **Audit selected** and
+  **Audit all INF** validate source files without WIM changes.
+- **Add selected to WIM...** is an optional, separately confirmed
+  operation requiring signed-package checks, fresh WIM inventory,
+  a read/write mount and administrator approval. It stages driver
+  packages in the OFFLINE WIM, not the running Windows PC, and
+  does not remove old driver versions or automatically Commit.
+- The legacy **Driver tools → Add drivers** remains an independent
+  whole-folder command without Driver Studio's selective New/Newer
+  filtering. Use it only when intentional, especially with Recurse.
 
-## Compatibility, notes and rollback
+## Acceptance and limitations
 
-- Only the Driver Studio UI workflow, labels, documentation and
-  related UI regression checks changed from 4.3.22. Driver
-  installation engine behavior, security preflight and WIM contents
-  are unchanged.
-- The legacy **Driver tools → Add drivers** command still uses the
-  selected source folder (with Recurse if enabled) without the
-  selective New/Newer filter. Use Driver Studio for selective WIM
-  staging when needed.
-- `v4.3.22` and its original download archives remain published
-  as an unchanged fallback:
-  https://github.com/sgennadi/DISM-GUI/releases/tag/v4.3.22
-- Manual validation on production images and physical machines
-  remains recommended before deployment.
+- Windows CI x86, x64, ARM64: successful compiled portable builds.
+- x64 WinForms/WIM smoke and simulated 125%, 150%, 175%, 200% UI
+  scaling: successful, including real Scan / Refresh on an
+  **unmounted** WIM, stale-state invalidation and single-button UI.
+- Hosted Windows VM signed OEM / WIM verification: successful.
+- Automatic comparison for a newly re-mounted WIM relies on the
+  existing WIMGAPI-verified inventory bridge. The specific visual
+  flow on physical user equipment should still be confirmed after
+  updating; no real-device driver binding is claimed.
+- No automatic DISM Mount, Unmount, Commit, Discard, Remove-Driver,
+  WIMMount cleanup or ForceUnsigned actions are introduced.
+- No change to selective-import write engine or its postflight
+  verification logic.
 
-Original DISMGUI attribution and redistribution notices remain intact.
+## Rollback
+
+The original [v4.3.23 stable](https://github.com/sgennadi/DISM-GUI/releases/tag/v4.3.23)
+and its published ZIPs remain intact if rollback is needed.
+
+Original upstream DISMGUI attribution and licensing remain intact.
