@@ -3573,6 +3573,29 @@ internal static class LayoutSmoke
             Application.DoEvents();
             Require(installStudio.Enabled && !studioGrid.Rows[0].Cells[0].ReadOnly,
                     "Verified New INF must enable selective install");
+            var selectAllEligible = Find(studioPanel, "btnStudioSelectAllEligible") as Button;
+            var clearAllInf = Find(studioPanel, "btnStudioClearAll") as Button;
+            var auditAllInf = Find(studioPanel, "btnStudioAuditAll") as Button;
+            var selectedCount = Find(studioPanel, "lblStudioSelection") as Label;
+            Require(selectAllEligible is not null && clearAllInf is not null &&
+                    auditAllInf is not null && selectedCount is not null &&
+                    selectAllEligible.Enabled && clearAllInf.Enabled && auditAllInf.Enabled &&
+                    selectedCount.Text == "1 selected",
+                    "Driver Studio needs visible Select all eligible/Clear/Audit all controls.");
+            VerifyReadableButton(selectAllEligible!, "Driver Studio select all eligible");
+            VerifyReadableButton(auditAllInf!, "Driver Studio audit all INF");
+            clearAllInf!.PerformClick();
+            Application.DoEvents();
+            Require(!installStudio.Enabled && !newStudio[0].Selected &&
+                    !(bool)studioGrid.Rows[0].Cells[0].Value! &&
+                    !clearAllInf.Enabled && selectedCount.Text == "0 selected",
+                    "Clear must uncheck all plan entries and disable installation.");
+            selectAllEligible!.PerformClick();
+            Application.DoEvents();
+            Require(installStudio.Enabled && newStudio[0].Selected &&
+                    (bool)studioGrid.Rows[0].Cells[0].Value! &&
+                    selectedCount.Text == "1 selected",
+                    "Select all eligible must select only verified New or Newer drivers.");
             var studioSource = Find(studioPanel, "txtStudioSource") as TextBox;
             Require(studioSource is not null, "Driver Studio source path entry missing");
             studioSource!.Text = @"C:\ChangedDrivers";
@@ -3593,7 +3616,10 @@ internal static class LayoutSmoke
                     studioGrid.Rows[0].Cells[4].ToolTipText.Contains("WIM inventory NOT checked") &&
                     studioDetails is not null &&
                     studioDetails.Text.Contains("WIM inventory: NOT verified") &&
-                    !installStudio.Enabled,
+                    !installStudio.Enabled && !selectAllEligible.Enabled &&
+                    auditAllInf!.Enabled && !newStudio[0].Selected &&
+                    studioGrid.Rows[0].Cells[0].ReadOnly &&
+                    !(bool)studioGrid.Rows[0].Cells[0].Value!,
                     "Unverified image inventory must display explicit tooltip and block import.");
             var conflictVersion = new DriverStudioEngine.DriverPackage {
                 InfName = driverFixture.Source.InfName,
