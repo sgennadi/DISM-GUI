@@ -25,8 +25,7 @@ Public NotInheritable Class DriverStudioPanel
     Private ReadOnly copyButton As Button
     Private ReadOnly installButton As Button
     Private ReadOnly stopButton As Button
-    Private ReadOnly importActions As TableLayoutPanel
-    Private ReadOnly importStopColumn As ColumnStyle
+    Private ReadOnly importActions As Panel
     Private ReadOnly auditButton As Button
     Private ReadOnly selectEligibleButton As Button
     Private ReadOnly clearSelectionButton As Button
@@ -81,7 +80,7 @@ Public NotInheritable Class DriverStudioPanel
         Controls.Add(viewport)
         rootLayout = New TableLayoutPanel With {
             .Name = "DriverStudioLayout",
-            .ColumnCount = 1, .RowCount = 9, .Dock = DockStyle.Top,
+            .ColumnCount = 1, .RowCount = 7, .Dock = DockStyle.Top,
             .Width = 660, .Height = 800,
             .BackColor = Color.White, .Margin = Padding.Empty,
             .Padding = New Padding(15, 12, 15, 18)
@@ -91,8 +90,9 @@ Public NotInheritable Class DriverStudioPanel
         ' Scale rows to the real UI font instead of clipping content at high DPI.
         Dim layoutScale As Single = Math.Max(1.0F, Me.Font.Height / 16.0F)
         Dim stackSource As Boolean = layoutScale > 1.15F
-        ' Reserve TWO full rows for the source and Scan INF at higher DPI.
-        For Each h As Integer In {60, If(stackSource, 116, 64), 52, 42, 283, 72, 155, 74, 80}
+        ' Keep actions next to the results instead of separate detached footers.
+        ' Grid/details expand with the viewport; narrow/high-DPI windows scroll.
+        For Each h As Integer In {58, If(stackSource, 94, 62), 44, 46, 260, 64, 154}
             rootLayout.RowStyles.Add(New RowStyle(SizeType.Absolute,
                 CInt(Math.Ceiling(h * layoutScale))))
         Next
@@ -304,7 +304,7 @@ Public NotInheritable Class DriverStudioPanel
 
         Dim selectionBar As New TableLayoutPanel With {
             .Name = "DriverStudioSelectionBar", .Dock = DockStyle.Fill,
-            .RowCount = 1, .ColumnCount = 5,
+            .RowCount = 1, .ColumnCount = 6,
             .Margin = New Padding(0, 0, 0, 3), .BackColor = Color.White
         }
         selectionBar.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
@@ -313,6 +313,8 @@ Public NotInheritable Class DriverStudioPanel
                 CInt(Math.Ceiling(columnWidth * layoutScale))))
         Next
         selectionBar.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+        selectionBar.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(225 * layoutScale))))
         driverGridArea.Controls.Add(selectionBar, 0, 0)
 
         selectEligibleButton = New Button With {
@@ -364,14 +366,56 @@ Public NotInheritable Class DriverStudioPanel
         selectionLabel = WriteLabel("0 selected", 8.8F, False, ModernTheme.Muted)
         selectionLabel.Name = "lblStudioSelection"
         selectionLabel.TextAlign = ContentAlignment.MiddleRight
+        selectionLabel.Margin = New Padding(5, 0, 10, 0)
         selectionBar.Controls.Add(selectionLabel, 4, 0)
+
+        ' The primary write action lives next to selection/audit, never as a
+        ' detached bottom-of-page button. Stop replaces it during a batch.
+        importActions = New Panel With {
+            .Name = "DriverStudioImportActions", .Dock = DockStyle.Fill,
+            .Padding = New Padding(5, 3, 0, 4),
+            .BackColor = Color.White, .Margin = Padding.Empty
+        }
+        selectionBar.Controls.Add(importActions, 5, 0)
+        installButton = New Button With {
+            .Name = "btnStudioInstallSelected",
+            .Text = "Add selected to WIM...",
+            .Dock = DockStyle.Fill, .Enabled = False,
+            .Margin = Padding.Empty
+        }
+        ModernTheme.StyleButton(installButton, "primary")
+        installButton.AutoEllipsis = False
+        installButton.AccessibleDescription =
+            "Optional offline WIM write. Requires verified New/Newer INF, signed package audit, " &
+            "read/write mount and explicit confirmation. No automatic Commit or old-driver removal."
+        AddHandler installButton.Click, AddressOf InstallSelectedClicked
+        importActions.Controls.Add(installButton)
+
+        stopButton = New Button With {
+            .Name = "btnStudioStopAfterCurrent",
+            .Text = "Stop after current",
+            .Dock = DockStyle.Fill, .Enabled = False, .Visible = False,
+            .Margin = Padding.Empty
+        }
+        ModernTheme.StyleButton(stopButton, "neutral")
+        stopButton.AutoEllipsis = False
+        AddHandler stopButton.Click, Sub(sender, e)
+            stopAfterCurrent = True
+            stopButton.Enabled = False
+            statusLabel.Text = "Stopping after the current DISM driver operation finishes."
+        End Sub
+        importActions.Controls.Add(stopButton)
+
         driverGridArea.Controls.Add(grid, 0, 1)
 
         Dim detailsLayout As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .RowCount = 2, .ColumnCount = 1,
+            .Name = "DriverStudioDetailsArea",
+            .Dock = DockStyle.Fill, .RowCount = 2, .ColumnCount = 2,
             .Margin = Padding.Empty, .BackColor = Color.White
         }
         detailsLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+        detailsLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(185 * layoutScale))))
         detailsLayout.RowStyles.Add(New RowStyle(SizeType.Absolute,
             CInt(Math.Ceiling(46 * layoutScale))))
         detailsLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
@@ -389,19 +433,13 @@ Public NotInheritable Class DriverStudioPanel
             .Margin = New Padding(0, 0, 0, 6)
         }
         detailsLayout.Controls.Add(detailBox, 0, 1)
+        detailsLayout.SetColumnSpan(detailBox, 2)
 
-        Dim footer As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 1,
-            .Margin = New Padding(0, 11, 0, 0), .BackColor = Color.White
-        }
-        footer.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(185 * layoutScale))))
-        footer.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        rootLayout.Controls.Add(footer, 0, 7)
+        ' Export belongs with the detail/report view, not in a separate row.
         copyButton = New Button With {
             .Name = "btnStudioCopyPlan", .Text = "Copy comparison",
             .Dock = DockStyle.Fill, .Enabled = False,
-            .Margin = New Padding(0, 3, 10, 4)
+            .Margin = New Padding(2, 3, 0, 4)
         }
         ModernTheme.StyleButton(copyButton, "browse")
         copyButton.AutoEllipsis = False
@@ -417,53 +455,7 @@ Public NotInheritable Class DriverStudioPanel
                 statusLabel.Text = "Copy failed: " & ex.Message
             End Try
         End Sub
-        footer.Controls.Add(copyButton, 0, 0)
-        ' Copy comparison remains available without a second route to Driver tools.
-        ' Driver tools is already accessible through the left navigation.
-        importActions = New TableLayoutPanel With {
-            .Name = "DriverStudioImportActions",
-            .Dock = DockStyle.Fill, .ColumnCount = 3, .RowCount = 1,
-            .Margin = New Padding(0, 6, 0, 0), .BackColor = Color.White
-        }
-        importActions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        importActions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(215 * layoutScale))))
-        importStopColumn = New ColumnStyle(SizeType.Absolute, 0)
-        importActions.ColumnStyles.Add(importStopColumn)
-        importActions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        rootLayout.Controls.Add(importActions, 0, 8)
-
-        installButton = New Button With {
-            .Name = "btnStudioInstallSelected",
-            .Text = "Add selected to WIM...",
-            .Dock = DockStyle.Fill, .Enabled = False,
-            .Margin = New Padding(0, 4, 10, 5)
-        }
-        ModernTheme.StyleButton(installButton, "primary")
-        installButton.AutoEllipsis = False
-        installButton.AccessibleDescription = "Optional write operation: stage checked drivers in a mounted read/write WIM only. This does not install drivers on this PC or remove older drivers."
-        AddHandler installButton.Click, AddressOf InstallSelectedClicked
-        importActions.Controls.Add(installButton, 0, 0)
-
-        stopButton = New Button With {
-            .Name = "btnStudioStopAfterCurrent",
-            .Text = "Stop after current",
-            .Dock = DockStyle.Fill, .Enabled = False, .Visible = False,
-            .Margin = New Padding(0, 4, 10, 5)
-        }
-        ModernTheme.StyleButton(stopButton, "neutral")
-        stopButton.AutoEllipsis = False
-        AddHandler stopButton.Click, Sub(sender, e)
-            stopAfterCurrent = True
-            stopButton.Enabled = False
-            statusLabel.Text = "Stopping after the current DISM driver operation finishes."
-        End Sub
-        importActions.Controls.Add(stopButton, 1, 0)
-
-        Dim importNote = WriteLabel("Optional WIM write (R/W). Commit is manual.",
-                                    8.4F, False, ModernTheme.Muted)
-        importNote.AccessibleDescription = "Optional: adds selected packages only to the offline WIM after auditing and confirmation. No drivers installed on this PC. No automatic Commit or Discard."
-        importNote.TextAlign = ContentAlignment.MiddleRight
-        importActions.Controls.Add(importNote, 2, 0)
+        detailsLayout.Controls.Add(copyButton, 1, 0)
 
         AddHandler sourceBox.TextChanged, Sub(sender, e)
             If Not isWorking Then InvalidateComparison()
