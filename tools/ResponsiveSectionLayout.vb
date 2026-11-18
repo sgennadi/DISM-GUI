@@ -66,6 +66,24 @@ Public NotInheritable Class ResponsiveSectionLayout
         Dim dismountButton = DirectCast(Take(page, "btnDismount"), Button)
         Dim openMounted = DirectCast(Take(page, "btnOpenFolder"), Button)
 
+        ' These controls retain their original browse handlers. Their cells
+        ' must be measured from the current UI font, not fixed 157px widths.
+        Dim wimBrowse = DirectCast(chooseWim, Button)
+        Dim mountBrowse = DirectCast(chooseMount, Button)
+        wimBrowse.Text = "Choose WIM"
+        mountBrowse.Text = "Choose folder"
+        ModernTheme.StyleButton(wimBrowse, "browse")
+        ModernTheme.StyleButton(mountBrowse, "browse")
+        wimBrowse.AutoEllipsis = False
+        mountBrowse.AutoEllipsis = False
+        mountBrowse.AccessibleDescription =
+            "Choose an empty folder for WIM mounting. Selecting a folder does not mount the image."
+        Dim browseCellWidth = Math.Max(157,
+            Math.Max(ModernTheme.RecommendedButtonSize(wimBrowse, 110).Width +
+                        7 + 7 + 8,
+                     ModernTheme.RecommendedButtonSize(mountBrowse, 120).Width +
+                        7 + 7 + 8))
+
         ' Remove original fixed-position labels, replacing them with measured
         ' grid labels. Names are not used by the existing DISM command handlers.
         For Each name In {"Label1", "Label2", "Label3"}
@@ -107,7 +125,7 @@ Public NotInheritable Class ResponsiveSectionLayout
         }
         fileRow.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         fileRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        fileRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 157))
+        fileRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, browseCellWidth))
         left.Controls.Add(fileRow, 0, 1)
         fileRow.Controls.Add(wim, 0, 0)
         chooseWim.Margin = New Padding(7, 3, 0, 4)
@@ -168,10 +186,10 @@ Public NotInheritable Class ResponsiveSectionLayout
         }
         mountRow.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         mountRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        mountRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 157))
+        mountRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, browseCellWidth))
         left.Controls.Add(mountRow, 0, 4)
         mountRow.Controls.Add(mount, 0, 0)
-        chooseMount.Margin = New Padding(7, 3, 12, 4)
+        chooseMount.Margin = New Padding(7, 3, 7, 4)
         mountRow.Controls.Add(chooseMount, 1, 0)
 
         readOnlyCheckbox.Margin = New Padding(3, 12, 0, 6)
@@ -210,6 +228,16 @@ Public NotInheritable Class ResponsiveSectionLayout
         info.Dock = DockStyle.Fill
         info.Margin = New Padding(0, 4, 0, 8)
         actions.Controls.Add(info, 0, 3)
+
+        ' Keep right-hand Mount/Dismount/Info captions fully visible too;
+        ' the column should never silently squeeze a button.
+        Dim actionButtons As Button() = {mountButton, dismountButton, openMounted,
+                                         DirectCast(info, Button)}
+        Dim actionWidth = Math.Max(208, actionButtons.Max(Function(button)
+            Return ModernTheme.RecommendedButtonSize(button, 120).Width +
+                   button.Margin.Horizontal + 12
+        End Function))
+        root.ColumnStyles(1).Width = actionWidth
 
         page.ResumeLayout(True)
     End Sub
