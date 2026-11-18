@@ -25,8 +25,7 @@ Public NotInheritable Class DriverStudioPanel
     Private ReadOnly copyButton As Button
     Private ReadOnly installButton As Button
     Private ReadOnly stopButton As Button
-    Private ReadOnly importActions As TableLayoutPanel
-    Private ReadOnly importStopColumn As ColumnStyle
+    Private ReadOnly importActions As Panel
     Private ReadOnly auditButton As Button
     Private ReadOnly selectEligibleButton As Button
     Private ReadOnly clearSelectionButton As Button
@@ -81,7 +80,7 @@ Public NotInheritable Class DriverStudioPanel
         Controls.Add(viewport)
         rootLayout = New TableLayoutPanel With {
             .Name = "DriverStudioLayout",
-            .ColumnCount = 1, .RowCount = 9, .Dock = DockStyle.Top,
+            .ColumnCount = 1, .RowCount = 7, .Dock = DockStyle.Top,
             .Width = 660, .Height = 800,
             .BackColor = Color.White, .Margin = Padding.Empty,
             .Padding = New Padding(15, 12, 15, 18)
@@ -91,8 +90,9 @@ Public NotInheritable Class DriverStudioPanel
         ' Scale rows to the real UI font instead of clipping content at high DPI.
         Dim layoutScale As Single = Math.Max(1.0F, Me.Font.Height / 16.0F)
         Dim stackSource As Boolean = layoutScale > 1.15F
-        ' Reserve TWO full rows for the source and Scan INF at higher DPI.
-        For Each h As Integer In {60, If(stackSource, 116, 64), 52, 42, 283, 72, 155, 74, 80}
+        ' Keep actions next to the results instead of separate detached footers.
+        ' Grid/details expand with the viewport; narrow/high-DPI windows scroll.
+        For Each h As Integer In {58, If(stackSource, 94, 62), 44, 46, 260, 64, 154}
             rootLayout.RowStyles.Add(New RowStyle(SizeType.Absolute,
                 CInt(Math.Ceiling(h * layoutScale))))
         Next
@@ -101,9 +101,48 @@ Public NotInheritable Class DriverStudioPanel
         viewport.Controls.Add(rootLayout)
         Dim resizeStudio As Action = Sub()
             If viewport.IsDisposed OrElse rootLayout.IsDisposed Then Return
-            Dim minimum = If(stackSource, 660, CInt(Math.Ceiling(800 * layoutScale)))
+            ' Wide windows get one compact action row. At small widths or
+            ' high DPI, distribute selection/audits and the WIM write across
+            ' three readable rows rather than clipping Audit selected.
+            Dim compactActions = viewport.ClientSize.Width <
+                CInt(Math.Ceiling(920 * layoutScale))
+            Dim actionBar = TryCast(rootLayout.Controls.Find(
+                "DriverStudioSelectionBar", True).FirstOrDefault(), TableLayoutPanel)
+            Dim gridArea = TryCast(rootLayout.Controls.Find(
+                "DriverStudioGridArea", True).FirstOrDefault(), TableLayoutPanel)
+            If actionBar IsNot Nothing AndAlso gridArea IsNot Nothing Then
+                ArrangeSelectionToolbar(actionBar, gridArea, compactActions, layoutScale)
+            End If
+
+            Dim minimum = If(compactActions,
+                CInt(Math.Ceiling(300 * layoutScale)) + rootLayout.Padding.Horizontal,
+                CInt(Math.Ceiling((198 + 88 + 145 + 122 + 225 + 100) * layoutScale)) +
+                    rootLayout.Padding.Horizontal)
             Dim wanted = Math.Max(minimum, viewport.ClientSize.Width - 1)
             If rootLayout.Width <> wanted Then rootLayout.Width = wanted
+
+            ' Reuse the vertical space released by the old Copy and Add
+            ' footer rows. The comparison grid gets two thirds of any extra
+            ' height and the INF details receive the remaining third.
+            Dim fixedHeight As Integer = rootLayout.Padding.Vertical + 8
+            For Each rowIndex As Integer In {0, 1, 2, 3, 5}
+                fixedHeight += CInt(Math.Ceiling(rootLayout.RowStyles(rowIndex).Height))
+            Next
+            Dim minGrid = CInt(Math.Ceiling(
+                If(compactActions, 330, 260) * layoutScale))
+            Dim minDetails = CInt(Math.Ceiling(154 * layoutScale))
+            Dim extra = Math.Max(0, viewport.ClientSize.Height -
+                                  fixedHeight - minGrid - minDetails - 1)
+            Dim gridHeight = minGrid + CInt(Math.Floor(extra * 0.67))
+            Dim detailHeight = minDetails + extra - CInt(Math.Floor(extra * 0.67))
+            If CInt(rootLayout.RowStyles(4).Height) <> gridHeight Then
+                rootLayout.RowStyles(4).Height = gridHeight
+            End If
+            If CInt(rootLayout.RowStyles(6).Height) <> detailHeight Then
+                rootLayout.RowStyles(6).Height = detailHeight
+            End If
+            Dim newHeight = fixedHeight + gridHeight + detailHeight
+            If rootLayout.Height <> newHeight Then rootLayout.Height = newHeight
         End Sub
         AddHandler viewport.ClientSizeChanged, Sub(sender, e) resizeStudio()
         AddHandler Me.VisibleChanged, Sub(sender, e)
@@ -304,15 +343,19 @@ Public NotInheritable Class DriverStudioPanel
 
         Dim selectionBar As New TableLayoutPanel With {
             .Name = "DriverStudioSelectionBar", .Dock = DockStyle.Fill,
-            .RowCount = 1, .ColumnCount = 5,
+            .RowCount = 3, .ColumnCount = 6,
             .Margin = New Padding(0, 0, 0, 3), .BackColor = Color.White
         }
         selectionBar.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        For Each columnWidth As Integer In {168, 88, 145, 122}
+        selectionBar.RowStyles.Add(New RowStyle(SizeType.Absolute, 0))
+        selectionBar.RowStyles.Add(New RowStyle(SizeType.Absolute, 0))
+        For Each columnWidth As Integer In {198, 88, 145, 122}
             selectionBar.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
                 CInt(Math.Ceiling(columnWidth * layoutScale))))
         Next
         selectionBar.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+        selectionBar.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(225 * layoutScale))))
         driverGridArea.Controls.Add(selectionBar, 0, 0)
 
         selectEligibleButton = New Button With {
@@ -364,20 +407,64 @@ Public NotInheritable Class DriverStudioPanel
         selectionLabel = WriteLabel("0 selected", 8.8F, False, ModernTheme.Muted)
         selectionLabel.Name = "lblStudioSelection"
         selectionLabel.TextAlign = ContentAlignment.MiddleRight
+        selectionLabel.Margin = New Padding(5, 0, 10, 0)
         selectionBar.Controls.Add(selectionLabel, 4, 0)
+
+        ' The primary write action lives next to selection/audit, never as a
+        ' detached bottom-of-page button. Stop replaces it during a batch.
+        importActions = New Panel With {
+            .Name = "DriverStudioImportActions", .Dock = DockStyle.Fill,
+            .Padding = New Padding(5, 3, 0, 4),
+            .BackColor = Color.White, .Margin = Padding.Empty
+        }
+        selectionBar.Controls.Add(importActions, 5, 0)
+        installButton = New Button With {
+            .Name = "btnStudioInstallSelected",
+            .Text = "Add selected to WIM...",
+            .Dock = DockStyle.Fill, .Enabled = False,
+            .Margin = Padding.Empty
+        }
+        ModernTheme.StyleButton(installButton, "primary")
+        installButton.AutoEllipsis = False
+        installButton.AccessibleDescription =
+            "Optional offline WIM write. Requires verified New/Newer INF, signed package audit, " &
+            "read/write mount and explicit confirmation. No automatic Commit or old-driver removal."
+        AddHandler installButton.Click, AddressOf InstallSelectedClicked
+        importActions.Controls.Add(installButton)
+
+        stopButton = New Button With {
+            .Name = "btnStudioStopAfterCurrent",
+            .Text = "Stop after current",
+            .Dock = DockStyle.Fill, .Enabled = False, .Visible = False,
+            .Margin = Padding.Empty
+        }
+        ModernTheme.StyleButton(stopButton, "neutral")
+        stopButton.AutoEllipsis = False
+        AddHandler stopButton.Click, Sub(sender, e)
+            stopAfterCurrent = True
+            stopButton.Enabled = False
+            statusLabel.Text = "Stopping after the current DISM driver operation finishes."
+        End Sub
+        importActions.Controls.Add(stopButton)
+
         driverGridArea.Controls.Add(grid, 0, 1)
 
         Dim detailsLayout As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .RowCount = 2, .ColumnCount = 1,
+            .Name = "DriverStudioDetailsArea",
+            .Dock = DockStyle.Fill, .RowCount = 2, .ColumnCount = 2,
             .Margin = Padding.Empty, .BackColor = Color.White
         }
         detailsLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+        detailsLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(162 * layoutScale))))
         detailsLayout.RowStyles.Add(New RowStyle(SizeType.Absolute,
             CInt(Math.Ceiling(46 * layoutScale))))
         detailsLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         rootLayout.Controls.Add(detailsLayout, 0, 6)
+        ' Keep this header short at 175-200% scaling; Copy comparison is
+        ' placed in its own right column, not over the heading.
         detailsLayout.Controls.Add(WriteLabel(If(stackSource,
-                                              "PACKAGE DETAILS", "DRIVER PACKAGE  |  DETAILS"),
+                                              "INF DETAILS", "PACKAGE DETAILS"),
                                               9.2F, True, ModernTheme.Blue), 0, 0)
         detailBox = New TextBox With {
             .Name = "txtStudioDetails", .Multiline = True, .ReadOnly = True,
@@ -389,19 +476,13 @@ Public NotInheritable Class DriverStudioPanel
             .Margin = New Padding(0, 0, 0, 6)
         }
         detailsLayout.Controls.Add(detailBox, 0, 1)
+        detailsLayout.SetColumnSpan(detailBox, 2)
 
-        Dim footer As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 1,
-            .Margin = New Padding(0, 11, 0, 0), .BackColor = Color.White
-        }
-        footer.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(185 * layoutScale))))
-        footer.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        rootLayout.Controls.Add(footer, 0, 7)
+        ' Export belongs with the detail/report view, not in a separate row.
         copyButton = New Button With {
             .Name = "btnStudioCopyPlan", .Text = "Copy comparison",
             .Dock = DockStyle.Fill, .Enabled = False,
-            .Margin = New Padding(0, 3, 10, 4)
+            .Margin = New Padding(2, 3, 0, 4)
         }
         ModernTheme.StyleButton(copyButton, "browse")
         copyButton.AutoEllipsis = False
@@ -417,53 +498,7 @@ Public NotInheritable Class DriverStudioPanel
                 statusLabel.Text = "Copy failed: " & ex.Message
             End Try
         End Sub
-        footer.Controls.Add(copyButton, 0, 0)
-        ' Copy comparison remains available without a second route to Driver tools.
-        ' Driver tools is already accessible through the left navigation.
-        importActions = New TableLayoutPanel With {
-            .Name = "DriverStudioImportActions",
-            .Dock = DockStyle.Fill, .ColumnCount = 3, .RowCount = 1,
-            .Margin = New Padding(0, 6, 0, 0), .BackColor = Color.White
-        }
-        importActions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        importActions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(215 * layoutScale))))
-        importStopColumn = New ColumnStyle(SizeType.Absolute, 0)
-        importActions.ColumnStyles.Add(importStopColumn)
-        importActions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        rootLayout.Controls.Add(importActions, 0, 8)
-
-        installButton = New Button With {
-            .Name = "btnStudioInstallSelected",
-            .Text = "Add selected to WIM...",
-            .Dock = DockStyle.Fill, .Enabled = False,
-            .Margin = New Padding(0, 4, 10, 5)
-        }
-        ModernTheme.StyleButton(installButton, "primary")
-        installButton.AutoEllipsis = False
-        installButton.AccessibleDescription = "Optional write operation: stage checked drivers in a mounted read/write WIM only. This does not install drivers on this PC or remove older drivers."
-        AddHandler installButton.Click, AddressOf InstallSelectedClicked
-        importActions.Controls.Add(installButton, 0, 0)
-
-        stopButton = New Button With {
-            .Name = "btnStudioStopAfterCurrent",
-            .Text = "Stop after current",
-            .Dock = DockStyle.Fill, .Enabled = False, .Visible = False,
-            .Margin = New Padding(0, 4, 10, 5)
-        }
-        ModernTheme.StyleButton(stopButton, "neutral")
-        stopButton.AutoEllipsis = False
-        AddHandler stopButton.Click, Sub(sender, e)
-            stopAfterCurrent = True
-            stopButton.Enabled = False
-            statusLabel.Text = "Stopping after the current DISM driver operation finishes."
-        End Sub
-        importActions.Controls.Add(stopButton, 1, 0)
-
-        Dim importNote = WriteLabel("Optional WIM write (R/W). Commit is manual.",
-                                    8.4F, False, ModernTheme.Muted)
-        importNote.AccessibleDescription = "Optional: adds selected packages only to the offline WIM after auditing and confirmation. No drivers installed on this PC. No automatic Commit or Discard."
-        importNote.TextAlign = ContentAlignment.MiddleRight
-        importActions.Controls.Add(importNote, 2, 0)
+        detailsLayout.Controls.Add(copyButton, 1, 0)
 
         AddHandler sourceBox.TextChanged, Sub(sender, e)
             If Not isWorking Then InvalidateComparison()
@@ -471,6 +506,70 @@ Public NotInheritable Class DriverStudioPanel
         AddHandler recursive.CheckedChanged, Sub(sender, e)
             If Not isWorking Then InvalidateComparison()
         End Sub
+        ' Initial children are now available for responsive toolbar layout.
+        resizeStudio()
+    End Sub
+
+    Private Sub ArrangeSelectionToolbar(bar As TableLayoutPanel,
+                                        gridArea As TableLayoutPanel,
+                                        compact As Boolean,
+                                        layoutScale As Single)
+        If TypeOf bar.Tag Is Boolean AndAlso CBool(bar.Tag) = compact Then Return
+        ' Mark early to avoid recursive ClientSizeChanged reflow.
+        bar.Tag = compact
+        bar.SuspendLayout()
+        gridArea.SuspendLayout()
+        Try
+            Dim positions As (Ctl As Control, Column As Integer, Row As Integer)()
+            If compact Then
+                For i As Integer = 0 To 5
+                    bar.ColumnStyles(i).SizeType = If(i < 2,
+                        SizeType.Percent, SizeType.Absolute)
+                    bar.ColumnStyles(i).Width = If(i < 2, 50.0F, 0.0F)
+                Next
+                For i As Integer = 0 To 2
+                    bar.RowStyles(i).SizeType = SizeType.Percent
+                    bar.RowStyles(i).Height = 100.0F / 3.0F
+                Next
+                positions = {
+                    (selectEligibleButton, 0, 0), (clearSelectionButton, 1, 0),
+                    (auditButton, 0, 1), (auditAllButton, 1, 1),
+                    (selectionLabel, 0, 2), (importActions, 1, 2)
+                }
+            Else
+                Dim actionWidths As Integer() = {198, 88, 145, 122}
+                For i As Integer = 0 To 3
+                    bar.ColumnStyles(i).SizeType = SizeType.Absolute
+                    bar.ColumnStyles(i).Width = CSng(Math.Ceiling(
+                        actionWidths(i) * layoutScale))
+                Next
+                bar.ColumnStyles(4).SizeType = SizeType.Percent
+                bar.ColumnStyles(4).Width = 100
+                bar.ColumnStyles(5).SizeType = SizeType.Absolute
+                bar.ColumnStyles(5).Width = CSng(Math.Ceiling(225 * layoutScale))
+                bar.RowStyles(0).SizeType = SizeType.Percent
+                bar.RowStyles(0).Height = 100
+                For i As Integer = 1 To 2
+                    bar.RowStyles(i).SizeType = SizeType.Absolute
+                    bar.RowStyles(i).Height = 0
+                Next
+                positions = {
+                    (selectEligibleButton, 0, 0), (clearSelectionButton, 1, 0),
+                    (auditButton, 2, 0), (auditAllButton, 3, 0),
+                    (selectionLabel, 4, 0), (importActions, 5, 0)
+                }
+            End If
+            For Each placement In positions
+                bar.SetCellPosition(placement.Ctl,
+                    New TableLayoutPanelCellPosition(
+                        placement.Column, placement.Row))
+            Next
+            gridArea.RowStyles(0).Height = CSng(Math.Ceiling(
+                If(compact, 147, 45) * layoutScale))
+        Finally
+            gridArea.ResumeLayout(True)
+            bar.ResumeLayout(True)
+        End Try
     End Sub
 
     Private Shared Function WriteLabel(value As String, size As Single,
@@ -602,6 +701,10 @@ Public NotInheritable Class DriverStudioPanel
         lastAutoCompareSignature = ""
         targetLabel.Text = "WIM comparison pending. Use Scan / Refresh."
         statusLabel.Text = "Source changed. Scan / Refresh to read INF and compare automatically."
+        ' Expired comparisons must clear ALL action states immediately, not
+        ' only the Add button; never rely on a later click in the INF grid.
+        auditButton.Enabled = False
+        UpdateInstallReady()
     End Sub
 
     Private Sub WorkState(busy As Boolean)
@@ -612,24 +715,33 @@ Public NotInheritable Class DriverStudioPanel
         sourceBox.ReadOnly = busy
         grid.ReadOnly = busy
         Dim showStop = busy AndAlso isInstalling
-        importStopColumn.Width = If(showStop,
-            CInt(Math.Ceiling(215 * Math.Max(1.0F, Me.Font.Height / 16.0F))), 0)
+        installButton.Visible = Not showStop
         stopButton.Visible = showStop
+        If showStop Then stopButton.BringToFront()
         stopButton.Enabled = showStop AndAlso Not stopAfterCurrent
         UpdateInstallReady()
     End Sub
 
     Private Sub UpdateInstallReady()
-        Dim eligible = comparisonVerified AndAlso decisions.Any(
-            Function(d) DriverStudioInstaller.IsAllowed(d))
+        Dim eligibleCount = decisions.Where(
+            Function(d) DriverStudioInstaller.IsAllowed(d)).Count()
+        Dim selectedCount = decisions.Where(Function(d) d.Selected).Count()
+        Dim allEligibleSelected = comparisonVerified AndAlso eligibleCount > 0 AndAlso
+            decisions.All(Function(d)
+                Return Not DriverStudioInstaller.IsAllowed(d) OrElse d.Selected
+            End Function)
+        Dim eligible = comparisonVerified AndAlso eligibleCount > 0
         installButton.Enabled = Not isWorking AndAlso eligible AndAlso
             decisions.Any(Function(d) d.Selected AndAlso DriverStudioInstaller.IsAllowed(d))
+        selectEligibleButton.Text = If(allEligibleSelected,
+            "Deselect New / Newer", "Select New / Newer")
+        selectEligibleButton.AccessibleDescription = If(allEligibleSelected,
+            "All eligible INF packages are already selected. Click to deselect them.",
+            "Choose all verified New/Newer INF packages; no WIM changes are made.")
         selectEligibleButton.Enabled = Not isWorking AndAlso eligible
-        clearSelectionButton.Enabled = Not isWorking AndAlso
-            decisions.Any(Function(d) d.Selected)
+        clearSelectionButton.Enabled = Not isWorking AndAlso selectedCount > 0
         auditAllButton.Enabled = Not isWorking AndAlso decisions.Count > 0
-        selectionLabel.Text = decisions.Where(Function(d) d.Selected).Count().ToString() &
-            " selected"
+        selectionLabel.Text = selectedCount.ToString() & " selected"
     End Sub
 
     Private Sub ApplyBulkSelection(selectEligible As Boolean)
@@ -658,15 +770,25 @@ Public NotInheritable Class DriverStudioPanel
     End Sub
 
     Private Sub SelectAllEligibleClicked(sender As Object, e As EventArgs)
+        If isWorking Then Return
         If Not comparisonVerified Then
             statusLabel.Text = "Selected WIM index is not verified. Mount it, " &
                 "then return here or click Scan / Refresh. Audit all is read-only."
             Return
         End If
-        ApplyBulkSelection(True)
-        statusLabel.Text = "Marked " &
-            decisions.Where(Function(d) d.Selected).Count().ToString() &
-            " New/Newer INF(s); no changes yet. Audit selected before Add to WIM."
+        Dim eligibleCount = decisions.Where(Function(d) DriverStudioInstaller.IsAllowed(d)).Count()
+        If eligibleCount = 0 Then Return
+        Dim allSelected = decisions.All(Function(d)
+            Return Not DriverStudioInstaller.IsAllowed(d) OrElse d.Selected
+        End Function)
+        ApplyBulkSelection(Not allSelected)
+        If allSelected Then
+            statusLabel.Text = "Deselected New/Newer INF packages. WIM unchanged."
+        Else
+            statusLabel.Text = "Marked " &
+                decisions.Where(Function(d) d.Selected).Count().ToString() &
+                " New/Newer INF(s). Nothing written; audit before Add to WIM."
+        End If
     End Sub
 
     ' One read-only action for source inspection and (when already mounted)
@@ -850,6 +972,10 @@ Public NotInheritable Class DriverStudioPanel
 
     Private Sub GridSelected(sender As Object, e As EventArgs)
         ShowSelected()
+        ' Keep bulk-selection state synchronized after DataGridView focus moves.
+        ' In particular, a completed asynchronous Scan must never require
+        ' clicking an INF row just to activate Select New / Newer.
+        UpdateInstallReady()
     End Sub
 
     Private Sub ShowSelected()

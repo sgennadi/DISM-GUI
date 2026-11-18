@@ -3541,13 +3541,18 @@ internal static class LayoutSmoke
                     "Driver Studio must expose a discoverable read-only package integrity audit");
             VerifyReadableButton(integrityAudit!, "Driver Studio package audit high-DPI button");
             var auditHeading = AllControls(studioPanel).OfType<Label>().FirstOrDefault(l =>
-                l.Text == "PACKAGE DETAILS" || l.Text == "DRIVER PACKAGE  |  DETAILS");
+                l.Text == "PACKAGE DETAILS" || l.Text == "INF DETAILS" ||
+                l.Text == "DRIVER PACKAGE  |  DETAILS");
             Require(auditHeading is not null, "Driver Studio package details heading missing");
             var auditHeadingText = TextRenderer.MeasureText(auditHeading!.Text,
                 auditHeading.Font, new Size(2000, 100),
                 TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
+            Console.WriteLine($"Driver Studio package heading: text={auditHeadingText.Width}, " +
+                $"available={auditHeading.ClientSize.Width}, " +
+                $"details={auditHeading.Parent?.ClientSize.Width}, " +
+                $"copy={(Find(studioPanel, "btnStudioCopyPlan") as Button)?.Width}");
             Require(auditHeadingText.Width + 4 <= auditHeading.ClientSize.Width,
-                "Driver Studio package details heading clipped beside Audit selected");
+                "Driver Studio INF details heading clipped beside Copy comparison");
             var auditScroll = Find(studioPanel, "DriverStudioViewport") as Panel;
             Require(auditScroll is not null && auditScroll.AutoScroll,
                     "Driver Studio audit controls need a scrollable viewport");
@@ -3563,10 +3568,25 @@ internal static class LayoutSmoke
             Application.DoEvents();
             var installStudio = Find(studioPanel, "btnStudioInstallSelected") as Button;
             var stopStudio = Find(studioPanel, "btnStudioStopAfterCurrent") as Button;
+            var studioActionBar = Find(studioPanel, "DriverStudioSelectionBar") as TableLayoutPanel;
+            var studioDetailsArea = Find(studioPanel, "DriverStudioDetailsArea") as TableLayoutPanel;
+            var studioRoot = Find(studioPanel, "DriverStudioLayout") as TableLayoutPanel;
+            var copyStudio = Find(studioPanel, "btnStudioCopyPlan") as Button;
             Require(installStudio is not null && stopStudio is not null &&
-                    installStudio.Width >= 100 &&
+                    studioActionBar is not null && studioDetailsArea is not null &&
+                    studioRoot is not null && copyStudio is not null &&
+                    installStudio.Width >= 125 &&
+                    installStudio.Parent?.Parent == studioActionBar &&
+                    copyStudio.Parent == studioDetailsArea &&
+                    studioRoot.RowCount == 7 &&
+                    studioRoot.RowStyles.Count == 7 &&
                     !stopStudio.Visible && !stopStudio.Enabled,
-                    "Optional WIM write must remain readable; Stop is hidden until a write is in progress.");
+                    "Add selected to WIM must be next to selection/audit. Copy belongs with package details; no detached footer rows.");
+            Require(installStudio.RectangleToScreen(installStudio.ClientRectangle).Bottom <=
+                    studioGrid.RectangleToScreen(studioGrid.ClientRectangle).Top &&
+                    copyStudio.RectangleToScreen(copyStudio.ClientRectangle).Top >=
+                    studioGrid.RectangleToScreen(studioGrid.ClientRectangle).Bottom,
+                    "Driver Studio actions must stay near their relevant table/details without overlap.");
             Require(!installStudio!.Enabled && !stopStudio!.Enabled &&
                     studioGrid.Rows[0].Cells[0].ReadOnly,
                     "Identical driver versions must not enable import or user override");
@@ -3589,18 +3609,33 @@ internal static class LayoutSmoke
                     selectedCount.Text == "0 selected",
                     "Read-only Driver Studio preview must show no selected drivers but offer explicit selection and audit.");
             Require(selectAllEligible!.Text == "Select New / Newer" &&
+                    selectAllEligible.Enabled &&
                     installStudio.Text == "Add selected to WIM..." &&
                     integrityAudit!.Parent == auditAllInf!.Parent &&
-                    integrityAudit.Parent == selectAllEligible.Parent,
-                    "WIM import must be clearly optional, with both Audit commands together.");
+                    integrityAudit.Parent == selectAllEligible.Parent &&
+                    installStudio.Parent?.Parent == selectAllEligible.Parent,
+                    "WIM write is optional and located with the selection/audit controls; Select works before clicking the grid.");
             VerifyReadableButton(selectAllEligible, "Driver Studio explicit New/Newer selector");
             VerifyReadableButton(auditAllInf, "Driver Studio audit all INF");
             selectAllEligible.PerformClick();
             Application.DoEvents();
             Require(installStudio.Enabled && newStudio[0].Selected &&
                     (bool)studioGrid.Rows[0].Cells[0].Value! &&
-                    clearAllInf.Enabled && selectedCount.Text == "1 selected",
-                    "Select New/Newer must only mark eligible drivers; installation stays a separate action.");
+                    clearAllInf.Enabled && selectedCount.Text == "1 selected" &&
+                    selectAllEligible.Enabled &&
+                    selectAllEligible.Text == "Deselect New / Newer",
+                    "All eligible drivers selected: the button must remain enabled and visibly change to Deselect.");
+            // Clicking the same bulk action again must visibly undo selection,
+            // even without clicking or highlighting an INF row.
+            selectAllEligible.PerformClick();
+            Application.DoEvents();
+            Require(!installStudio.Enabled && !newStudio[0].Selected &&
+                    !(bool)studioGrid.Rows[0].Cells[0].Value! &&
+                    selectAllEligible.Text == "Select New / Newer" &&
+                    selectAllEligible.Enabled && selectedCount.Text == "0 selected",
+                    "Select New/Newer must toggle without requiring a click in the grid.");
+            selectAllEligible.PerformClick();
+            Application.DoEvents();
             clearAllInf.PerformClick();
             Application.DoEvents();
             Require(!installStudio.Enabled && !newStudio[0].Selected &&
@@ -3611,14 +3646,18 @@ internal static class LayoutSmoke
             Application.DoEvents();
             Require(installStudio.Enabled && newStudio[0].Selected &&
                     (bool)studioGrid.Rows[0].Cells[0].Value! &&
+                    selectAllEligible.Enabled &&
+                    selectAllEligible.Text == "Deselect New / Newer" &&
                     selectedCount.Text == "1 selected",
-                    "Explicit Select New/Newer must restore the chosen WIM plan.");
+                    "Explicit Select New/Newer must restore the chosen WIM plan and stay responsive.");
             var studioSource = Find(studioPanel, "txtStudioSource") as TextBox;
             Require(studioSource is not null, "Driver Studio source path entry missing");
             studioSource!.Text = @"C:\ChangedDrivers";
             Application.DoEvents();
-            Require(!installStudio.Enabled,
-                    "Changing the driver source must invalidate the install plan");
+            Require(!installStudio.Enabled && !selectAllEligible.Enabled &&
+                    !clearAllInf.Enabled && !integrityAudit.Enabled &&
+                    !auditAllInf.Enabled && selectedCount.Text == "0 selected",
+                    "Changing the driver source must immediately invalidate ALL selection/audit/import actions without a grid click.");
             // Field screenshot: after /Discard, the selected mount directory
             // was empty. A source INF scan may still flag two conflicting
             // versions as Review, while all other rows remain Not checked.
