@@ -29,6 +29,11 @@ Public NotInheritable Class DriverStudioPanel
     Private ReadOnly installButton As Button
     Private ReadOnly stopButton As Button
     Private ReadOnly auditButton As Button
+    Private ReadOnly selectEligibleButton As Button
+    Private ReadOnly clearSelectionButton As Button
+    Private ReadOnly auditAllButton As Button
+    Private ReadOnly selectionLabel As Label
+    Private bulkSelectionUpdate As Boolean
     Private ReadOnly targetLabel As Label
     Private ReadOnly statusLabel As Label
     Private ReadOnly totalMetric As Label
@@ -89,7 +94,7 @@ Public NotInheritable Class DriverStudioPanel
         Dim layoutScale As Single = Math.Max(1.0F, Me.Font.Height / 16.0F)
         Dim stackSource As Boolean = layoutScale > 1.15F
         ' Reserve TWO full rows for the source and Scan INF at higher DPI.
-        For Each h As Integer In {60, If(stackSource, 116, 64), 52, 42, 235, 72, 155, 74, 80}
+        For Each h As Integer In {60, If(stackSource, 116, 64), 52, 42, 283, 72, 155, 74, 80}
             rootLayout.RowStyles.Add(New RowStyle(SizeType.Absolute,
                 CInt(Math.Ceiling(h * layoutScale))))
         Next
@@ -277,14 +282,89 @@ Public NotInheritable Class DriverStudioPanel
                 DataGridViewDataErrorContexts.Commit)
         End Sub
         AddHandler grid.CellValueChanged, Sub(sender, e)
-            If e.RowIndex >= 0 AndAlso e.RowIndex < decisions.Count AndAlso
-               e.ColumnIndex = 0 Then
-                Dim value = grid.Rows(e.RowIndex).Cells(0).Value
-                decisions(e.RowIndex).Selected = TypeOf value Is Boolean AndAlso CBool(value)
-                UpdateInstallReady()
+            If bulkSelectionUpdate OrElse e.ColumnIndex <> 0 OrElse
+               e.RowIndex < 0 OrElse e.RowIndex >= decisions.Count Then Return
+            Dim value = grid.Rows(e.RowIndex).Cells(0).Value
+            Dim checked = TypeOf value Is Boolean AndAlso CBool(value)
+            Dim eligible = comparisonVerified AndAlso
+                DriverStudioInstaller.IsAllowed(decisions(e.RowIndex))
+            decisions(e.RowIndex).Selected = checked AndAlso eligible
+            If checked AndAlso Not eligible Then
+                bulkSelectionUpdate = True
+                Try
+                    grid.Rows(e.RowIndex).Cells(0).Value = False
+                Finally
+                    bulkSelectionUpdate = False
+                End Try
             End If
+            UpdateInstallReady()
         End Sub
-        rootLayout.Controls.Add(grid, 0, 4)
+
+        Dim driverGridArea As New TableLayoutPanel With {
+            .Name = "DriverStudioGridArea", .Dock = DockStyle.Fill,
+            .RowCount = 2, .ColumnCount = 1,
+            .BackColor = Color.White, .Margin = Padding.Empty
+        }
+        driverGridArea.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+        driverGridArea.RowStyles.Add(New RowStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(45 * layoutScale))))
+        driverGridArea.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        rootLayout.Controls.Add(driverGridArea, 0, 4)
+
+        Dim selectionBar As New TableLayoutPanel With {
+            .Name = "DriverStudioSelectionBar", .Dock = DockStyle.Fill,
+            .RowCount = 1, .ColumnCount = 4,
+            .Margin = New Padding(0, 0, 0, 3), .BackColor = Color.White
+        }
+        selectionBar.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
+        selectionBar.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(169 * layoutScale))))
+        selectionBar.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(104 * layoutScale))))
+        selectionBar.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
+            CInt(Math.Ceiling(142 * layoutScale))))
+        selectionBar.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+        driverGridArea.Controls.Add(selectionBar, 0, 0)
+
+        selectEligibleButton = New Button With {
+            .Name = "btnStudioSelectAllEligible", .Text = "Select all eligible",
+            .Dock = DockStyle.Fill, .Enabled = False,
+            .Margin = New Padding(0, 3, 7, 4)
+        }
+        ModernTheme.StyleButton(selectEligibleButton, "secondary")
+        AddHandler selectEligibleButton.Click, AddressOf SelectAllEligibleClicked
+        selectEligibleButton.AccessibleDescription =
+            "Select every New or Newer INF only AFTER mounted WIM comparison."
+        selectionBar.Controls.Add(selectEligibleButton, 0, 0)
+
+        clearSelectionButton = New Button With {
+            .Name = "btnStudioClearAll", .Text = "Clear",
+            .Dock = DockStyle.Fill, .Enabled = False,
+            .Margin = New Padding(0, 3, 7, 4)
+        }
+        ModernTheme.StyleButton(clearSelectionButton, "neutral")
+        AddHandler clearSelectionButton.Click, Sub(sender, e)
+            ApplyBulkSelection(False)
+            statusLabel.Text = "Driver import plan cleared."
+        End Sub
+        selectionBar.Controls.Add(clearSelectionButton, 1, 0)
+
+        auditAllButton = New Button With {
+            .Name = "btnStudioAuditAll", .Text = "Audit all INF",
+            .Dock = DockStyle.Fill, .Enabled = False,
+            .Margin = New Padding(0, 3, 7, 4)
+        }
+        ModernTheme.StyleButton(auditAllButton, "browse")
+        AddHandler auditAllButton.Click, AddressOf AuditAllClicked
+        auditAllButton.AccessibleDescription =
+            "Read-only source package and CAT signature audit, maximum 30 INF per run."
+        selectionBar.Controls.Add(auditAllButton, 2, 0)
+
+        selectionLabel = WriteLabel("0 selected", 8.8F, False, ModernTheme.Muted)
+        selectionLabel.Name = "lblStudioSelection"
+        selectionLabel.TextAlign = ContentAlignment.MiddleRight
+        selectionBar.Controls.Add(selectionLabel, 3, 0)
+        driverGridArea.Controls.Add(grid, 0, 1)
 
         Dim detailsLayout As New TableLayoutPanel With {
             .Dock = DockStyle.Fill, .RowCount = 2, .ColumnCount = 2,
@@ -489,8 +569,53 @@ Public NotInheritable Class DriverStudioPanel
     End Sub
 
     Private Sub UpdateInstallReady()
-        installButton.Enabled = Not isWorking AndAlso comparisonVerified AndAlso
+        Dim eligible = comparisonVerified AndAlso decisions.Any(
+            Function(d) DriverStudioInstaller.IsAllowed(d))
+        installButton.Enabled = Not isWorking AndAlso eligible AndAlso
             decisions.Any(Function(d) d.Selected AndAlso DriverStudioInstaller.IsAllowed(d))
+        selectEligibleButton.Enabled = Not isWorking AndAlso eligible
+        clearSelectionButton.Enabled = Not isWorking AndAlso
+            decisions.Any(Function(d) d.Selected)
+        auditAllButton.Enabled = Not isWorking AndAlso decisions.Count > 0
+        selectionLabel.Text = decisions.Count(Function(d) d.Selected).ToString() &
+            " selected"
+    End Sub
+
+    Private Sub ApplyBulkSelection(selectEligible As Boolean)
+        If isWorking OrElse decisions.Count = 0 Then Return
+        Dim eligibleCount = decisions.Count(Function(d)
+            Return comparisonVerified AndAlso DriverStudioInstaller.IsAllowed(d)
+        End Function)
+        If selectEligible AndAlso eligibleCount > 200 Then
+            statusLabel.Text = "Import limit: 200 INF per batch. Narrow the source first."
+            Return
+        End If
+        bulkSelectionUpdate = True
+        grid.SuspendLayout()
+        Try
+            For i As Integer = 0 To decisions.Count - 1
+                Dim selected = selectEligible AndAlso comparisonVerified AndAlso
+                    DriverStudioInstaller.IsAllowed(decisions(i))
+                decisions(i).Selected = selected
+                grid.Rows(i).Cells(0).Value = selected
+            Next
+        Finally
+            grid.ResumeLayout(False)
+            bulkSelectionUpdate = False
+        End Try
+        UpdateInstallReady()
+    End Sub
+
+    Private Sub SelectAllEligibleClicked(sender As Object, e As EventArgs)
+        If Not comparisonVerified Then
+            statusLabel.Text = "Mount and Compare with WIM first. " &
+                "Audit all INF checks source packages without a mount."
+            Return
+        End If
+        ApplyBulkSelection(True)
+        statusLabel.Text = "Selected " &
+            decisions.Count(Function(d) d.Selected).ToString() &
+            " eligible New/Newer INF(s). Review and audit before import."
     End Sub
 
     Private Async Sub ScanClicked(sender As Object, e As EventArgs)
@@ -606,10 +731,14 @@ Public NotInheritable Class DriverStudioPanel
         Try
             grid.Rows.Clear()
             For Each d In results
+                Dim canSelect = verified AndAlso DriverStudioInstaller.IsAllowed(d)
+                If Not canSelect Then d.Selected = False
                 Dim number = grid.Rows.Add(d.Selected, d.Candidate.InfName,
                     d.Candidate.Version, d.InstalledVersion, d.Status)
-                grid.Rows(number).Cells(0).ReadOnly =
-                    Not DriverStudioInstaller.IsAllowed(d)
+                grid.Rows(number).Cells(0).ReadOnly = Not canSelect
+                grid.Rows(number).Cells(0).ToolTipText = If(canSelect,
+                    "Include this New/Newer INF in the installation plan.",
+                    "Not eligible for import; review or compare WIM first.")
                 Dim cell = grid.Rows(number).Cells(4)
                 cell.ToolTipText = If(Not verified AndAlso d.Status = "Review",
                     "Review SOURCE INF (no WIM comparison). " & d.Detail,
