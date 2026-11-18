@@ -860,6 +860,9 @@ Public NotInheritable Class ModernTheme
                     End If
                 End If
             End If
+            If tabs.SelectedIndex = 0 Then
+                driverStudio.NotifyMountWorkspaceVisited()
+            End If
             setActive(Math.Max(0, tabs.SelectedIndex))
             If tabs.SelectedIndex = wimPageIndex Then wim360.ActivateFromMount()
             If tabs.SelectedIndex = studioPageIndex Then
