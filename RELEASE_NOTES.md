@@ -1,67 +1,57 @@
-# DISM GUI 4.3.25 — Stable
+# DISM GUI 4.3.26 — Stable
 
-Portable Windows x86, x64 and ARM64 release built with Visual Studio
-2026 and self-contained .NET 10. This is a Driver Studio UI and
-usability maintenance update over v4.3.24.
+Portable Windows builds for x86, x64 and ARM64, with Visual Studio 2026
+and self-contained .NET 10. Maintenance update to Driver Studio's source
+file selection controls, following operator screenshots from v4.3.25.
 
-## More coherent Driver Studio actions
+## Driver Studio: intuitive source workflow
 
-- **Add selected to WIM...** is now on the action bar above the INF
-  comparison table, directly alongside **Select New / Newer**, **Clear**
-  and the two read-only **Audit** actions. It no longer lives as a
-  detached large button at the bottom of the page.
-- During a real selective WIM import, **Stop after current** replaces
-  the Add action in the same toolbar slot. Stop is not shown when idle.
-- **Select New / Newer** is available immediately once an eligible,
-  verified WIM comparison finishes. When all eligible packages are
-  already checked, the caption changes to **Deselect New / Newer**.
-  Clicking again visibly clears them; no need to click an INF row first.
-  The independent **Clear** action still clears a partial/manual plan.
-- Changing the driver source immediately resets all selection, audit
-  and import controls; stale WIM comparisons cannot authorize writes.
-- **Copy comparison** now sits beside **INF DETAILS** rather than
-  consuming its own large footer row. Source package detail content
-  remains scrollable and export remains read-only.
-- Removed two unused bottom action rows. The driver table and INF
-  details expand with available window height instead of leaving a
-  large unused bottom area.
-- The action bar now adapts to window width and Windows font scaling:
-  one row on wide screens; three legible rows in compact/high-DPI
-  windows, keeping Audit and Add actions reachable.
+- **Choose folder** moved into the upper-right Driver Studio workspace
+  header. The button width is calculated from its actual font/caption
+  rather than assuming a fixed size, and the workspace header adapts to
+  larger UI fonts to avoid truncation.
+- **Scan / Refresh** moved to the editable INF source path row. At a normal
+  window width, the path field and the single Scan button sit together.
+  At higher display scaling, the path spans the top row and the Scan
+  action sits directly below at the right. There are no duplicate Scan
+  controls and no separate manual Compare action.
+- The source field has a readable minimum height and smaller margins
+  to avoid appearing as a cropped line in a compact window.
+- Browsing is disabled while a scan/driver import is in progress, so
+  the source cannot be changed through the chooser mid-operation.
+- Existing selection/audit buttons, adaptive high-DPI selection
+  toolbar, INF details, and optional **Add selected to WIM...** controls
+  from v4.3.25 remain as-is.
 
-## Safety remains unchanged
+## Safety and behavior
 
-- **Scan / Refresh** automatically compares only with an already
-  mounted, WIMGAPI-verified exact WIM/index, without modifying it.
-- New/Newer packages are never selected automatically by scanning.
-  A checkbox or Select action only creates a prospective plan; it does
-  not call DISM Add-Driver by itself.
-- **Add selected to WIM...** remains an optional, explicitly confirmed
-  write to the **mounted offline image** (R/W). It never silently
-  installs drivers in the running PC, removes older drivers,
-  commits/discards a WIM or changes WIMMount registry entries.
-- Signature/manifests, selected target/index, architecture, source INF,
-  fresh inventory, administrator rights and writer lease still
-  gate the import. Existing preflight and postflight validations are
-  unchanged.
-- Legacy **Driver tools → Add drivers** retains independent
-  whole-folder semantics; use selective Driver Studio staging when
-  you do not want to stage older/same-version packages.
+- Choosing a folder only fills in the source path; it does not install
+  drivers or change a WIM.
+- Scan / Refresh is read-only. It examines source INF files and performs
+  automatic comparison only against an already-mounted image verified
+  for the exact WIM path/index/mount directory by WIMGAPI.
+- New/Newer INF are not checked by scanning. Import is an explicit,
+  independently confirmed write to the **mounted offline WIM**, never
+  the running Windows installation. No automatic Commit/Discard,
+  mount recovery, driver removal or force-unsigned operation is added.
+- Signature audit, installed-driver inventory validation, WIM
+  architecture and image writer lease, and postflight validation
+  remain unchanged from v4.3.25.
 
 ## Validation
 
-- Windows CI x86, x64, ARM64: success.
-- Real disposable WIM servicing and WinForms interaction tests: success.
-- Simulated font scaling 125%, 150%, 175%, 200%: success, including
-  compact toolbar access, button captions, optional write placement
-  and source-change selection-state reset.
-- Hosted Windows VM signed OEM/WIM validation: success.
-- Physical machine use, including an actual user-mounted WIM with
-  production drivers, still merits local acceptance testing.
+- Windows x86 / x64 / ARM64 CI, plus signed OEM/WIM verification on
+  a hosted Windows VM: PASS for the source-change PR.
+- Real read-only WIM mount smoke tests and WinForms control checks: PASS.
+- Simulated font scaling 125%, 150%, 175%, 200%: PASS, including
+  full captions, header placement, path-field height and no
+  source/scan control overlap. These tests do not replace manual
+  testing on a physical Windows system.
 
 ## Rollback
 
-Stable [DISM GUI v4.3.24](https://github.com/sgennadi/DISM-GUI/releases/tag/v4.3.24)
-and its original portable ZIP files remain unchanged and available.
+The original, unchanged portable release
+[DISM GUI v4.3.25](https://github.com/sgennadi/DISM-GUI/releases/tag/v4.3.25)
+remains published with x86, x64 and ARM64 downloads.
 
-Original upstream attribution and project licensing remain intact.
+Original upstream attribution and project licensing are retained.
