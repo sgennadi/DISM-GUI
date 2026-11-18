@@ -17,17 +17,16 @@ Public NotInheritable Class DriverStudioPanel
     Private ReadOnly currentWim As Func(Of String)
     Private ReadOnly currentIndex As Func(Of Integer)
     Private ReadOnly currentMount As Func(Of String)
-    Private ReadOnly openDrivers As Action(Of String)
     Private ReadOnly viewport As Panel
     Private ReadOnly rootLayout As TableLayoutPanel
     Private ReadOnly sourceBox As TextBox
     Private ReadOnly recursive As CheckBox
     Private ReadOnly scanButton As Button
-    Private ReadOnly compareButton As Button
     Private ReadOnly copyButton As Button
-    Private ReadOnly transferButton As Button
     Private ReadOnly installButton As Button
     Private ReadOnly stopButton As Button
+    Private ReadOnly importActions As TableLayoutPanel
+    Private ReadOnly importStopColumn As ColumnStyle
     Private ReadOnly auditButton As Button
     Private ReadOnly selectEligibleButton As Button
     Private ReadOnly clearSelectionButton As Button
@@ -62,13 +61,11 @@ Public NotInheritable Class DriverStudioPanel
     Public Sub New(getSource As Func(Of String),
                    getWim As Func(Of String),
                    getIndex As Func(Of Integer),
-                   getMount As Func(Of String),
-                   useSourceInDrivers As Action(Of String))
+                   getMount As Func(Of String))
         currentSource = getSource
         currentWim = getWim
         currentIndex = getIndex
         currentMount = getMount
-        openDrivers = useSourceInDrivers
 
         Me.Name = "DriverStudioPanel"
         Me.Dock = DockStyle.Fill
@@ -123,8 +120,8 @@ Public NotInheritable Class DriverStudioPanel
         heading.RowStyles.Add(New RowStyle(SizeType.Percent, 42))
         rootLayout.Controls.Add(heading, 0, 0)
         heading.Controls.Add(WriteLabel(If(stackSource,
-                                         "DRIVER STUDIO  |  VERSION CHECK",
-                                         "DRIVER STUDIO  |  SMART VERSION DETECTION"),
+                                         "DRIVER COMPARISON",
+                                         "OFFLINE DRIVER COMPARISON"),
                                         12.4F, True, ModernTheme.TextInk), 0, 0)
         heading.Controls.Add(WriteLabel("Compare versions safely. Adding drivers to WIM is optional.",
                                         9.1F, False, ModernTheme.Muted), 0, 1)
@@ -132,7 +129,7 @@ Public NotInheritable Class DriverStudioPanel
         Dim sourceRow As New TableLayoutPanel With {
             .Name = "DriverStudioSourceRow",
             .Dock = DockStyle.Fill, .Margin = New Padding(0, 4, 0, 6),
-            .ColumnCount = If(stackSource, 2, 3),
+            .ColumnCount = 2,
             .RowCount = If(stackSource, 2, 1), .BackColor = Color.White
         }
         If stackSource Then
@@ -144,7 +141,6 @@ Public NotInheritable Class DriverStudioPanel
             sourceRow.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
             sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
             sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(176 * layoutScale))))
-            sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(128 * layoutScale))))
         End If
         rootLayout.Controls.Add(sourceRow, 0, 1)
         sourceBox = New TextBox With {
@@ -177,23 +173,26 @@ Public NotInheritable Class DriverStudioPanel
                 End If
             End Using
         End Sub
-        sourceRow.Controls.Add(browse, If(stackSource, 0, 1), If(stackSource, 1, 0))
+        sourceRow.Controls.Add(browse, 1, If(stackSource, 1, 0))
 
+        ' One Scan / Refresh button is hosted in the always-visible workspace header.
+        ' Do not duplicate it in the scrollable source row at 175-200% DPI.
         scanButton = New Button With {
-            .Name = "btnStudioScan", .Text = "Scan INF",
-            .Dock = DockStyle.Fill, .Margin = New Padding(2, 6, 8, 7)
+            .Name = "btnStudioScanQuick", .Text = "Scan / Refresh",
+            .Dock = DockStyle.Fill, .Margin = New Padding(5, 3, 0, 3),
+            .AccessibleDescription =
+                "Read INF files and automatically compare them with the mounted WIM " &
+                "when that exact image and index are available. Read-only."
         }
         ModernTheme.StyleButton(scanButton, "primary")
         scanButton.AutoEllipsis = False
         AddHandler scanButton.Click, AddressOf ScanClicked
-        sourceRow.Controls.Add(scanButton, If(stackSource, 1, 2), If(stackSource, 1, 0))
 
         Dim settings As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 1,
+            .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 1,
             .Margin = Padding.Empty, .BackColor = Color.White
         }
         settings.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        settings.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 195))
         settings.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         rootLayout.Controls.Add(settings, 0, 2)
         recursive = New CheckBox With {
@@ -203,15 +202,6 @@ Public NotInheritable Class DriverStudioPanel
             .Margin = New Padding(3, 3, 6, 3)
         }
         settings.Controls.Add(recursive, 0, 0)
-        compareButton = New Button With {
-            .Name = "btnStudioCompare", .Text = "Compare with mounted index",
-            .Dock = DockStyle.Fill, .Margin = New Padding(1, 3, 0, 4)
-        }
-        ModernTheme.StyleButton(compareButton, "secondary")
-        compareButton.AutoEllipsis = False
-        AddHandler compareButton.Click, AddressOf CompareClicked
-        settings.Controls.Add(compareButton, 1, 0)
-
         Dim metrics As New TableLayoutPanel With {
             .Name = "DriverStudioMetrics", .Dock = DockStyle.Fill,
             .ColumnCount = 3, .RowCount = 1, .Margin = New Padding(0, 7, 0, 7),
@@ -401,12 +391,11 @@ Public NotInheritable Class DriverStudioPanel
         detailsLayout.Controls.Add(detailBox, 0, 1)
 
         Dim footer As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .ColumnCount = 3, .RowCount = 1,
+            .Dock = DockStyle.Fill, .ColumnCount = 2, .RowCount = 1,
             .Margin = New Padding(0, 11, 0, 0), .BackColor = Color.White
         }
         footer.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(185 * layoutScale))))
-        footer.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(235 * layoutScale))))
         footer.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         rootLayout.Controls.Add(footer, 0, 7)
         copyButton = New Button With {
@@ -429,28 +418,17 @@ Public NotInheritable Class DriverStudioPanel
             End Try
         End Sub
         footer.Controls.Add(copyButton, 0, 0)
-        transferButton = New Button With {
-            .Name = "btnStudioGoDrivers", .Text = "Open Drivers section",
-            .Dock = DockStyle.Fill, .Enabled = False,
-            .Margin = New Padding(0, 3, 10, 4)
-        }
-        ModernTheme.StyleButton(transferButton, "neutral")
-        transferButton.AutoEllipsis = False
-        AddHandler transferButton.Click, AddressOf OpenDriversClicked
-        footer.Controls.Add(transferButton, 1, 0)
-        Dim warning = WriteLabel("No automatic Commit / Discard",
-                                  8.5F, False, ModernTheme.Muted)
-        warning.TextAlign = ContentAlignment.MiddleRight
-        footer.Controls.Add(warning, 2, 0)
-
-        Dim importActions As New TableLayoutPanel With {
+        ' Copy comparison remains available without a second route to Driver tools.
+        ' Driver tools is already accessible through the left navigation.
+        importActions = New TableLayoutPanel With {
             .Name = "DriverStudioImportActions",
             .Dock = DockStyle.Fill, .ColumnCount = 3, .RowCount = 1,
             .Margin = New Padding(0, 6, 0, 0), .BackColor = Color.White
         }
         importActions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         importActions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(215 * layoutScale))))
-        importActions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(215 * layoutScale))))
+        importStopColumn = New ColumnStyle(SizeType.Absolute, 0)
+        importActions.ColumnStyles.Add(importStopColumn)
         importActions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         rootLayout.Controls.Add(importActions, 0, 8)
 
@@ -469,7 +447,7 @@ Public NotInheritable Class DriverStudioPanel
         stopButton = New Button With {
             .Name = "btnStudioStopAfterCurrent",
             .Text = "Stop after current",
-            .Dock = DockStyle.Fill, .Enabled = False,
+            .Dock = DockStyle.Fill, .Enabled = False, .Visible = False,
             .Margin = New Padding(0, 4, 10, 5)
         }
         ModernTheme.StyleButton(stopButton, "neutral")
@@ -527,6 +505,12 @@ Public NotInheritable Class DriverStudioPanel
     ' Transfer only the selected source folder to legacy Driver tools.
     ' A single INF selection maps to its parent folder. This never authorizes
     ' adding drivers or enables the legacy "Add drivers" action.
+    Public ReadOnly Property ScanAction As Button
+        Get
+            Return scanButton
+        End Get
+    End Property
+
     Public Function SelectedSourceFolderForDriverTools() As String
         Dim selected = sourceBox.Text.Trim().Trim(""""c)
         If selected.Length = 0 Then Return ""
@@ -543,37 +527,63 @@ Public NotInheritable Class DriverStudioPanel
         Return ""
     End Function
 
+    ' The operator may unmount/remount the SAME WIM into the SAME folder.
+    ' The file/index/folder string is then unchanged, but the inventory is not
+    ' guaranteed to be the same. Force a fresh read-only scan on returning.
+    Public Sub NotifyMountWorkspaceVisited()
+        lastAutoCompareSignature = ""
+    End Sub
+
     Public Sub ActivateFromDrivers()
         If Not isWorking AndAlso String.IsNullOrWhiteSpace(sourceBox.Text) Then
             Dim path = currentSource()
             If Not String.IsNullOrWhiteSpace(path) Then sourceBox.Text = path.Trim()
         End If
-        ' A selected folder is NOT proof that Windows still mounts the image.
-        ' An earlier /Discard or /Cleanup-Mountpoints may have removed it.
-        targetLabel.Text = "Target: " & If(String.IsNullOrWhiteSpace(currentWim()),
-            "No WIM selected", Path.GetFileName(currentWim())) &
-            "  |  Index " & currentIndex().ToString() &
-            "  |  Mount not verified (use Compare)"
-        targetLabel.AccessibleDescription = "Selected mount folder: " &
-            If(String.IsNullOrWhiteSpace(currentMount()), "Not set", currentMount())
-        ' A successful Mount does not re-run an earlier INF-only scan.
-        ' When returning from Mount to Driver Studio, automatically attempt ONE
-        ' read-only comparison if the source was already scanned and Windows
-        ' exists in the selected mount. WIMGAPI still validates exact WIM/index.
-        If isWorking OrElse comparisonVerified OrElse decisions.Count = 0 OrElse
-           String.IsNullOrWhiteSpace(sourceBox.Text.Trim()) Then Return
+        If isWorking Then Return
+
         Dim wim = If(currentWim(), "").Trim()
         Dim mount = If(currentMount(), "").Trim()
-        If wim.Length = 0 OrElse mount.Length = 0 OrElse Not File.Exists(wim) Then Return
-        If Not Directory.Exists(Path.Combine(mount, "Windows")) Then Return
-        Dim signature = wim.ToUpperInvariant() & "|" & currentIndex().ToString() &
-                        "|" & mount.ToUpperInvariant() & "|" &
-                        sourceBox.Text.Trim().ToUpperInvariant()
+        Dim target = "Target: " & If(wim.Length = 0, "No WIM selected",
+            Path.GetFileName(wim)) & " | Index " & currentIndex().ToString()
+        targetLabel.AccessibleDescription = "Selected mount folder: " & mount
+        Dim mountedWindowsAvailable As Boolean = False
+        Try
+            mountedWindowsAvailable = wim.Length > 0 AndAlso File.Exists(wim) AndAlso
+                mount.Length > 0 AndAlso Directory.Exists(Path.Combine(mount, "Windows"))
+        Catch ex As ArgumentException
+            mountedWindowsAvailable = False
+        Catch ex As NotSupportedException
+            mountedWindowsAvailable = False
+        End Try
+
+        If Not mountedWindowsAvailable Then
+            ' A previously verified WIM might have been unmounted or discarded
+            ' while the operator was using Mount. Never keep a stale "verified"
+            ' label, eligible checkboxes, or installed-driver version results.
+            If comparisonVerified AndAlso decisions.Count > 0 Then
+                Dim sourceOnly = DriverStudioEngine.CompareCandidates(
+                    decisions.Select(Function(d) d.Candidate).ToList(),
+                    New List(Of DriverStudioEngine.DriverPackage)(), False)
+                ShowDecisions(sourceOnly, "WIM inventory NOT checked")
+                statusLabel.Text = "Image is no longer mounted. INF scan retained; " &
+                    "driver versions NOT checked. No WIM changes."
+            End If
+            targetLabel.Text = target & " | Not mounted / not verified"
+            lastAutoCompareSignature = ""
+            Return
+        End If
+
+        Dim signature = CurrentTargetSignature()
+        If decisions.Count = 0 Then
+            targetLabel.Text = target & " | WIM available; click Scan / Refresh"
+            Return
+        End If
         If String.Equals(signature, lastAutoCompareSignature,
                          StringComparison.Ordinal) Then Return
         lastAutoCompareSignature = signature
-        statusLabel.Text = "Mounted Windows folder detected. Comparing INF versions..."
-        CompareClicked(Me, EventArgs.Empty)
+        targetLabel.Text = target & " | Comparing automatically..."
+        statusLabel.Text = "Mounted Windows folder detected. Checking WIM index..."
+        ScanClicked(Me, EventArgs.Empty)
     End Sub
 
     Private Sub InvalidateComparison()
@@ -585,25 +595,27 @@ Public NotInheritable Class DriverStudioPanel
         decisions.Clear()
         grid.Rows.Clear()
         copyButton.Enabled = False
-        transferButton.Enabled = False
         totalMetric.Text = "—"
         newMetric.Text = "—"
         sameMetric.Text = "—"
         lastTarget = "Not checked"
         lastAutoCompareSignature = ""
-        statusLabel.Text = "Folder changed. Scan INF before comparing installed versions."
+        targetLabel.Text = "WIM comparison pending. Use Scan / Refresh."
+        statusLabel.Text = "Source changed. Scan / Refresh to read INF and compare automatically."
     End Sub
 
     Private Sub WorkState(busy As Boolean)
         isWorking = busy
         scanButton.Enabled = Not busy
-        compareButton.Enabled = Not busy
         auditButton.Enabled = Not busy AndAlso decisions.Count > 0
         recursive.Enabled = Not busy
         sourceBox.ReadOnly = busy
         grid.ReadOnly = busy
-        transferButton.Enabled = Not busy AndAlso decisions.Count > 0
-        stopButton.Enabled = busy AndAlso isInstalling AndAlso Not stopAfterCurrent
+        Dim showStop = busy AndAlso isInstalling
+        importStopColumn.Width = If(showStop,
+            CInt(Math.Ceiling(215 * Math.Max(1.0F, Me.Font.Height / 16.0F))), 0)
+        stopButton.Visible = showStop
+        stopButton.Enabled = showStop AndAlso Not stopAfterCurrent
         UpdateInstallReady()
     End Sub
 
@@ -647,8 +659,8 @@ Public NotInheritable Class DriverStudioPanel
 
     Private Sub SelectAllEligibleClicked(sender As Object, e As EventArgs)
         If Not comparisonVerified Then
-            statusLabel.Text = "Mount and Compare with WIM first. " &
-                "Audit all INF checks source packages without a mount."
+            statusLabel.Text = "Selected WIM index is not verified. Mount it, " &
+                "then return here or click Scan / Refresh. Audit all is read-only."
             Return
         End If
         ApplyBulkSelection(True)
@@ -657,48 +669,57 @@ Public NotInheritable Class DriverStudioPanel
             " New/Newer INF(s); no changes yet. Audit selected before Add to WIM."
     End Sub
 
+    ' One read-only action for source inspection and (when already mounted)
+    ' image comparison. No action here mounts a WIM or invokes DISM Add-Driver.
+    ' An absent/invalid target never turns INF packages into "New".
     Private Async Sub ScanClicked(sender As Object, e As EventArgs)
         If isWorking Then Return
         Dim selectedPath = sourceBox.Text.Trim()
         Dim includeSubfolders = recursive.Checked
-        WorkState(True)
-        statusLabel.Text = "Scanning INF packages (read-only)..."
-        Try
-            Dim sourceItems = Await Task.Run(
-                Function() DriverStudioEngine.ScanSource(selectedPath, includeSubfolders))
-            If IsDisposed Then Return
-            Dim results = DriverStudioEngine.CompareCandidates(
-                sourceItems, New List(Of DriverStudioEngine.DriverPackage)(), False)
-            ShowDecisions(results, "Image inventory not checked")
-            statusLabel.Text = "INF scanned: " & results.Count.ToString() &
-                ". No WIM comparison. Review = source conflict; Not checked = needs mount."
-        Catch ex As Exception
-            If IsDisposed Then Return
-            RuntimeDiagnostics.RecordException("Driver Studio scan", ex)
-            statusLabel.Text = "INF scan failed: " & ex.Message
-            InvalidateComparison()
-            statusLabel.Text = "INF scan failed: " & ex.Message
-        Finally
-            If Not IsDisposed Then WorkState(False)
-        End Try
-    End Sub
-
-    Private Async Sub CompareClicked(sender As Object, e As EventArgs)
-        If isWorking Then Return
-        Dim selectedPath = sourceBox.Text.Trim()
-        Dim includeSubfolders = recursive.Checked
-        Dim imagePath = currentWim()
+        Dim imagePath = If(currentWim(), "").Trim()
         Dim index = currentIndex()
-        Dim mount = currentMount()
+        Dim mount = If(currentMount(), "").Trim()
         comparisonVerified = False
         comparedInventoryFingerprint = ""
         WorkState(True)
-        statusLabel.Text = "Checking selected WIM index and reading driver versions..."
-        Dim sourceItems As New List(Of DriverStudioEngine.DriverPackage)()
+        statusLabel.Text = "Scanning INF packages (read-only)..."
+        Dim sourceItems As List(Of DriverStudioEngine.DriverPackage) = Nothing
         Try
             sourceItems = Await Task.Run(
                 Function() DriverStudioEngine.ScanSource(selectedPath, includeSubfolders))
             If IsDisposed Then Return
+        Catch ex As Exception
+            If IsDisposed Then Return
+            RuntimeDiagnostics.RecordException("Driver Studio scan", ex)
+            InvalidateComparison()
+            statusLabel.Text = "INF scan failed: " & ex.Message
+            WorkState(False)
+            Return
+        End Try
+
+        Try
+            ' Check whether any mounted Windows is present before invoking
+            ' Get-WindowsDriver. The inventory bridge always verifies that
+            ' WIMGAPI registered the EXACT WIM file, index and mount directory.
+            Dim mountMayExist = imagePath.Length > 0 AndAlso File.Exists(imagePath) AndAlso
+                index > 0 AndAlso mount.Length > 0 AndAlso
+                Directory.Exists(Path.Combine(mount, "Windows"))
+            If Not mountMayExist Then
+                Dim sourceOnly = DriverStudioEngine.CompareCandidates(
+                    sourceItems, New List(Of DriverStudioEngine.DriverPackage)(), False)
+                ShowDecisions(sourceOnly, "WIM inventory NOT checked")
+                targetLabel.Text = "Target: " & If(imagePath.Length = 0, "No WIM selected",
+                    Path.GetFileName(imagePath)) & " | Index " & index.ToString() &
+                    " | Not mounted / not verified"
+                targetLabel.AccessibleDescription = "Selected mount folder: " & mount
+                statusLabel.Text = sourceOnly.Count.ToString() &
+                    " INF scanned. WIM not mounted; versions NOT checked. " &
+                    "Mount the index; comparison runs on returning here."
+                lastAutoCompareSignature = ""
+                Return
+            End If
+
+            statusLabel.Text = "INF scan complete. Verifying WIM index and driver inventory..."
             Dim installed = Await DriverStudioInventory.ReadMountedAsync(
                 imagePath, index, mount, CancellationToken.None)
             If IsDisposed Then Return
@@ -709,11 +730,11 @@ Public NotInheritable Class DriverStudioPanel
                     "Selected image index is missing from inspected WIM.")
                 Return selected.Architecture
             End Function)
+            If IsDisposed Then Return
             Dim results = DriverStudioEngine.CompareCandidates(
                 sourceItems, installed, True, architecture)
-            Dim inventoryFingerprint =
+            comparedInventoryFingerprint =
                 DriverStudioInstaller.SnapshotInstalledInventory(installed)
-            comparedInventoryFingerprint = inventoryFingerprint
             comparedArchitecture = architecture
             comparedWim = imagePath
             comparedIndex = index
@@ -725,28 +746,39 @@ Public NotInheritable Class DriverStudioPanel
             targetLabel.Text = "Target: " & Path.GetFileName(imagePath) &
                 " | Index " & index.ToString() & " | WIM inventory verified"
             targetLabel.AccessibleDescription = "Verified mount folder: " & mount
+            lastAutoCompareSignature = CurrentTargetSignature()
             statusLabel.Text = "Compared " & results.Count.ToString() &
-                               " INF(s) against " & installed.Count.ToString() &
-                               " WIM driver entries. Read-only; 0 selected by default."
+                " INF(s) against " & installed.Count.ToString() &
+                " WIM driver entries. Read-only; 0 selected by default."
         Catch ex As Exception
             If IsDisposed Then Return
-            RuntimeDiagnostics.RecordException("Driver Studio compare", ex)
-            ' Never turn an unavailable inventory into "New" decisions.
-            ' VB.NET forbids Await inside Catch; use the source INF scan already
-            ' completed before reading the installed-driver inventory.
-            Dim results = DriverStudioEngine.CompareCandidates(
+            RuntimeDiagnostics.RecordException("Driver Studio automatic WIM comparison", ex)
+            ' An INF-only result is still useful, but may NOT authorize import.
+            Dim unverified = DriverStudioEngine.CompareCandidates(
                 sourceItems, New List(Of DriverStudioEngine.DriverPackage)(), False)
-            ShowDecisions(results, "Inventory NOT verified")
-            targetLabel.Text = "Target: " & If(String.IsNullOrWhiteSpace(imagePath),
-                "No WIM selected", Path.GetFileName(imagePath)) &
-                " | Index " & index.ToString() & " | Mount NOT verified"
-            targetLabel.AccessibleDescription = "Last selected folder: " & mount
-            statusLabel.Text = "WIM NOT verified. INF scan only; mount this index, then Compare."
+            ShowDecisions(unverified, "WIM inventory NOT verified")
+            targetLabel.Text = "Target: " & If(imagePath.Length = 0, "No WIM selected",
+                Path.GetFileName(imagePath)) & " | Index " & index.ToString() &
+                " | WIM NOT verified"
+            targetLabel.AccessibleDescription = "Selected mount: " & mount
+            statusLabel.Text = "INF scanned; WIM comparison unavailable. " &
+                "No WIM changes. Use Scan / Refresh after checking Mount health."
             statusLabel.AccessibleDescription = ex.Message
+            ' Suppress repeated automatic retries of the same broken target
+            ' during tab navigation; Scan / Refresh explicitly retries.
+            lastAutoCompareSignature = CurrentTargetSignature()
         Finally
             If Not IsDisposed Then WorkState(False)
         End Try
     End Sub
+
+    Private Function CurrentTargetSignature() As String
+        Return If(currentWim(), "").Trim().ToUpperInvariant() & "|" &
+            currentIndex().ToString(Globalization.CultureInfo.InvariantCulture) & "|" &
+            If(currentMount(), "").Trim().ToUpperInvariant() & "|" &
+            sourceBox.Text.Trim().ToUpperInvariant() & "|" &
+            recursive.Checked.ToString()
+    End Function
 
     Public Sub PreviewForTest(items As IEnumerable(Of DriverStudioEngine.Decision),
                               Optional verified As Boolean = True)
@@ -805,7 +837,6 @@ Public NotInheritable Class DriverStudioPanel
             "No INF files found. Select a folder with driver INF packages.",
             "Read-only preview: no drivers selected, no WIM changes.")
         copyButton.Enabled = results.Count > 0
-        transferButton.Enabled = results.Count > 0
         auditButton.Enabled = results.Count > 0
         UpdateInstallReady()
         If results.Count > 0 Then
@@ -902,7 +933,7 @@ Public NotInheritable Class DriverStudioPanel
                 packages.Count.ToString() & " trusted. " &
                 If(comparisonVerified,
                    "WIM compared; install still requires R/W mount and approval.",
-                   "WIM not compared. Mount the image and run Compare for versions.")
+                   "WIM not compared. Mount the image; Scan / Refresh will compare automatically.")
             ShowSelected()
         Catch ex As Exception
             RuntimeDiagnostics.RecordException("Driver Studio package audit", ex)
@@ -961,7 +992,7 @@ Public NotInheritable Class DriverStudioPanel
            recursive.Checked <> comparedRecurse Then
             MessageBox.Show(Me.FindForm(),
                 "The WIM, image index, mount folder or driver source changed. " &
-                "Run Compare with mounted index again.",
+                "Click Scan / Refresh to verify the mounted WIM again.",
                 "Driver Studio - Comparison expired", MessageBoxButtons.OK,
                 MessageBoxIcon.Warning)
             Return
@@ -1022,7 +1053,7 @@ Public NotInheritable Class DriverStudioPanel
                                      StringComparison.OrdinalIgnoreCase) Then
                     Throw New InvalidOperationException(
                         "The image architecture changed since driver comparison. " &
-                        "Compare again before importing.")
+                        "Scan / Refresh before importing.")
                 End If
                 Return indexInfo.Architecture
             End Function)
@@ -1171,73 +1202,4 @@ Public NotInheritable Class DriverStudioPanel
         End Try
     End Sub
 
-    Private Sub OpenDriversClicked(sender As Object, e As EventArgs)
-        If decisions.Count = 0 Then Return
-        Dim folderPath = sourceBox.Text.Trim()
-        If File.Exists(folderPath) Then folderPath = Path.GetDirectoryName(folderPath)
-        If Not Directory.Exists(folderPath) Then Return
-        ' This command only navigates; it never imports drivers by itself.
-        Dim prompt = "Open this source folder in the Drivers section?" &
-                     Environment.NewLine & Environment.NewLine &
-                     "The standard Add Drivers command imports the entire folder," &
-                     Environment.NewLine &
-                     "including same-version or older drivers." &
-                     Environment.NewLine &
-                     "Smart Version Detection does not filter that command."
-        Using confirm As New Form With {
-            .Text = "Open Drivers section",
-            .StartPosition = FormStartPosition.CenterParent,
-            .FormBorderStyle = FormBorderStyle.Sizable,
-            .MaximizeBox = False, .MinimizeBox = False,
-            .ShowInTaskbar = False, .AutoScaleMode = AutoScaleMode.Font,
-            .Font = ModernTheme.UiFont(10.0F),
-            .MinimumSize = New Size(590, 245),
-            .ClientSize = New Size(650, 255)
-        }
-            Dim message As New Label With {
-                .Dock = DockStyle.Fill, .Text = prompt,
-                .Font = ModernTheme.UiFont(10.0F),
-                .ForeColor = ModernTheme.TextInk,
-                .Padding = New Padding(12), .AutoSize = False
-            }
-            Dim popupScale As Single = Math.Max(1.0F, confirm.Font.Height / 18.0F)
-            Dim actions As New FlowLayoutPanel With {
-                .Dock = DockStyle.Fill,
-                .FlowDirection = FlowDirection.RightToLeft,
-                .Padding = New Padding(8), .WrapContents = False
-            }
-            Dim cancel As New Button With {
-                .Text = "Cancel", .DialogResult = DialogResult.Cancel,
-                .Width = 112, .Height = 34
-            }
-            Dim proceed As New Button With {
-                .Text = "Open Drivers", .DialogResult = DialogResult.OK,
-                .Width = 145, .Height = 34
-            }
-            ModernTheme.StyleButton(cancel, "neutral")
-            ModernTheme.StyleButton(proceed, "primary")
-            cancel.Size = New Size(CInt(Math.Ceiling(120 * popupScale)),
-                                   CInt(Math.Ceiling(36 * popupScale)))
-            proceed.Size = New Size(CInt(Math.Ceiling(150 * popupScale)),
-                                    CInt(Math.Ceiling(36 * popupScale)))
-            actions.Controls.Add(cancel)
-            actions.Controls.Add(proceed)
-            Dim dialogLayout As New TableLayoutPanel With {
-                .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 2,
-                .Padding = New Padding(8, 8, 8, 8)
-            }
-            dialogLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-            dialogLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-            dialogLayout.RowStyles.Add(New RowStyle(SizeType.Absolute,
-                CInt(Math.Ceiling(60 * popupScale))))
-            dialogLayout.Controls.Add(message, 0, 0)
-            dialogLayout.Controls.Add(actions, 0, 1)
-            confirm.Controls.Add(dialogLayout)
-            confirm.AcceptButton = proceed
-            confirm.CancelButton = cancel
-            If confirm.ShowDialog(Me.FindForm()) = DialogResult.OK Then
-                openDrivers(folderPath)
-            End If
-        End Using
-    End Sub
 End Class

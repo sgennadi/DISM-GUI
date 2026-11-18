@@ -24,11 +24,16 @@ recursing through subfolders. It extracts the DriverVer date/version, INF
 name, manufacturer, class, selected hardware IDs and source-INF SHA-256.
 
 To check whether the *same version* is already present, first mount the
-chosen WIM index using **WIM 360 → Mount**. Then choose **Compare with
-mounted index** in Driver Studio. The tool verifies that the WIM file,
-index, and mount directory match and queries structured
-`Get-WindowsDriver -Path <mount-folder> -All` metadata. If the index is
-not mounted, every unverified candidate is labeled **Not checked**.
+chosen WIM index using **WIM 360 → Mount**. **Scan / Refresh**
+now performs both source INF scanning and automatic read-only comparison
+whenever the exact WIM file/index is already mounted and verified by
+WIMGAPI. Returning to Driver Studio after a successful Mount automatically
+refreshes previously scanned sources. If no valid mount exists, the scan
+still works, but every unverified candidate is **Not checked** (or
+**Review** for ambiguous source packages), never a fabricated New/Newer.
+Run **Scan / Refresh** again to pick up changes made outside the application.
+No automatic mounting, import, Commit or Discard is performed. The tool
+queries structured `Get-WindowsDriver -Path <mount-folder> -All` metadata.
 
 **Same version** means the same INF name, provider, class, version and
 date; this does not guarantee identical signed driver files. Driver Studio
@@ -44,9 +49,16 @@ and source INF hashes, then invokes DISM separately for each selected INF.
 **Same version, Older, Review, Duplicate source** and **Not checked** are
 never eligible. A changed source or inventory invalidates the plan.
 
-The **Stop after current** control finishes the active DISM command before
-ending the batch to avoid interrupting a write. Driver Studio does **not**
-mount, unmount, commit, discard or force unsigned packages automatically.
+The **Stop after current** control is visible only during an active WIM
+driver import, and finishes the current DISM command before ending the
+batch. **Open Drivers section** was removed because the sidebar already
+opens **Driver tools** and carries across the current source folder.
+The top header now has one **Scan / Refresh** action rather than duplicate
+Scan INF buttons; the separate manual Compare button was removed.
+**Copy comparison**, **Select New / Newer**, **Clear**, **Audit selected**,
+**Audit all INF**, and optional **Add selected to WIM...** remain distinct,
+useful actions. Driver Studio does **not** mount, unmount, commit, discard
+or force unsigned packages automatically.
 After reviewing the outcome, use **WIM 360 → Mount** to explicitly commit or
 discard the image. The legacy Drivers section's Add drivers button still
 imports an **entire folder**: its behavior is separate from the selective importer.

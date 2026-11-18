@@ -3375,18 +3375,19 @@ internal static class LayoutSmoke
             tabs.SelectedIndex = 10;
             Application.DoEvents();
             Require(studioScanQuick!.Visible && studioScanQuick.Enabled &&
-                    studioScanQuick.Text == "Scan INF" &&
+                    studioScanQuick.Text == "Scan / Refresh" &&
                     studioScanQuick.Height >= 26,
-                "Driver Studio must expose its Scan INF action in the always-visible workspace header");
+                "Driver Studio must expose its single read-only Scan / Refresh action in the header");
+            VerifyReadableButton(studioScanQuick, "Driver Studio single Scan / Refresh at high DPI");
             var quickBounds = studioScanQuick.RectangleToScreen(studioScanQuick.ClientRectangle);
             var formBounds = form.RectangleToScreen(form.ClientRectangle);
             Require(quickBounds.Top >= formBounds.Top &&
                     quickBounds.Bottom <= formBounds.Bottom,
-                "Driver Studio quick Scan INF must remain onscreen at high DPI");
+                "Driver Studio Scan / Refresh must remain onscreen at high DPI");
             tabs.SelectedIndex = 9;
             Application.DoEvents();
             Require(!studioScanQuick.Visible,
-                "Driver Studio Scan INF must not cover the WIM 360 header");
+                "Driver Studio Scan / Refresh must not cover the WIM 360 header");
             var dashboard = Find(tabs.TabPages[9], "Wim360Dashboard") as Wim360Dashboard;
             Require(dashboard is not null &&
                     Find(dashboard, "Wim360Layout") is TableLayoutPanel &&
@@ -3514,10 +3515,12 @@ internal static class LayoutSmoke
             var studioPanel = Find(tabs.TabPages[10], "DriverStudioPanel") as DriverStudioPanel;
             Require(studioNav is not null && studioPanel is not null &&
                     Find(studioPanel, "gridStudioDrivers") is DataGridView &&
-                    Find(studioPanel, "btnStudioCompare") is Button &&
-                    Find(studioPanel, "btnStudioScan") is Button &&
-                    Find(studioPanel, "btnStudioCopyPlan") is Button,
-                    "Driver Studio navigation and scan/compare preview must exist");
+                    Find(form, "btnStudioScanQuick") is Button &&
+                    Find(studioPanel, "btnStudioCopyPlan") is Button &&
+                    Find(form, "btnStudioCompare") is null &&
+                    Find(form, "btnStudioGoDrivers") is null &&
+                    Find(form, "btnStudioScan") is null,
+                    "Driver Studio must use one Scan / Refresh action; remove redundant Compare and Drivers navigation.");
             tabs.SelectedIndex = 10;
             Application.DoEvents();
             var studioPreview = DriverStudioEngine.CompareCandidates(
@@ -3561,8 +3564,9 @@ internal static class LayoutSmoke
             var installStudio = Find(studioPanel, "btnStudioInstallSelected") as Button;
             var stopStudio = Find(studioPanel, "btnStudioStopAfterCurrent") as Button;
             Require(installStudio is not null && stopStudio is not null &&
-                    installStudio.Width >= 100 && stopStudio.Width >= 100,
-                    "Driver Studio must show readable per-INF install and safe-stop controls");
+                    installStudio.Width >= 100 &&
+                    !stopStudio.Visible && !stopStudio.Enabled,
+                    "Optional WIM write must remain readable; Stop is hidden until a write is in progress.");
             Require(!installStudio!.Enabled && !stopStudio!.Enabled &&
                     studioGrid.Rows[0].Cells[0].ReadOnly,
                     "Identical driver versions must not enable import or user override");
@@ -3658,11 +3662,11 @@ internal static class LayoutSmoke
             Console.WriteLine("PASS Driver Studio Review source/Not checked WIM status clarity");
             studioPanel.PreviewForTest(studioPreview);
             Application.DoEvents();
-            var visibleScan = (Button)Find(studioPanel, "btnStudioScan")!;
-            var visibleCompare = (Button)Find(studioPanel, "btnStudioCompare")!;
-            Require(visibleScan.Width >= 85 && visibleCompare.Width >= 130 &&
-                    studioGrid.Height >= 145,
-                    "Driver Studio must have readable scan buttons and comparison grid");
+            var visibleScan = (Button)Find(form, "btnStudioScanQuick")!;
+            Require(visibleScan.Width >= 85 && studioGrid.Height >= 145 &&
+                    AllControls(form).OfType<Button>().Count(b =>
+                        b.Name == "btnStudioScanQuick") == 1,
+                    "Driver Studio must have one visible Scan / Refresh action and a readable comparison grid.");
             if (Environment.GetEnvironmentVariable("DISMGUI_LAYOUT_ONLY") == "1")
                 Require(studioSource.Width >= 200,
                     "Driver Studio source path was squeezed under high font scaling");
@@ -3703,6 +3707,65 @@ internal static class LayoutSmoke
                 System.IO.File.Delete(temporaryInf);
             }
             Console.WriteLine("PASS Driver Studio sidebar source folder handoff (folder and INF)");
+            // Exercise the actual asynchronous one-click scan entrypoint with no
+            // mounted image. Merely selecting an INF may never create a "New"
+            // install plan or launch DISM servicing.
+            var uiScanRoot = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                "DISMGUI-OneScan-" + Guid.NewGuid().ToString("N"));
+            System.IO.Directory.CreateDirectory(uiScanRoot);
+            try {
+                System.IO.File.WriteAllText(System.IO.Path.Combine(uiScanRoot, "smoke.inf"),
+                    string.Join("\r\n", new[] {
+                        "[Version]", "Signature=\"$Windows NT$\"",
+                        "Class=Net", "Provider=%Contoso%",
+                        "DriverVer=11/03/2026,2.1.4.0",
+                        "CatalogFile=smoke.cat", "",
+                        "[Manufacturer]", "%Contoso%=ContosoModels,NTamd64",
+                        "[ContosoModels.NTamd64]",
+                        "%Device%=Install,PCI\\VEN_1234&DEV_4567", "",
+                        "[Strings]", "Contoso=\"Contoso Corporation\"",
+                        "Device=\"Contoso Ethernet\""
+                    }));
+                System.IO.File.WriteAllText(
+                    System.IO.Path.Combine(uiScanRoot, "smoke.cat"), "unsigned smoke CAT");
+                studioSource.Text = uiScanRoot;
+                tabs.SelectedIndex = 10;
+                Application.DoEvents();
+                var scanStatus = Find(studioPanel, "lblStudioStatus") as Label;
+                Require(scanStatus is not null && visibleScan.Visible &&
+                        visibleScan.Enabled && studioGrid.Rows.Count == 0,
+                        "Changing source must invalidate previous verified comparison.");
+                visibleScan.PerformClick();
+                var scanDeadline = DateTime.UtcNow.AddSeconds(25);
+                while (DateTime.UtcNow < scanDeadline &&
+                       !scanStatus!.Text.Contains("WIM not mounted", StringComparison.OrdinalIgnoreCase) &&
+                       !scanStatus.Text.Contains("INF scan failed", StringComparison.OrdinalIgnoreCase)) {
+                    Application.DoEvents();
+                    System.Threading.Thread.Sleep(20);
+                }
+                Require(scanStatus!.Text.Contains("WIM not mounted", StringComparison.OrdinalIgnoreCase) &&
+                        studioGrid.Rows.Count == 1 &&
+                        Convert.ToString(studioGrid.Rows[0].Cells[4].Value) == "Not checked" &&
+                        studioGrid.Rows[0].Cells[0].ReadOnly &&
+                        !installStudio.Enabled,
+                        "One-click Scan / Refresh without mounted WIM must be read-only and unverified.");
+                Console.WriteLine("PASS actual Scan / Refresh source-only invocation without mounted WIM");
+            } finally {
+                System.IO.Directory.Delete(uiScanRoot, recursive: true);
+            }
+            // A previously verified result must never survive an unmount:
+            // when the operator returns, versions are unverified and ineligible.
+            studioPanel.PreviewForTest(newStudio, verified: true);
+            tabs.SelectedIndex = 0;
+            Application.DoEvents();
+            tabs.SelectedIndex = 10;
+            Application.DoEvents();
+            Require(studioGrid.Rows.Count == 1 &&
+                    Convert.ToString(studioGrid.Rows[0].Cells[4].Value) == "Not checked" &&
+                    studioGrid.Rows[0].Cells[0].ReadOnly &&
+                    !installStudio.Enabled,
+                    "Driver Studio must invalidate stale WIM comparison on returning after unmount.");
+            Console.WriteLine("PASS Driver Studio stale mount invalidation and single Scan / Refresh layout");
             tabs.SelectedIndex = 0;
             Application.DoEvents();
             Console.WriteLine("PASS embedded Driver Studio preview and safe comparison UI");
