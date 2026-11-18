@@ -529,32 +529,51 @@ Public NotInheritable Class DriverStudioPanel
             Dim path = currentSource()
             If Not String.IsNullOrWhiteSpace(path) Then sourceBox.Text = path.Trim()
         End If
-        ' A selected folder is NOT proof that Windows still mounts the image.
-        ' An earlier /Discard or /Cleanup-Mountpoints may have removed it.
-        targetLabel.Text = "Target: " & If(String.IsNullOrWhiteSpace(currentWim()),
-            "No WIM selected", Path.GetFileName(currentWim())) &
-            "  |  Index " & currentIndex().ToString() &
-            "  |  WIM comparison pending"
-        targetLabel.AccessibleDescription = "Selected mount folder: " &
-            If(String.IsNullOrWhiteSpace(currentMount()), "Not set", currentMount())
-        ' A successful Mount does not re-run an earlier INF-only scan.
-        ' When returning from Mount to Driver Studio, automatically attempt ONE
-        ' read-only comparison if the source was already scanned and Windows
-        ' exists in the selected mount. WIMGAPI still validates exact WIM/index.
-        If isWorking OrElse comparisonVerified OrElse decisions.Count = 0 OrElse
-           String.IsNullOrWhiteSpace(sourceBox.Text.Trim()) Then Return
+        If isWorking Then Return
+
         Dim wim = If(currentWim(), "").Trim()
         Dim mount = If(currentMount(), "").Trim()
-        If wim.Length = 0 OrElse mount.Length = 0 OrElse Not File.Exists(wim) Then Return
-        If Not Directory.Exists(Path.Combine(mount, "Windows")) Then Return
-        Dim signature = wim.ToUpperInvariant() & "|" & currentIndex().ToString() &
-                        "|" & mount.ToUpperInvariant() & "|" &
-                        sourceBox.Text.Trim().ToUpperInvariant()
+        Dim target = "Target: " & If(wim.Length = 0, "No WIM selected",
+            Path.GetFileName(wim)) & " | Index " & currentIndex().ToString()
+        targetLabel.AccessibleDescription = "Selected mount folder: " & mount
+        Dim mountedWindowsAvailable As Boolean = False
+        Try
+            mountedWindowsAvailable = wim.Length > 0 AndAlso File.Exists(wim) AndAlso
+                mount.Length > 0 AndAlso Directory.Exists(Path.Combine(mount, "Windows"))
+        Catch ex As ArgumentException
+            mountedWindowsAvailable = False
+        Catch ex As NotSupportedException
+            mountedWindowsAvailable = False
+        End Try
+
+        If Not mountedWindowsAvailable Then
+            ' A previously verified WIM might have been unmounted or discarded
+            ' while the operator was using Mount. Never keep a stale "verified"
+            ' label, eligible checkboxes, or installed-driver version results.
+            If comparisonVerified AndAlso decisions.Count > 0 Then
+                Dim sourceOnly = DriverStudioEngine.CompareCandidates(
+                    decisions.Select(Function(d) d.Candidate).ToList(),
+                    New List(Of DriverStudioEngine.DriverPackage)(), False)
+                ShowDecisions(sourceOnly, "WIM inventory NOT checked")
+                statusLabel.Text = "Image is no longer mounted. INF scan retained; " &
+                    "driver versions NOT checked. No WIM changes."
+            End If
+            targetLabel.Text = target & " | Not mounted / not verified"
+            lastAutoCompareSignature = ""
+            Return
+        End If
+
+        Dim signature = CurrentTargetSignature()
+        If decisions.Count = 0 Then
+            targetLabel.Text = target & " | WIM available; click Scan / Refresh"
+            Return
+        End If
         If String.Equals(signature, lastAutoCompareSignature,
                          StringComparison.Ordinal) Then Return
         lastAutoCompareSignature = signature
-        statusLabel.Text = "Mounted Windows folder detected. Comparing INF versions..."
-        CompareClicked(Me, EventArgs.Empty)
+        targetLabel.Text = target & " | Comparing automatically..."
+        statusLabel.Text = "Mounted Windows folder detected. Checking WIM index..."
+        ScanClicked(Me, EventArgs.Empty)
     End Sub
 
     Private Sub InvalidateComparison()
@@ -635,48 +654,57 @@ Public NotInheritable Class DriverStudioPanel
             " New/Newer INF(s); no changes yet. Audit selected before Add to WIM."
     End Sub
 
+    ' One read-only action for source inspection and (when already mounted)
+    ' image comparison. No action here mounts a WIM or invokes DISM Add-Driver.
+    ' An absent/invalid target never turns INF packages into "New".
     Private Async Sub ScanClicked(sender As Object, e As EventArgs)
         If isWorking Then Return
         Dim selectedPath = sourceBox.Text.Trim()
         Dim includeSubfolders = recursive.Checked
-        WorkState(True)
-        statusLabel.Text = "Scanning INF packages (read-only)..."
-        Try
-            Dim sourceItems = Await Task.Run(
-                Function() DriverStudioEngine.ScanSource(selectedPath, includeSubfolders))
-            If IsDisposed Then Return
-            Dim results = DriverStudioEngine.CompareCandidates(
-                sourceItems, New List(Of DriverStudioEngine.DriverPackage)(), False)
-            ShowDecisions(results, "Image inventory not checked")
-            statusLabel.Text = "INF scanned: " & results.Count.ToString() &
-                ". No WIM comparison. Review = source conflict; Not checked = needs mount."
-        Catch ex As Exception
-            If IsDisposed Then Return
-            RuntimeDiagnostics.RecordException("Driver Studio scan", ex)
-            statusLabel.Text = "INF scan failed: " & ex.Message
-            InvalidateComparison()
-            statusLabel.Text = "INF scan failed: " & ex.Message
-        Finally
-            If Not IsDisposed Then WorkState(False)
-        End Try
-    End Sub
-
-    Private Async Sub CompareClicked(sender As Object, e As EventArgs)
-        If isWorking Then Return
-        Dim selectedPath = sourceBox.Text.Trim()
-        Dim includeSubfolders = recursive.Checked
-        Dim imagePath = currentWim()
+        Dim imagePath = If(currentWim(), "").Trim()
         Dim index = currentIndex()
-        Dim mount = currentMount()
+        Dim mount = If(currentMount(), "").Trim()
         comparisonVerified = False
         comparedInventoryFingerprint = ""
         WorkState(True)
-        statusLabel.Text = "Checking selected WIM index and reading driver versions..."
-        Dim sourceItems As New List(Of DriverStudioEngine.DriverPackage)()
+        statusLabel.Text = "Scanning INF packages (read-only)..."
+        Dim sourceItems As List(Of DriverStudioEngine.DriverPackage) = Nothing
         Try
             sourceItems = Await Task.Run(
                 Function() DriverStudioEngine.ScanSource(selectedPath, includeSubfolders))
             If IsDisposed Then Return
+        Catch ex As Exception
+            If IsDisposed Then Return
+            RuntimeDiagnostics.RecordException("Driver Studio scan", ex)
+            InvalidateComparison()
+            statusLabel.Text = "INF scan failed: " & ex.Message
+            WorkState(False)
+            Return
+        End Try
+
+        Try
+            ' Check whether any mounted Windows is present before invoking
+            ' Get-WindowsDriver. The inventory bridge always verifies that
+            ' WIMGAPI registered the EXACT WIM file, index and mount directory.
+            Dim mountMayExist = imagePath.Length > 0 AndAlso File.Exists(imagePath) AndAlso
+                index > 0 AndAlso mount.Length > 0 AndAlso
+                Directory.Exists(Path.Combine(mount, "Windows"))
+            If Not mountMayExist Then
+                Dim sourceOnly = DriverStudioEngine.CompareCandidates(
+                    sourceItems, New List(Of DriverStudioEngine.DriverPackage)(), False)
+                ShowDecisions(sourceOnly, "WIM inventory NOT checked")
+                targetLabel.Text = "Target: " & If(imagePath.Length = 0, "No WIM selected",
+                    Path.GetFileName(imagePath)) & " | Index " & index.ToString() &
+                    " | Not mounted / not verified"
+                targetLabel.AccessibleDescription = "Selected mount folder: " & mount
+                statusLabel.Text = sourceOnly.Count.ToString() &
+                    " INF scanned. WIM not mounted; versions NOT checked. " &
+                    "Mount the index; comparison runs on returning here."
+                lastAutoCompareSignature = ""
+                Return
+            End If
+
+            statusLabel.Text = "INF scan complete. Verifying WIM index and driver inventory..."
             Dim installed = Await DriverStudioInventory.ReadMountedAsync(
                 imagePath, index, mount, CancellationToken.None)
             If IsDisposed Then Return
@@ -687,11 +715,11 @@ Public NotInheritable Class DriverStudioPanel
                     "Selected image index is missing from inspected WIM.")
                 Return selected.Architecture
             End Function)
+            If IsDisposed Then Return
             Dim results = DriverStudioEngine.CompareCandidates(
                 sourceItems, installed, True, architecture)
-            Dim inventoryFingerprint =
+            comparedInventoryFingerprint =
                 DriverStudioInstaller.SnapshotInstalledInventory(installed)
-            comparedInventoryFingerprint = inventoryFingerprint
             comparedArchitecture = architecture
             comparedWim = imagePath
             comparedIndex = index
@@ -703,28 +731,39 @@ Public NotInheritable Class DriverStudioPanel
             targetLabel.Text = "Target: " & Path.GetFileName(imagePath) &
                 " | Index " & index.ToString() & " | WIM inventory verified"
             targetLabel.AccessibleDescription = "Verified mount folder: " & mount
+            lastAutoCompareSignature = CurrentTargetSignature()
             statusLabel.Text = "Compared " & results.Count.ToString() &
-                               " INF(s) against " & installed.Count.ToString() &
-                               " WIM driver entries. Read-only; 0 selected by default."
+                " INF(s) against " & installed.Count.ToString() &
+                " WIM driver entries. Read-only; 0 selected by default."
         Catch ex As Exception
             If IsDisposed Then Return
-            RuntimeDiagnostics.RecordException("Driver Studio compare", ex)
-            ' Never turn an unavailable inventory into "New" decisions.
-            ' VB.NET forbids Await inside Catch; use the source INF scan already
-            ' completed before reading the installed-driver inventory.
-            Dim results = DriverStudioEngine.CompareCandidates(
+            RuntimeDiagnostics.RecordException("Driver Studio automatic WIM comparison", ex)
+            ' An INF-only result is still useful, but may NOT authorize import.
+            Dim unverified = DriverStudioEngine.CompareCandidates(
                 sourceItems, New List(Of DriverStudioEngine.DriverPackage)(), False)
-            ShowDecisions(results, "Inventory NOT verified")
-            targetLabel.Text = "Target: " & If(String.IsNullOrWhiteSpace(imagePath),
-                "No WIM selected", Path.GetFileName(imagePath)) &
-                " | Index " & index.ToString() & " | Mount NOT verified"
-            targetLabel.AccessibleDescription = "Last selected folder: " & mount
-            statusLabel.Text = "WIM NOT verified. INF scan only; mount this index, then Compare."
+            ShowDecisions(unverified, "WIM inventory NOT verified")
+            targetLabel.Text = "Target: " & If(imagePath.Length = 0, "No WIM selected",
+                Path.GetFileName(imagePath)) & " | Index " & index.ToString() &
+                " | WIM NOT verified"
+            targetLabel.AccessibleDescription = "Selected mount: " & mount
+            statusLabel.Text = "INF scanned; WIM comparison unavailable. " &
+                "No WIM changes. Use Scan / Refresh after checking Mount health."
             statusLabel.AccessibleDescription = ex.Message
+            ' Suppress repeated automatic retries of the same broken target
+            ' during tab navigation; Scan / Refresh explicitly retries.
+            lastAutoCompareSignature = CurrentTargetSignature()
         Finally
             If Not IsDisposed Then WorkState(False)
         End Try
     End Sub
+
+    Private Function CurrentTargetSignature() As String
+        Return If(currentWim(), "").Trim().ToUpperInvariant() & "|" &
+            currentIndex().ToString(Globalization.CultureInfo.InvariantCulture) & "|" &
+            If(currentMount(), "").Trim().ToUpperInvariant() & "|" &
+            sourceBox.Text.Trim().ToUpperInvariant() & "|" &
+            recursive.Checked.ToString()
+    End Function
 
     Public Sub PreviewForTest(items As IEnumerable(Of DriverStudioEngine.Decision),
                               Optional verified As Boolean = True)
