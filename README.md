@@ -4,10 +4,10 @@ Modernized from [mikecel79/DISMGUI](https://github.com/mikecel79/DISMGUI). Origi
 
 ## Stable release
 
-**Latest stable: [DISM GUI v4.3.24](https://github.com/sgennadi/DISM-GUI/releases/tag/v4.3.24)**.
+**Latest stable: [DISM GUI v4.3.25](https://github.com/sgennadi/DISM-GUI/releases/tag/v4.3.25)**.
 Three portable Windows archives (x86, x64, ARM64), SHA-256 checksums
 and release notes are published after the Windows CI validation passes.
-The [v4.3.23 stable](https://github.com/sgennadi/DISM-GUI/releases/tag/v4.3.23)
+The [v4.3.24 stable](https://github.com/sgennadi/DISM-GUI/releases/tag/v4.3.24)
 is retained unchanged for rollback.
 
 ## Builds
