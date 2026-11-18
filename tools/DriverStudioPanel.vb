@@ -520,7 +520,7 @@ Public NotInheritable Class DriverStudioPanel
         bar.SuspendLayout()
         gridArea.SuspendLayout()
         Try
-            Dim positions As (Button As Control, Column As Integer, Row As Integer)()
+            Dim positions As (Ctl As Control, Column As Integer, Row As Integer)()
             If compact Then
                 For i As Integer = 0 To 5
                     bar.ColumnStyles(i).SizeType = If(i < 2,
@@ -537,12 +537,11 @@ Public NotInheritable Class DriverStudioPanel
                     (selectionLabel, 0, 2), (importActions, 1, 2)
                 }
             Else
+                Dim actionWidths As Integer() = {198, 88, 145, 122}
                 For i As Integer = 0 To 3
                     bar.ColumnStyles(i).SizeType = SizeType.Absolute
-                Next
-                For i As Integer = 0 To 3
                     bar.ColumnStyles(i).Width = CSng(Math.Ceiling(
-                        ({198, 88, 145, 122})(i) * layoutScale))
+                        actionWidths(i) * layoutScale))
                 Next
                 bar.ColumnStyles(4).SizeType = SizeType.Percent
                 bar.ColumnStyles(4).Width = 100
@@ -561,7 +560,7 @@ Public NotInheritable Class DriverStudioPanel
                 }
             End If
             For Each placement In positions
-                bar.SetCellPosition(placement.Button,
+                bar.SetCellPosition(placement.Ctl,
                     New TableLayoutPanelCellPosition(
                         placement.Column, placement.Row))
             Next
