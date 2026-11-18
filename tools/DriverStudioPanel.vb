@@ -126,7 +126,7 @@ Public NotInheritable Class DriverStudioPanel
                                          "DRIVER STUDIO  |  VERSION CHECK",
                                          "DRIVER STUDIO  |  SMART VERSION DETECTION"),
                                         12.4F, True, ModernTheme.TextInk), 0, 0)
-        heading.Controls.Add(WriteLabel("Read-only driver version comparison",
+        heading.Controls.Add(WriteLabel("Compare versions safely. Adding drivers to WIM is optional.",
                                         9.1F, False, ModernTheme.Muted), 0, 1)
 
         Dim sourceRow As New TableLayoutPanel With {
@@ -263,7 +263,7 @@ Public NotInheritable Class DriverStudioPanel
         grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(216, 235, 253)
         grid.DefaultCellStyle.SelectionForeColor = ModernTheme.TextInk
         Dim checkedCol As New DataGridViewCheckBoxColumn With {
-            .Name = "colStudioInclude", .HeaderText = "Plan", .FillWeight = 44
+             .Name = "colStudioInclude", .HeaderText = "Add?", .FillWeight = 48
         }
         grid.Columns.Add(checkedCol)
         grid.Columns.Add("colStudioInf", "INF file")
@@ -314,28 +314,26 @@ Public NotInheritable Class DriverStudioPanel
 
         Dim selectionBar As New TableLayoutPanel With {
             .Name = "DriverStudioSelectionBar", .Dock = DockStyle.Fill,
-            .RowCount = 1, .ColumnCount = 4,
+            .RowCount = 1, .ColumnCount = 5,
             .Margin = New Padding(0, 0, 0, 3), .BackColor = Color.White
         }
         selectionBar.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        selectionBar.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
-            CInt(Math.Ceiling(169 * layoutScale))))
-        selectionBar.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
-            CInt(Math.Ceiling(104 * layoutScale))))
-        selectionBar.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
-            CInt(Math.Ceiling(142 * layoutScale))))
+        For Each columnWidth As Integer In {168, 88, 145, 122}
+            selectionBar.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
+                CInt(Math.Ceiling(columnWidth * layoutScale))))
+        Next
         selectionBar.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         driverGridArea.Controls.Add(selectionBar, 0, 0)
 
         selectEligibleButton = New Button With {
-            .Name = "btnStudioSelectAllEligible", .Text = "Select all eligible",
+            .Name = "btnStudioSelectAllEligible", .Text = "Select New / Newer",
             .Dock = DockStyle.Fill, .Enabled = False,
             .Margin = New Padding(0, 3, 7, 4)
         }
         ModernTheme.StyleButton(selectEligibleButton, "secondary")
         AddHandler selectEligibleButton.Click, AddressOf SelectAllEligibleClicked
         selectEligibleButton.AccessibleDescription =
-            "Select every New or Newer INF only AFTER mounted WIM comparison."
+            "Opt-in: mark verified New/Newer packages for an optional WIM import; never installs by itself."
         selectionBar.Controls.Add(selectEligibleButton, 0, 0)
 
         clearSelectionButton = New Button With {
@@ -346,9 +344,21 @@ Public NotInheritable Class DriverStudioPanel
         ModernTheme.StyleButton(clearSelectionButton, "neutral")
         AddHandler clearSelectionButton.Click, Sub(sender, e)
             ApplyBulkSelection(False)
-            statusLabel.Text = "Driver import plan cleared."
+            statusLabel.Text = "Selection cleared. WIM unchanged."
         End Sub
         selectionBar.Controls.Add(clearSelectionButton, 1, 0)
+
+        auditButton = New Button With {
+            .Name = "btnStudioAuditSelected", .Text = "Audit selected",
+            .Dock = DockStyle.Fill, .Enabled = False,
+            .Margin = New Padding(0, 3, 7, 4)
+        }
+        ModernTheme.StyleButton(auditButton, "secondary")
+        auditButton.AutoEllipsis = False
+        AddHandler auditButton.Click, AddressOf AuditClicked
+        auditButton.AccessibleDescription =
+            "Read-only: audit all checked INF packages, or the highlighted INF if none are checked."
+        selectionBar.Controls.Add(auditButton, 2, 0)
 
         auditAllButton = New Button With {
             .Name = "btnStudioAuditAll", .Text = "Audit all INF",
@@ -359,21 +369,19 @@ Public NotInheritable Class DriverStudioPanel
         AddHandler auditAllButton.Click, AddressOf AuditAllClicked
         auditAllButton.AccessibleDescription =
             "Read-only source package and CAT signature audit, maximum 30 INF per run."
-        selectionBar.Controls.Add(auditAllButton, 2, 0)
+        selectionBar.Controls.Add(auditAllButton, 3, 0)
 
         selectionLabel = WriteLabel("0 selected", 8.8F, False, ModernTheme.Muted)
         selectionLabel.Name = "lblStudioSelection"
         selectionLabel.TextAlign = ContentAlignment.MiddleRight
-        selectionBar.Controls.Add(selectionLabel, 3, 0)
+        selectionBar.Controls.Add(selectionLabel, 4, 0)
         driverGridArea.Controls.Add(grid, 0, 1)
 
         Dim detailsLayout As New TableLayoutPanel With {
-            .Dock = DockStyle.Fill, .RowCount = 2, .ColumnCount = 2,
+            .Dock = DockStyle.Fill, .RowCount = 2, .ColumnCount = 1,
             .Margin = Padding.Empty, .BackColor = Color.White
         }
         detailsLayout.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-        detailsLayout.ColumnStyles.Add(New ColumnStyle(
-            SizeType.Absolute, CInt(Math.Ceiling(166 * layoutScale))))
         detailsLayout.RowStyles.Add(New RowStyle(SizeType.Absolute,
             CInt(Math.Ceiling(46 * layoutScale))))
         detailsLayout.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
@@ -381,15 +389,6 @@ Public NotInheritable Class DriverStudioPanel
         detailsLayout.Controls.Add(WriteLabel(If(stackSource,
                                               "PACKAGE DETAILS", "DRIVER PACKAGE  |  DETAILS"),
                                               9.2F, True, ModernTheme.Blue), 0, 0)
-        auditButton = New Button With {
-            .Name = "btnStudioAuditSelected", .Text = "Audit selected",
-            .Dock = DockStyle.Fill, .Margin = New Padding(2, 3, 3, 4),
-            .Enabled = False
-        }
-        ModernTheme.StyleButton(auditButton, "secondary")
-        auditButton.AutoEllipsis = False
-        AddHandler auditButton.Click, AddressOf AuditClicked
-        detailsLayout.Controls.Add(auditButton, 1, 0)
         detailBox = New TextBox With {
             .Name = "txtStudioDetails", .Multiline = True, .ReadOnly = True,
             .ScrollBars = ScrollBars.Vertical, .Dock = DockStyle.Fill,
@@ -400,7 +399,6 @@ Public NotInheritable Class DriverStudioPanel
             .Margin = New Padding(0, 0, 0, 6)
         }
         detailsLayout.Controls.Add(detailBox, 0, 1)
-        detailsLayout.SetColumnSpan(detailBox, 2)
 
         Dim footer As New TableLayoutPanel With {
             .Dock = DockStyle.Fill, .ColumnCount = 3, .RowCount = 1,
@@ -458,12 +456,13 @@ Public NotInheritable Class DriverStudioPanel
 
         installButton = New Button With {
             .Name = "btnStudioInstallSelected",
-            .Text = "Install selected INF",
+            .Text = "Add selected to WIM...",
             .Dock = DockStyle.Fill, .Enabled = False,
             .Margin = New Padding(0, 4, 10, 5)
         }
         ModernTheme.StyleButton(installButton, "primary")
         installButton.AutoEllipsis = False
+        installButton.AccessibleDescription = "Optional write operation: stage checked drivers in a mounted read/write WIM only. This does not install drivers on this PC or remove older drivers."
         AddHandler installButton.Click, AddressOf InstallSelectedClicked
         importActions.Controls.Add(installButton, 0, 0)
 
@@ -482,7 +481,7 @@ Public NotInheritable Class DriverStudioPanel
         End Sub
         importActions.Controls.Add(stopButton, 1, 0)
 
-        Dim importNote = WriteLabel("Requires mounted R/W image",
+        Dim importNote = WriteLabel("OPTIONAL WIM change. Requires R/W mount; no automatic Commit.",
                                     8.4F, False, ModernTheme.Muted)
         importNote.TextAlign = ContentAlignment.MiddleRight
         importActions.Controls.Add(importNote, 2, 0)
@@ -652,9 +651,9 @@ Public NotInheritable Class DriverStudioPanel
             Return
         End If
         ApplyBulkSelection(True)
-        statusLabel.Text = "Selected " &
+        statusLabel.Text = "Marked " &
             decisions.Where(Function(d) d.Selected).Count().ToString() &
-            " eligible New/Newer INF(s). Review and audit before import."
+            " New/Newer INF(s); no changes yet. Audit selected before Add to WIM."
     End Sub
 
     Private Async Sub ScanClicked(sender As Object, e As EventArgs)
@@ -727,7 +726,7 @@ Public NotInheritable Class DriverStudioPanel
             targetLabel.AccessibleDescription = "Verified mount folder: " & mount
             statusLabel.Text = "Compared " & results.Count.ToString() &
                                " INF(s) against " & installed.Count.ToString() &
-                               " installed driver entries. No changes made."
+                               " WIM driver entries. Read-only; 0 selected by default."
         Catch ex As Exception
             If IsDisposed Then Return
             RuntimeDiagnostics.RecordException("Driver Studio compare", ex)
@@ -771,7 +770,9 @@ Public NotInheritable Class DriverStudioPanel
             grid.Rows.Clear()
             For Each d In results
                 Dim canSelect = verified AndAlso DriverStudioInstaller.IsAllowed(d)
-                If Not canSelect Then d.Selected = False
+                ' Version comparison must never silently create a write plan.
+                ' New/Newer rows are visible, but require explicit user selection.
+                d.Selected = False
                 Dim number = grid.Rows.Add(d.Selected, d.Candidate.InfName,
                     d.Candidate.Version, d.InstalledVersion, d.Status)
                 grid.Rows(number).Cells(0).ReadOnly = Not canSelect
@@ -801,7 +802,7 @@ Public NotInheritable Class DriverStudioPanel
         sameMetric.Text = sameCount.ToString()
         statusLabel.Text = If(results.Count = 0,
             "No INF files found. Select a folder with driver INF packages.",
-            "Preview ready. Choose an INF to see the comparison explanation.")
+            "Read-only preview. No drivers selected. Click Select New / Newer only if you intend to modify this WIM.")
         copyButton.Enabled = results.Count > 0
         transferButton.Enabled = results.Count > 0
         auditButton.Enabled = results.Count > 0
@@ -935,10 +936,10 @@ Public NotInheritable Class DriverStudioPanel
                    Not packageAudits(d.Candidate.FilePath).CanInstall
            End Function) Then
             MessageBox.Show(Me.FindForm(),
-                "Audit selected INF first. A complete source-package SHA-256 " &
+                "Use Audit selected first. A complete source-package SHA-256 " &
                 "manifest and a valid CAT Authenticode signature are required." &
                 Environment.NewLine &
-                "Select New/Newer packages and click Audit selected.",
+                "Select New / Newer, then Audit selected; this does not install.",
                 "Driver Studio - Safety preflight", MessageBoxButtons.OK,
                 MessageBoxIcon.Warning)
             Return
@@ -965,13 +966,13 @@ Public NotInheritable Class DriverStudioPanel
             Return
         End If
 
-        Dim prompt = "Install " & selected.Count.ToString() &
-                     " selected INF driver package(s) into:" & Environment.NewLine &
+        Dim prompt = "Add " & selected.Count.ToString() &
+                     " selected INF package(s) to the MOUNTED OFFLINE WIM:" & Environment.NewLine &
                      comparedWim & Environment.NewLine &
                      "Index " & comparedIndex.ToString() &
                      " | Mount folder: " & comparedMount & Environment.NewLine &
                      Environment.NewLine &
-                     "DISM will MODIFY the mounted image. Only New/Newer INF files " &
+                     "DISM will MODIFY this offline WIM, NOT the running Windows PC. Only New/Newer INF files " &
                      "will be added; existing, older and ambiguous packages are skipped." &
                      Environment.NewLine & Environment.NewLine &
                      "No automatic Mount, Commit, Discard, Recurse or ForceUnsigned." &
