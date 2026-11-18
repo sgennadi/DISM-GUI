@@ -3649,8 +3649,10 @@ internal static class LayoutSmoke
             Require(studioSource is not null, "Driver Studio source path entry missing");
             studioSource!.Text = @"C:\ChangedDrivers";
             Application.DoEvents();
-            Require(!installStudio.Enabled,
-                    "Changing the driver source must invalidate the install plan");
+            Require(!installStudio.Enabled && !selectAllEligible.Enabled &&
+                    !clearAllInf.Enabled && !integrityAudit.Enabled &&
+                    !auditAllInf.Enabled && selectedCount.Text == "0 selected",
+                    "Changing the driver source must immediately invalidate ALL selection/audit/import actions without a grid click.");
             // Field screenshot: after /Discard, the selected mount directory
             // was empty. A source INF scan may still flag two conflicting
             // versions as Review, while all other rows remain Not checked.
