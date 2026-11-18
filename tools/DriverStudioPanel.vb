@@ -22,6 +22,7 @@ Public NotInheritable Class DriverStudioPanel
     Private ReadOnly sourceBox As TextBox
     Private ReadOnly recursive As CheckBox
     Private ReadOnly scanButton As Button
+    Private ReadOnly browseButton As Button
     Private ReadOnly copyButton As Button
     Private ReadOnly installButton As Button
     Private ReadOnly stopButton As Button
@@ -92,7 +93,7 @@ Public NotInheritable Class DriverStudioPanel
         Dim stackSource As Boolean = layoutScale > 1.15F
         ' Keep actions next to the results instead of separate detached footers.
         ' Grid/details expand with the viewport; narrow/high-DPI windows scroll.
-        For Each h As Integer In {58, If(stackSource, 94, 62), 44, 46, 260, 64, 154}
+        For Each h As Integer In {58, If(stackSource, 86, 54), 44, 46, 260, 64, 154}
             rootLayout.RowStyles.Add(New RowStyle(SizeType.Absolute,
                 CInt(Math.Ceiling(h * layoutScale))))
         Next
@@ -174,12 +175,14 @@ Public NotInheritable Class DriverStudioPanel
         If stackSource Then
             sourceRow.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
             sourceRow.RowStyles.Add(New RowStyle(SizeType.Percent, 50))
-            sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
-            sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 50))
+            sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
+            sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
+                CInt(Math.Ceiling(188 * layoutScale))))
         Else
             sourceRow.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
             sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
-            sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(176 * layoutScale))))
+            sourceRow.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
+                CInt(Math.Ceiling(188 * layoutScale))))
         End If
         rootLayout.Controls.Add(sourceRow, 0, 1)
         sourceBox = New TextBox With {
@@ -187,18 +190,23 @@ Public NotInheritable Class DriverStudioPanel
             .PlaceholderText = "Driver folder or .inf file",
             .BorderStyle = BorderStyle.FixedSingle,
             .Font = ModernTheme.UiFont(9.7F), .BackColor = Color.White,
-            .Margin = New Padding(1, 13, 7, 11)
+            .Margin = New Padding(1, If(stackSource, 5, 8), 7,
+                                  If(stackSource, 3, 5))
         }
         sourceRow.Controls.Add(sourceBox, 0, 0)
         If stackSource Then sourceRow.SetColumnSpan(sourceBox, 2)
 
-        Dim browse As New Button With {
+        ' Choose folder belongs to the always-visible workspace header.
+        ' Scan stays beside the editable source path in this panel.
+        browseButton = New Button With {
             .Name = "btnStudioBrowse", .Text = "Choose folder",
-            .Dock = DockStyle.Fill, .Margin = New Padding(3, 6, 5, 7)
+            .Dock = DockStyle.Fill, .Margin = New Padding(5, 3, 0, 3),
+            .AccessibleDescription =
+                "Browse for the driver source folder. Selecting a folder does not scan, install or change the WIM."
         }
-        ModernTheme.StyleButton(browse, "browse")
-        browse.AutoEllipsis = False
-        AddHandler browse.Click, Sub(sender, e)
+        ModernTheme.StyleButton(browseButton, "browse")
+        browseButton.AutoEllipsis = False
+        AddHandler browseButton.Click, Sub(sender, e)
             Using picker As New FolderBrowserDialog With {
                 .Description = "Select a folder containing INF driver packages",
                 .UseDescriptionForTitle = True,
@@ -212,13 +220,13 @@ Public NotInheritable Class DriverStudioPanel
                 End If
             End Using
         End Sub
-        sourceRow.Controls.Add(browse, 1, If(stackSource, 1, 0))
-
-        ' One Scan / Refresh button is hosted in the always-visible workspace header.
-        ' Do not duplicate it in the scrollable source row at 175-200% DPI.
+        ' Scan/Refresh is near the path it scans; the header has only
+        ' Choose folder. Keep exactly one scan button and its existing handler.
         scanButton = New Button With {
             .Name = "btnStudioScanQuick", .Text = "Scan / Refresh",
-            .Dock = DockStyle.Fill, .Margin = New Padding(5, 3, 0, 3),
+            .Dock = DockStyle.Fill,
+            .Margin = New Padding(5, If(stackSource, 2, 6), 0,
+                                  If(stackSource, 2, 5)),
             .AccessibleDescription =
                 "Read INF files and automatically compare them with the mounted WIM " &
                 "when that exact image and index are available. Read-only."
@@ -226,6 +234,7 @@ Public NotInheritable Class DriverStudioPanel
         ModernTheme.StyleButton(scanButton, "primary")
         scanButton.AutoEllipsis = False
         AddHandler scanButton.Click, AddressOf ScanClicked
+        sourceRow.Controls.Add(scanButton, 1, If(stackSource, 1, 0))
 
         Dim settings As New TableLayoutPanel With {
             .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 1,
@@ -607,6 +616,12 @@ Public NotInheritable Class DriverStudioPanel
     Public ReadOnly Property ScanAction As Button
         Get
             Return scanButton
+        End Get
+    End Property
+
+    Public ReadOnly Property ChooseFolderAction As Button
+        Get
+            Return browseButton
         End Get
     End Property
 
