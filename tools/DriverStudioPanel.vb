@@ -584,8 +584,11 @@ Public NotInheritable Class DriverStudioPanel
         End Try
     End Sub
 
-    Public Sub PreviewForTest(items As IEnumerable(Of DriverStudioEngine.Decision))
-        ShowDecisions(items.ToList(), "CI fixture - mounted index verified", True)
+    Public Sub PreviewForTest(items As IEnumerable(Of DriverStudioEngine.Decision),
+                              Optional verified As Boolean = True)
+        ShowDecisions(items.ToList(),
+                      If(verified, "CI fixture - mounted index verified",
+                         "CI fixture - INF-only scan; WIM not verified"), verified)
     End Sub
 
     Private Sub ShowDecisions(results As List(Of DriverStudioEngine.Decision),
