@@ -3550,7 +3550,7 @@ internal static class LayoutSmoke
             Console.WriteLine($"Driver Studio package heading: text={auditHeadingText.Width}, " +
                 $"available={auditHeading.ClientSize.Width}, " +
                 $"details={auditHeading.Parent?.ClientSize.Width}, " +
-                $"copy={copyStudio?.Width}");
+                $"copy={(Find(studioPanel, "btnStudioCopyPlan") as Button)?.Width}");
             Require(auditHeadingText.Width + 4 <= auditHeading.ClientSize.Width,
                 "Driver Studio INF details heading clipped beside Copy comparison");
             var auditScroll = Find(studioPanel, "DriverStudioViewport") as Panel;
