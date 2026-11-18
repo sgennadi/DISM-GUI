@@ -3617,7 +3617,7 @@ internal static class LayoutSmoke
                     studioDetails is not null &&
                     studioDetails.Text.Contains("WIM inventory: NOT verified") &&
                     !installStudio.Enabled && !selectAllEligible.Enabled &&
-                    auditAllInf!.Enabled && !newStudio[0].Selected &&
+                    auditAllInf!.Enabled && !unverifiedRows[0].Selected &&
                     studioGrid.Rows[0].Cells[0].ReadOnly &&
                     !(bool)studioGrid.Rows[0].Cells[0].Value!,
                     "Unverified image inventory must display explicit tooltip and block import.");
