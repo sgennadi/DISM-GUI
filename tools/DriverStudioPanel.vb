@@ -25,6 +25,8 @@ Public NotInheritable Class DriverStudioPanel
     Private ReadOnly copyButton As Button
     Private ReadOnly installButton As Button
     Private ReadOnly stopButton As Button
+    Private ReadOnly importActions As TableLayoutPanel
+    Private ReadOnly importStopColumn As ColumnStyle
     Private ReadOnly auditButton As Button
     Private ReadOnly selectEligibleButton As Button
     Private ReadOnly clearSelectionButton As Button
@@ -418,14 +420,15 @@ Public NotInheritable Class DriverStudioPanel
         footer.Controls.Add(copyButton, 0, 0)
         ' Copy comparison remains available without a second route to Driver tools.
         ' Driver tools is already accessible through the left navigation.
-        Dim importActions As New TableLayoutPanel With {
+        importActions = New TableLayoutPanel With {
             .Name = "DriverStudioImportActions",
             .Dock = DockStyle.Fill, .ColumnCount = 3, .RowCount = 1,
             .Margin = New Padding(0, 6, 0, 0), .BackColor = Color.White
         }
         importActions.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
         importActions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(215 * layoutScale))))
-        importActions.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, CInt(Math.Ceiling(215 * layoutScale))))
+        importStopColumn = New ColumnStyle(SizeType.Absolute, 0)
+        importActions.ColumnStyles.Add(importStopColumn)
         importActions.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100))
         rootLayout.Controls.Add(importActions, 0, 8)
 
@@ -444,7 +447,7 @@ Public NotInheritable Class DriverStudioPanel
         stopButton = New Button With {
             .Name = "btnStudioStopAfterCurrent",
             .Text = "Stop after current",
-            .Dock = DockStyle.Fill, .Enabled = False,
+            .Dock = DockStyle.Fill, .Enabled = False, .Visible = False,
             .Margin = New Padding(0, 4, 10, 5)
         }
         ModernTheme.StyleButton(stopButton, "neutral")
@@ -590,7 +593,8 @@ Public NotInheritable Class DriverStudioPanel
         sameMetric.Text = "—"
         lastTarget = "Not checked"
         lastAutoCompareSignature = ""
-        statusLabel.Text = "Folder changed. Scan INF before comparing installed versions."
+        targetLabel.Text = "WIM comparison pending. Use Scan / Refresh."
+        statusLabel.Text = "Source changed. Scan / Refresh to read INF and compare automatically."
     End Sub
 
     Private Sub WorkState(busy As Boolean)
@@ -600,7 +604,11 @@ Public NotInheritable Class DriverStudioPanel
         recursive.Enabled = Not busy
         sourceBox.ReadOnly = busy
         grid.ReadOnly = busy
-        stopButton.Enabled = busy AndAlso isInstalling AndAlso Not stopAfterCurrent
+        Dim showStop = busy AndAlso isInstalling
+        importStopColumn.Width = If(showStop,
+            CInt(Math.Ceiling(215 * Math.Max(1.0F, Me.Font.Height / 16.0F))), 0)
+        stopButton.Visible = showStop
+        stopButton.Enabled = showStop AndAlso Not stopAfterCurrent
         UpdateInstallReady()
     End Sub
 
@@ -918,7 +926,7 @@ Public NotInheritable Class DriverStudioPanel
                 packages.Count.ToString() & " trusted. " &
                 If(comparisonVerified,
                    "WIM compared; install still requires R/W mount and approval.",
-                   "WIM not compared. Mount the image and run Compare for versions.")
+                   "WIM not compared. Mount the image; Scan / Refresh will compare automatically.")
             ShowSelected()
         Catch ex As Exception
             RuntimeDiagnostics.RecordException("Driver Studio package audit", ex)
@@ -977,7 +985,7 @@ Public NotInheritable Class DriverStudioPanel
            recursive.Checked <> comparedRecurse Then
             MessageBox.Show(Me.FindForm(),
                 "The WIM, image index, mount folder or driver source changed. " &
-                "Run Compare with mounted index again.",
+                "Click Scan / Refresh to verify the mounted WIM again.",
                 "Driver Studio - Comparison expired", MessageBoxButtons.OK,
                 MessageBoxIcon.Warning)
             Return
@@ -1038,7 +1046,7 @@ Public NotInheritable Class DriverStudioPanel
                                      StringComparison.OrdinalIgnoreCase) Then
                     Throw New InvalidOperationException(
                         "The image architecture changed since driver comparison. " &
-                        "Compare again before importing.")
+                        "Scan / Refresh before importing.")
                 End If
                 Return indexInfo.Architecture
             End Function)
