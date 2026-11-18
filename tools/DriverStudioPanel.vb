@@ -524,6 +524,25 @@ Public NotInheritable Class DriverStudioPanel
         Return value
     End Function
 
+    ' Transfer only the selected source folder to legacy Driver tools.
+    ' A single INF selection maps to its parent folder. This never authorizes
+    ' adding drivers or enables the legacy "Add drivers" action.
+    Public Function SelectedSourceFolderForDriverTools() As String
+        Dim selected = sourceBox.Text.Trim().Trim(""""c)
+        If selected.Length = 0 Then Return ""
+        Try
+            If Directory.Exists(selected) Then Return Path.GetFullPath(selected)
+            If File.Exists(selected) AndAlso
+               selected.EndsWith(".inf", StringComparison.OrdinalIgnoreCase) Then
+                Return Path.GetDirectoryName(Path.GetFullPath(selected))
+            End If
+        Catch ex As ArgumentException
+        Catch ex As NotSupportedException
+        Catch ex As PathTooLongException
+        End Try
+        Return ""
+    End Function
+
     Public Sub ActivateFromDrivers()
         If Not isWorking AndAlso String.IsNullOrWhiteSpace(sourceBox.Text) Then
             Dim path = currentSource()
@@ -597,15 +616,15 @@ Public NotInheritable Class DriverStudioPanel
         clearSelectionButton.Enabled = Not isWorking AndAlso
             decisions.Any(Function(d) d.Selected)
         auditAllButton.Enabled = Not isWorking AndAlso decisions.Count > 0
-        selectionLabel.Text = decisions.Count(Function(d) d.Selected).ToString() &
+        selectionLabel.Text = decisions.Where(Function(d) d.Selected).Count().ToString() &
             " selected"
     End Sub
 
     Private Sub ApplyBulkSelection(selectEligible As Boolean)
         If isWorking OrElse decisions.Count = 0 Then Return
-        Dim eligibleCount = decisions.Count(Function(d)
+        Dim eligibleCount = decisions.Where(Function(d)
             Return comparisonVerified AndAlso DriverStudioInstaller.IsAllowed(d)
-        End Function)
+        End Function).Count()
         If selectEligible AndAlso eligibleCount > 200 Then
             statusLabel.Text = "Import limit: 200 INF per batch. Narrow the source first."
             Return
@@ -634,7 +653,7 @@ Public NotInheritable Class DriverStudioPanel
         End If
         ApplyBulkSelection(True)
         statusLabel.Text = "Selected " &
-            decisions.Count(Function(d) d.Selected).ToString() &
+            decisions.Where(Function(d) d.Selected).Count().ToString() &
             " eligible New/Newer INF(s). Review and audit before import."
     End Sub
 
