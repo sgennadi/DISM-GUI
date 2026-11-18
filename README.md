@@ -61,8 +61,11 @@ The **Stop after current** control is visible only during an active WIM
 driver import, and finishes the current DISM command before ending the
 batch. **Open Drivers section** was removed because the sidebar already
 opens **Driver tools** and carries across the current source folder.
-The top header now has one **Scan / Refresh** action rather than duplicate
-Scan INF buttons; the separate manual Compare button was removed.
+The **Choose folder** action lives in the top-right Driver Studio header.
+The single **Scan / Refresh** action sits beside the editable INF source path,
+not in the header. On high-DPI/narrow windows the path occupies the first row
+and the Scan button moves below it to avoid clipped captions. No duplicate
+Scan/Compare buttons are created and simply choosing a folder never modifies WIM.
 **Copy comparison**, **Select New / Newer**, **Clear**, **Audit selected**,
 **Audit all INF**, and optional **Add selected to WIM...** remain distinct,
 useful actions. Driver Studio does **not** mount, unmount, commit, discard
