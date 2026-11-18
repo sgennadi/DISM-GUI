@@ -807,7 +807,7 @@ Public NotInheritable Class ModernTheme
                                            sectionNames(Math.Min(index, 8)).ToUpperInvariant()))))
             If studioScanShortcut IsNot Nothing Then
                 Dim showScan = index = studioPageIndex
-                studioScanColumn.Width = If(showScan, 154, 0)
+                studioScanColumn.Width = If(showScan, 190, 0)
                 studioScanShortcut.Visible = showScan
             End If
         End Sub
