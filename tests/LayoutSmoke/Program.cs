@@ -3912,9 +3912,17 @@ internal static class LayoutSmoke
                 VerifyReadableButton((Button)browseWim, $"Mount Choose WIM at {effective}");
                 VerifyReadableButton((Button)browseMount, $"Mount Choose folder at {effective}");
                 var mountRoot = Find(page, "MountResponsiveRoot") as TableLayoutPanel;
+                var mountActions = Find(page, "MountActionButtons") as TableLayoutPanel;
                 Require(mountRoot is not null && mountRoot.ColumnStyles.Count == 2 &&
-                        mountRoot.ColumnStyles[1].Width >= 208,
-                    "Mount layout must reserve sufficient width for right-side actions.");
+                        mountActions is not null,
+                    "Mount responsive layout and its action host are missing.");
+                var stackedMount = mountRoot!.ColumnStyles[1].Width <= 1;
+                Require(stackedMount
+                    ? (page.AutoScroll && mountRoot.RowStyles[1].Height >= 120 &&
+                       mountActions!.ColumnCount == 2 && mountActions.RowCount == 2)
+                    : (mountRoot.ColumnStyles[1].Width >= 208 &&
+                       mountActions!.ColumnCount == 1),
+                    "Mount must stack actions into two columns below full-width source fields when cramped.");
                 var browseRight = browseMount.RectangleToScreen(browseMount.ClientRectangle).Right;
                 var visibleRight = page.RectangleToScreen(page.ClientRectangle).Right;
                 Require(browseRight <= visibleRight + 3,
