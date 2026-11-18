@@ -1,6 +1,7 @@
 Imports System
 Imports System.Collections.Generic
 Imports System.Drawing
+Imports System.Linq
 Imports System.Windows.Forms
 
 ' Resizes legacy sections while preserving their original DISM event handlers.
