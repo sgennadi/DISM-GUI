@@ -308,7 +308,7 @@ Public NotInheritable Class DriverStudioPanel
             .Margin = New Padding(0, 0, 0, 3), .BackColor = Color.White
         }
         selectionBar.RowStyles.Add(New RowStyle(SizeType.Percent, 100))
-        For Each columnWidth As Integer In {168, 88, 145, 122}
+        For Each columnWidth As Integer In {198, 88, 145, 122}
             selectionBar.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute,
                 CInt(Math.Ceiling(columnWidth * layoutScale))))
         Next
@@ -604,24 +604,33 @@ Public NotInheritable Class DriverStudioPanel
         sourceBox.ReadOnly = busy
         grid.ReadOnly = busy
         Dim showStop = busy AndAlso isInstalling
-        importStopColumn.Width = If(showStop,
-            CInt(Math.Ceiling(215 * Math.Max(1.0F, Me.Font.Height / 16.0F))), 0)
+        installButton.Visible = Not showStop
         stopButton.Visible = showStop
+        If showStop Then stopButton.BringToFront()
         stopButton.Enabled = showStop AndAlso Not stopAfterCurrent
         UpdateInstallReady()
     End Sub
 
     Private Sub UpdateInstallReady()
-        Dim eligible = comparisonVerified AndAlso decisions.Any(
+        Dim eligibleCount = decisions.Count(
             Function(d) DriverStudioInstaller.IsAllowed(d))
+        Dim selectedCount = decisions.Count(Function(d) d.Selected)
+        Dim allEligibleSelected = comparisonVerified AndAlso eligibleCount > 0 AndAlso
+            decisions.All(Function(d)
+                Return Not DriverStudioInstaller.IsAllowed(d) OrElse d.Selected
+            End Function)
+        Dim eligible = comparisonVerified AndAlso eligibleCount > 0
         installButton.Enabled = Not isWorking AndAlso eligible AndAlso
             decisions.Any(Function(d) d.Selected AndAlso DriverStudioInstaller.IsAllowed(d))
+        selectEligibleButton.Text = If(allEligibleSelected,
+            "Deselect New / Newer", "Select New / Newer")
+        selectEligibleButton.AccessibleDescription = If(allEligibleSelected,
+            "All eligible INF packages are already selected. Click to deselect them.",
+            "Choose all verified New/Newer INF packages; no WIM changes are made.")
         selectEligibleButton.Enabled = Not isWorking AndAlso eligible
-        clearSelectionButton.Enabled = Not isWorking AndAlso
-            decisions.Any(Function(d) d.Selected)
+        clearSelectionButton.Enabled = Not isWorking AndAlso selectedCount > 0
         auditAllButton.Enabled = Not isWorking AndAlso decisions.Count > 0
-        selectionLabel.Text = decisions.Where(Function(d) d.Selected).Count().ToString() &
-            " selected"
+        selectionLabel.Text = selectedCount.ToString() & " selected"
     End Sub
 
     Private Sub ApplyBulkSelection(selectEligible As Boolean)
@@ -650,15 +659,25 @@ Public NotInheritable Class DriverStudioPanel
     End Sub
 
     Private Sub SelectAllEligibleClicked(sender As Object, e As EventArgs)
+        If isWorking Then Return
         If Not comparisonVerified Then
             statusLabel.Text = "Selected WIM index is not verified. Mount it, " &
                 "then return here or click Scan / Refresh. Audit all is read-only."
             Return
         End If
-        ApplyBulkSelection(True)
-        statusLabel.Text = "Marked " &
-            decisions.Where(Function(d) d.Selected).Count().ToString() &
-            " New/Newer INF(s); no changes yet. Audit selected before Add to WIM."
+        Dim eligibleCount = decisions.Count(Function(d) DriverStudioInstaller.IsAllowed(d))
+        If eligibleCount = 0 Then Return
+        Dim allSelected = decisions.All(Function(d)
+            Return Not DriverStudioInstaller.IsAllowed(d) OrElse d.Selected
+        End Function)
+        ApplyBulkSelection(Not allSelected)
+        If allSelected Then
+            statusLabel.Text = "Deselected New/Newer INF packages. WIM unchanged."
+        Else
+            statusLabel.Text = "Marked " &
+                decisions.Count(Function(d) d.Selected).ToString() &
+                " New/Newer INF(s). Nothing written; audit before Add to WIM."
+        End If
     End Sub
 
     ' One read-only action for source inspection and (when already mounted)
@@ -842,6 +861,10 @@ Public NotInheritable Class DriverStudioPanel
 
     Private Sub GridSelected(sender As Object, e As EventArgs)
         ShowSelected()
+        ' Keep bulk-selection state synchronized after DataGridView focus moves.
+        ' In particular, a completed asynchronous Scan must never require
+        ' clicking an INF row just to activate Select New / Newer.
+        UpdateInstallReady()
     End Sub
 
     Private Sub ShowSelected()
