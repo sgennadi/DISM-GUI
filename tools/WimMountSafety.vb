@@ -114,7 +114,7 @@ Public NotInheritable Class WimMountSafety
     ' Injectable inventory permits regression tests without mounting a WIM.
     Public Shared Function ValidateNewMountTarget(
         report As Wim360Reader.WimReport, index As Integer, mountFolder As String,
-        readOnly As Boolean,
+        mountReadOnly As Boolean,
         registrations As IEnumerable(Of Wim360Reader.MountedImageRegistration)
     ) As String
         If report Is Nothing Then Throw New ArgumentNullException(NameOf(report))
@@ -170,7 +170,7 @@ Public NotInheritable Class WimMountSafety
                     registeredFolder & " (" & entry.Status & "). " &
                     "Do not mount again; inspect WIM 360 > Mount health.")
             End If
-            If sameWim AndAlso (entry.IsReadWrite OrElse Not readOnly OrElse
+            If sameWim AndAlso (entry.IsReadWrite OrElse Not mountReadOnly OrElse
                                 Not String.Equals(entry.Status, "Mounted (read-only)",
                                                   StringComparison.Ordinal)) Then
                 Throw New InvalidOperationException(
@@ -198,7 +198,7 @@ Public NotInheritable Class WimMountSafety
 
     Public Shared Function ValidateNewMount(wimPath As String, indexText As String,
                                             mountFolder As String,
-                                            readOnly As Boolean) As String
+                                            mountReadOnly As Boolean) As String
         Dim index As Integer
         If Not Integer.TryParse(If(indexText, "").Trim(), NumberStyles.None,
                                 CultureInfo.InvariantCulture, index) OrElse index < 1 Then
@@ -209,7 +209,7 @@ Public NotInheritable Class WimMountSafety
             Throw New FileNotFoundException("WIM file was not found.", source)
         End If
         Dim report = Wim360Reader.Inspect(source)
-        Return ValidateNewMountTarget(report, index, mountFolder, readOnly,
+        Return ValidateNewMountTarget(report, index, mountFolder, mountReadOnly,
                                       Wim360Reader.MountedImageRegistrations())
     End Function
 
