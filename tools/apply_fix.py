@@ -43,6 +43,7 @@ def main():
     Private activeDismountTarget As WimMountSafety.Target = Nothing
     Private activeDismountJournal As WimMountSafety.OperationRecord = Nothing
     Private activeMountLease As WimImageOperationLease = Nothing
+    Private activeMountReadOnly As Boolean
     Private activeDismountLease As WimImageOperationLease = Nothing
 
     Private Function RecentDirectory(ByVal category As String) As String
@@ -321,8 +322,15 @@ def main():
             Return
         End If
         Try
+            ' Check WIMGAPI registration BEFORE creating a worker, then once
+            ' more under the cooperative WIM writer lease.
+            activeMountReadOnly = chkMountReadOnly.Checked
+            WimMountSafety.ValidateNewMount(strWIM, strIndex, strFolderName,
+                                             activeMountReadOnly)
             activeMountLease = WimImageOperationLease.Acquire(
                 WimImageOperationLease.WriterResource, strWIM, strFolderName)
+            WimMountSafety.ValidateNewMount(strWIM, strIndex, strFolderName,
+                                             activeMountReadOnly)
             strOutput = ""
             strDISMExitCode = ""
             txtOutput.Clear()
@@ -331,14 +339,42 @@ def main():
             activeMountLease?.Dispose()
             activeMountLease = Nothing
             RuntimeDiagnostics.RecordException("DISM mount preflight/lock", ex)
-            MessageBox.Show(Me, "Mount was NOT started: " & ex.Message,
-                            "WIM busy or invalid", MessageBoxButtons.OK,
-                            MessageBoxIcon.Warning)
+            Dim answer = MessageBox.Show(Me,
+                "Mount was NOT started: " & ex.Message & Environment.NewLine &
+                Environment.NewLine & "Open read-only WIM 360 Mount health now?",
+                "WIM already mounted or unavailable", MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning, MessageBoxDefaultButton.Button1)
+            If answer = DialogResult.Yes Then
+                Using health As New WimMountHealthForm(strWIM)
+                    health.ShowDialog(Me)
+                End Using
+            End If
             Return
         End Try
         frmProgress.ShowDialog(Me)
         txtOutput.Text = strOutput
     End Sub''', "WIM mount with cross-process lease")
+    # Do not dereference WinForms controls from the background worker.
+    # Re-check OS WIMGAPI registration at the last moment before DISM.Start().
+    worker_begin = data.find("    Private Sub BackgroundWorkerMount_DoWork")
+    worker_end = data.find("    Private Sub BackgroundWorkerMount_RunWorkerCompleted",
+                           worker_begin + 1)
+    if worker_begin < 0 or worker_end < 0:
+        raise RuntimeError("Mount worker not found for last-moment registration guard")
+    mount_worker = data[worker_begin:worker_end]
+    if (mount_worker.count("        If chkMountReadOnly.Checked = True Then") != 1 or
+            mount_worker.count("        DISM.Start()\n") != 1):
+        raise RuntimeError("Unexpected upstream Mount-WIM worker layout")
+    mount_worker = mount_worker.replace(
+        "        If chkMountReadOnly.Checked = True Then",
+        "        If activeMountReadOnly Then")
+    mount_worker = mount_worker.replace("        DISM.Start()\n",
+        "        ' Recheck registration after the worker begins and before DISM starts.\n"
+        "        WimMountSafety.ValidateNewMount(strWIM, strIndex, strFolderName,\n"
+        "                                        activeMountReadOnly)\n"
+        "        DISM.Start()\n")
+    data = data[:worker_begin] + mount_worker + data[worker_end:]
+
     data = replace_block(data, "    Private Sub BackgroundWorkerMount_RunWorkerCompleted",
                          "    Private Sub BackgroundWorkerDisMount_DoWork", '''    Private Sub BackgroundWorkerMount_RunWorkerCompleted(ByVal sender As Object, ByVal e As System.ComponentModel.RunWorkerCompletedEventArgs) Handles BackgroundWorkerMount.RunWorkerCompleted
         Try
