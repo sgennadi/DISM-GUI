@@ -3728,6 +3728,7 @@ internal static class LayoutSmoke
                 System.IO.File.WriteAllText(
                     System.IO.Path.Combine(uiScanRoot, "smoke.cat"), "unsigned smoke CAT");
                 studioSource.Text = uiScanRoot;
+                tabs.SelectedIndex = 10;
                 Application.DoEvents();
                 var scanStatus = Find(studioPanel, "lblStudioStatus") as Label;
                 Require(scanStatus is not null && visibleScan.Visible &&
