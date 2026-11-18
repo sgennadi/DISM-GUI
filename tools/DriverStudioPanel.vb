@@ -527,6 +527,13 @@ Public NotInheritable Class DriverStudioPanel
         Return ""
     End Function
 
+    ' The operator may unmount/remount the SAME WIM into the SAME folder.
+    ' The file/index/folder string is then unchanged, but the inventory is not
+    ' guaranteed to be the same. Force a fresh read-only scan on returning.
+    Public Sub NotifyMountWorkspaceVisited()
+        lastAutoCompareSignature = ""
+    End Sub
+
     Public Sub ActivateFromDrivers()
         If Not isWorking AndAlso String.IsNullOrWhiteSpace(sourceBox.Text) Then
             Dim path = currentSource()
