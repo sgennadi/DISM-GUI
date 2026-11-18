@@ -3579,6 +3579,42 @@ internal static class LayoutSmoke
             Application.DoEvents();
             Require(!installStudio.Enabled,
                     "Changing the driver source must invalidate the install plan");
+            // Field screenshot: after /Discard, the selected mount directory
+            // was empty. A source INF scan may still flag two conflicting
+            // versions as Review, while all other rows remain Not checked.
+            var unverifiedRows = DriverStudioEngine.CompareCandidates(
+                new[] { driverFixture.Source },
+                Array.Empty<DriverStudioEngine.DriverPackage>(), false);
+            studioPanel.PreviewForTest(unverifiedRows, verified: false);
+            Application.DoEvents();
+            var studioDetails = Find(studioPanel, "txtStudioDetails") as TextBox;
+            Require(studioGrid.Rows.Count == 1 &&
+                    Convert.ToString(studioGrid.Rows[0].Cells[4].Value) == "Not checked" &&
+                    studioGrid.Rows[0].Cells[4].ToolTipText.Contains("WIM inventory NOT checked") &&
+                    !installStudio.Enabled,
+                    "Unverified image inventory must display explicit tooltip and block import.");
+            var conflictVersion = new DriverStudioEngine.DriverPackage {
+                InfName = driverFixture.Source.InfName,
+                FilePath = driverFixture.Source.FilePath + "-alternate",
+                Provider = driverFixture.Source.Provider,
+                ClassName = driverFixture.Source.ClassName,
+                Version = "99.1.0.0",
+                DriverDate = driverFixture.Source.DriverDate,
+                Sha256 = new string('F', 64)
+            };
+            var sourceReviewRows = DriverStudioEngine.CompareCandidates(
+                new[] { driverFixture.Source, conflictVersion },
+                Array.Empty<DriverStudioEngine.DriverPackage>(), false);
+            studioPanel.PreviewForTest(sourceReviewRows, verified: false);
+            Application.DoEvents();
+            Require(studioGrid.Rows.Count == 2 &&
+                    sourceReviewRows.All(x => x.Status == "Review" && !x.Selected) &&
+                    studioGrid.Rows.Cast<DataGridViewRow>().All(row =>
+                        row.Cells[4].ToolTipText.Contains("Review SOURCE INF")) &&
+                    studioGrid.Columns[4].HeaderCell.ToolTipText.Contains("Not checked") &&
+                    !installStudio.Enabled,
+                    "Review must disclose SOURCE ambiguity, even with unmounted WIM; no import.");
+            Console.WriteLine("PASS Driver Studio Review source/Not checked WIM status clarity");
             studioPanel.PreviewForTest(studioPreview);
             Application.DoEvents();
             var visibleScan = (Button)Find(studioPanel, "btnStudioScan")!;
