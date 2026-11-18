@@ -448,11 +448,14 @@ Public NotInheritable Class DriverStudioPanel
             Dim path = currentSource()
             If Not String.IsNullOrWhiteSpace(path) Then sourceBox.Text = path.Trim()
         End If
+        ' A selected folder is NOT proof that Windows still mounts the image.
+        ' An earlier /Discard or /Cleanup-Mountpoints may have removed it.
         targetLabel.Text = "Target: " & If(String.IsNullOrWhiteSpace(currentWim()),
             "No WIM selected", Path.GetFileName(currentWim())) &
             "  |  Index " & currentIndex().ToString() &
-            "  |  Mount: " & If(String.IsNullOrWhiteSpace(currentMount()),
-                "Not set", currentMount())
+            "  |  Mount not verified (use Compare)"
+        targetLabel.AccessibleDescription = "Selected mount folder: " &
+            If(String.IsNullOrWhiteSpace(currentMount()), "Not set", currentMount())
     End Sub
 
     Private Sub InvalidateComparison()
@@ -503,6 +506,8 @@ Public NotInheritable Class DriverStudioPanel
             Dim results = DriverStudioEngine.CompareCandidates(
                 sourceItems, New List(Of DriverStudioEngine.DriverPackage)(), False)
             ShowDecisions(results, "Image inventory not checked")
+            statusLabel.Text = "INF scanned: " & results.Count.ToString() &
+                ". No WIM comparison. Review = source conflict; Not checked = needs mount."
         Catch ex As Exception
             If IsDisposed Then Return
             RuntimeDiagnostics.RecordException("Driver Studio scan", ex)
@@ -553,6 +558,9 @@ Public NotInheritable Class DriverStudioPanel
             comparedRecurse = includeSubfolders
             ShowDecisions(results, Path.GetFileName(imagePath) & " / Index " &
                           index.ToString() & " / " & mount, True)
+            targetLabel.Text = "Target: " & Path.GetFileName(imagePath) &
+                " | Index " & index.ToString() & " | WIM inventory verified"
+            targetLabel.AccessibleDescription = "Verified mount folder: " & mount
             statusLabel.Text = "Compared " & results.Count.ToString() &
                                " INF(s) against " & installed.Count.ToString() &
                                " installed driver entries. No changes made."
@@ -565,7 +573,12 @@ Public NotInheritable Class DriverStudioPanel
             Dim results = DriverStudioEngine.CompareCandidates(
                 sourceItems, New List(Of DriverStudioEngine.DriverPackage)(), False)
             ShowDecisions(results, "Inventory NOT verified")
-            statusLabel.Text = "Not checked: " & ex.Message
+            targetLabel.Text = "Target: " & If(String.IsNullOrWhiteSpace(imagePath),
+                "No WIM selected", Path.GetFileName(imagePath)) &
+                " | Index " & index.ToString() & " | Mount NOT verified"
+            targetLabel.AccessibleDescription = "Last selected folder: " & mount
+            statusLabel.Text = "WIM NOT verified. INF scan only; mount this index, then Compare."
+            statusLabel.AccessibleDescription = ex.Message
         Finally
             If Not IsDisposed Then WorkState(False)
         End Try
@@ -583,6 +596,9 @@ Public NotInheritable Class DriverStudioPanel
         packageAudits.Clear()
         lastTarget = comparisonTarget
         decisions = results
+        grid.ShowCellToolTips = True
+        grid.Columns(4).HeaderCell.ToolTipText =
+            "Review = source INF metadata/conflict. Not checked = mounted WIM inventory unavailable."
         grid.SuspendLayout()
         Try
             grid.Rows.Clear()
@@ -592,6 +608,11 @@ Public NotInheritable Class DriverStudioPanel
                 grid.Rows(number).Cells(0).ReadOnly =
                     Not DriverStudioInstaller.IsAllowed(d)
                 Dim cell = grid.Rows(number).Cells(4)
+                cell.ToolTipText = If(Not verified AndAlso d.Status = "Review",
+                    "Review SOURCE INF (no WIM comparison). " & d.Detail,
+                    If(Not verified AndAlso d.Status = "Not checked",
+                       "WIM inventory NOT checked. " & d.Detail,
+                       d.Detail))
                 If d.Status = "Same version" OrElse d.Status = "Duplicate source" Then
                     cell.Style.ForeColor = ModernTheme.Muted
                 ElseIf d.Status = "New" OrElse d.Status = "Newer" Then
@@ -632,7 +653,10 @@ Public NotInheritable Class DriverStudioPanel
            grid.SelectedRows(0).Index >= decisions.Count Then Return
         Dim d = decisions(grid.SelectedRows(0).Index)
         Dim src = d.Candidate
-        detailBox.Text = d.Status & " — " & d.Detail & Environment.NewLine &
+        detailBox.Text = "WIM inventory: " &
+            If(comparisonVerified, "verified", "NOT verified (source INF scan only)") &
+            Environment.NewLine &
+            d.Status & " — " & d.Detail & Environment.NewLine &
             "INF: " & src.FilePath & Environment.NewLine &
             "Provider: " & src.Provider & "   Class: " & src.ClassName &
             "   Version: " & src.Version & "   Date: " & src.DriverDate & Environment.NewLine &
