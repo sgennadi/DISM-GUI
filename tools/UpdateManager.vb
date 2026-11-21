@@ -344,7 +344,7 @@ Public NotInheritable Class UpdateManager
             Try
                 Directory.Delete(stageDir, True)
             Catch cleanupError As Exception
-                RuntimeDiagnostics.Record("Updater staging cleanup failed: " & cleanupError.GetType().Name)
+                RuntimeDiagnostics.RecordException("Updater staging cleanup", cleanupError)
             End Try
             Throw
         End Try
