@@ -24,7 +24,7 @@ Public NotInheritable Class OperationCenterForm
     Private ReadOnly status As Label
     Private ReadOnly runButton As Button
     Private ReadOnly preflightButton As Button
-    Private ReadOnly cancelButton As Button
+    Private ReadOnly cancelOperationButton As Button
     Private ReadOnly addStepButton As Button
     Private ReadOnly saveButton As Button
     Private ReadOnly loadButton As Button
@@ -246,9 +246,9 @@ Public NotInheritable Class OperationCenterForm
                                     "browse", AddressOf PreflightClicked)
         runButton = AddButton(actions, "btnOperationRun", "Run queue", 3,
                               "primary", AddressOf RunClicked)
-        cancelButton = AddButton(actions, "btnOperationCancel", "Stop after step", 4,
+        cancelOperationButton = AddButton(actions, "btnOperationCancel", "Stop after step", 4,
                                  "neutral", AddressOf CancelClicked)
-        cancelButton.Enabled = False
+        cancelOperationButton.Enabled = False
 
         Dim historyLayout As New TableLayoutPanel With {
             .Dock = DockStyle.Fill, .ColumnCount = 1, .RowCount = 3,
@@ -365,7 +365,7 @@ Public NotInheritable Class OperationCenterForm
         saveButton.Enabled = Not value
         loadButton.Enabled = Not value
         addStepButton.Enabled = Not value
-        cancelButton.Enabled = value
+        cancelOperationButton.Enabled = value
     End Sub
 
     Private Sub AddClicked(sender As Object, e As EventArgs)
