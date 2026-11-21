@@ -63,7 +63,7 @@ Public NotInheritable Class UpdateManager
            (directory.Attributes And FileAttributes.ReparsePoint) <> 0 Then
             Throw New System.Security.SecurityException("Update directory missing or redirected")
         End If
-        Dim acl = directory.GetAccessControl(AccessControlSections.Owner Or AccessControlSections.Access)
+        Dim acl = FileSystemAclExtensions.GetAccessControl(directory, AccessControlSections.Owner Or AccessControlSections.Access)
         Dim admin = New SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, Nothing)
         Dim system = New SecurityIdentifier(WellKnownSidType.LocalSystemSid, Nothing)
         If Not acl.AreAccessRulesProtected OrElse
