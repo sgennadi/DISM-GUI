@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '11.0.x'
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
@@ -38,6 +38,9 @@ jobs:
       - name: Test DISM image command quoting
         if: matrix.rid == 'win-x64'
         run: python -m unittest discover -s tests -p test_dism_image_commands.py
+      - name: Validate updater security and release policy
+        if: matrix.rid == 'win-x64'
+        run: python -m unittest discover -s tests -p test_updater_security_policy.py
       - name: Prepare modernized DISM GUI source
         run: python tools/prepare_source.py
       - name: Check patch
@@ -126,7 +129,9 @@ jobs:
   stable-release:
     name: Publish verified stable release
     needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Stable releases require a dedicated, reviewed release workflow and signing.
+    # Never publish automatically on a normal main push.
+    if: false # disabled until publisher signing, license clearance and WIM acceptance
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -194,7 +199,8 @@ jobs:
   rc-release:
     name: Publish DISM GUI 4.3.10 RC1
     needs: build
-    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.number == 10 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'fix/gui-readability-4.3.9-rc1' }}
+    # Historical RC publishing is disabled; no release from a pull request.
+    if: false
     runs-on: ubuntu-latest
     permissions:
       contents: write
