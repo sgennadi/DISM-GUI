@@ -126,7 +126,9 @@ jobs:
   stable-release:
     name: Publish verified stable release
     needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Stable releases require a dedicated, reviewed release workflow and signing.
+    # Never publish automatically on a normal main push.
+    if: false # disabled until publisher signing, license clearance and WIM acceptance
     runs-on: ubuntu-latest
     permissions:
       contents: write
