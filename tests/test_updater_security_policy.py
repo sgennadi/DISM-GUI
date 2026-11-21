@@ -39,6 +39,18 @@ class UpdaterSecurityPolicyTests(unittest.TestCase):
         self.assertIn("if: false", stable_section)
         self.assertNotIn("if: github.event_name == 'push'", stable_section)
 
+    def test_legacy_rc_publication_is_disabled(self):
+        self.assertRegex(self.workflow, r"(?m)^  rc-release:\\s*\\n")
+        rc_section = self.workflow.split("  rc-release:", 1)[1]
+        self.assertIn("if: false", rc_section)
+        self.assertNotIn("github.event.pull_request.number == 10", rc_section)
+
+    def test_updater_security_check_runs_once(self):
+        self.assertEqual(
+            self.workflow.count("python -m unittest discover -s tests -p test_updater_security_policy.py"),
+            1,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
