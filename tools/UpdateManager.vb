@@ -86,11 +86,11 @@ Public NotInheritable Class UpdateManager
             End If
         End Using
         Dim root As New DirectoryInfo(UpdatesRoot)
-        If Not root.Exists Then FileSystemAclExtensions.CreateDirectory(UpdatesRoot, AdminOnlyDirectorySecurity())
+        If Not root.Exists Then FileSystemAclExtensions.CreateDirectory(AdminOnlyDirectorySecurity(), UpdatesRoot)
         AssertProtectedDirectory(UpdatesRoot)
         Dim stage = Path.Combine(UpdatesRoot, Guid.NewGuid().ToString("N"))
         Dim directory As New DirectoryInfo(stage)
-        FileSystemAclExtensions.CreateDirectory(stage, AdminOnlyDirectorySecurity())
+        FileSystemAclExtensions.CreateDirectory(AdminOnlyDirectorySecurity(), stage)
         AssertProtectedDirectory(stage)
         Return stage
     End Function
@@ -225,7 +225,7 @@ Public NotInheritable Class UpdateManager
                 End If
                 Dim backupDir = Path.Combine(UpdatesRoot, "Backups")
                 Dim backupInfo As New DirectoryInfo(backupDir)
-                If Not backupInfo.Exists Then FileSystemAclExtensions.CreateDirectory(backupDir, AdminOnlyDirectorySecurity())
+                If Not backupInfo.Exists Then FileSystemAclExtensions.CreateDirectory(AdminOnlyDirectorySecurity(), backupDir)
                 AssertProtectedDirectory(backupDir)
                 Dim backup = Path.Combine(backupDir, "DISM GUI-before-update.exe")
                 File.Copy(destination, backup, True)
