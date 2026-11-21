@@ -10,21 +10,90 @@ Imports System.Reflection
 Imports System.Runtime.InteropServices
 Imports System.Text.RegularExpressions
 Imports System.Security.Cryptography
+Imports System.Security.AccessControl
+Imports System.Security.Principal
 Imports System.Text.Json
 Imports System.Threading.Tasks
 Imports System.Windows.Forms
 
 ' Self-contained updater: no PowerShell, cmd.exe, external installer or scheduled task.
-' Only official GitHub Releases with SHA-256 asset digests can be installed automatically.
+' SHA-256 confirms integrity, not publisher authenticity. Installation is fail-closed
+' until a separately trusted release-signing key and signatures are provisioned.
 Public NotInheritable Class UpdateManager
     Private Sub New()
     End Sub
 
     Private Const ProjectUrl As String = "https://github.com/sgennadi/DISM-GUI"
     Private Const ReleaseApi As String = "https://api.github.com/repos/sgennadi/DISM-GUI/releases/latest"
+    ' This is deliberately disabled: hashes returned alongside the ZIP are not signatures.
+    ' A future version must validate a detached signature against an embedded publisher key
+    ' before this may be enabled. Do not switch to True without that implementation/tests.
+    Private Const SignedUpdateVerificationReady As Boolean = False
     Private Shared ReadOnly UpdatesRoot As String =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                     "DISMGUI", "Updates")
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                     "DISMGUI-SecureUpdater")
+
+    Private Shared Sub RequireSignedUpdate()
+        If Not SignedUpdateVerificationReady Then
+            Throw New System.Security.SecurityException(
+                "Automatic installation is disabled: releases are not publisher-signed. " &
+                "Use View releases to download manually after verifying the publisher.")
+        End If
+    End Sub
+
+    Private Shared Function AdminOnlyDirectorySecurity() As DirectorySecurity
+        Dim admin = New SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, Nothing)
+        Dim system = New SecurityIdentifier(WellKnownSidType.LocalSystemSid, Nothing)
+        Dim result As New DirectorySecurity()
+        result.SetAccessRuleProtection(True, False)
+        result.SetOwner(admin)
+        Dim inherit = InheritanceFlags.ContainerInherit Or InheritanceFlags.ObjectInherit
+        result.AddAccessRule(New FileSystemAccessRule(admin, FileSystemRights.FullControl,
+                                                     inherit, PropagationFlags.None,
+                                                     AccessControlType.Allow))
+        result.AddAccessRule(New FileSystemAccessRule(system, FileSystemRights.FullControl,
+                                                     inherit, PropagationFlags.None,
+                                                     AccessControlType.Allow))
+        Return result
+    End Function
+
+    Private Shared Sub AssertProtectedDirectory(path As String)
+        Dim directory As New DirectoryInfo(path)
+        If Not directory.Exists OrElse
+           (directory.Attributes And FileAttributes.ReparsePoint) <> 0 Then
+            Throw New System.Security.SecurityException("Update directory missing or redirected")
+        End If
+        Dim acl = directory.GetAccessControl(AccessControlSections.Owner Or AccessControlSections.Access)
+        Dim admin = New SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, Nothing)
+        Dim system = New SecurityIdentifier(WellKnownSidType.LocalSystemSid, Nothing)
+        If Not acl.AreAccessRulesProtected OrElse
+           Not admin.Equals(acl.GetOwner(GetType(SecurityIdentifier))) Then
+            Throw New System.Security.SecurityException("Untrusted update directory owner or ACL")
+        End If
+        For Each rule As FileSystemAccessRule In acl.GetAccessRules(True, True, GetType(SecurityIdentifier))
+            If rule.AccessControlType = AccessControlType.Allow AndAlso
+               Not admin.Equals(rule.IdentityReference) AndAlso
+               Not system.Equals(rule.IdentityReference) Then
+                Throw New System.Security.SecurityException("Update directory grants access to non-admin users")
+            End If
+        Next
+    End Sub
+
+    Private Shared Function CreateProtectedStage() As String
+        Using identity = WindowsIdentity.GetCurrent()
+            If Not New WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator) Then
+                Throw New UnauthorizedAccessException("Administrator elevation is required for updates")
+            End If
+        End Using
+        Dim root As New DirectoryInfo(UpdatesRoot)
+        If Not root.Exists Then root.Create(AdminOnlyDirectorySecurity())
+        AssertProtectedDirectory(UpdatesRoot)
+        Dim stage = Path.Combine(UpdatesRoot, Guid.NewGuid().ToString("N"))
+        Dim directory As New DirectoryInfo(stage)
+        directory.Create(AdminOnlyDirectorySecurity())
+        AssertProtectedDirectory(stage)
+        Return stage
+    End Function
     Private Shared ReadOnly Web As New HttpClient()
 
     Shared Sub New()
@@ -104,6 +173,8 @@ Public NotInheritable Class UpdateManager
             Return False
         End If
         Try
+            RequireSignedUpdate()
+            AssertProtectedDirectory(UpdatesRoot)
             If args.Length <> 5 Then Throw New InvalidOperationException("Invalid update request")
             Dim destination = Path.GetFullPath(args(2))
             Dim parentPid As Integer
@@ -122,12 +193,14 @@ Public NotInheritable Class UpdateManager
                                  StringComparison.OrdinalIgnoreCase) Then
                 Throw New InvalidOperationException("Unexpected update destination")
             End If
+            AssertProtectedDirectory(stagedDirectory)
             Dim authorization = Path.Combine(stagedDirectory, "update-request.txt")
             Dim lines = File.ReadAllLines(authorization)
-            If lines.Length <> 3 OrElse
+            If lines.Length <> 4 OrElse
                Not String.Equals(lines(0), destination, StringComparison.OrdinalIgnoreCase) OrElse
                lines(1) <> parentPid.ToString() OrElse
-               Not String.Equals(lines(2), token, StringComparison.Ordinal) Then
+               Not String.Equals(lines(2), token, StringComparison.Ordinal) OrElse
+               Not Regex.IsMatch(lines(3), "^[A-F0-9]{64}$", RegexOptions.IgnoreCase) Then
                 Throw New InvalidOperationException("Update authorization failed")
             End If
             If Not File.Exists(destination) Then Throw New FileNotFoundException("Installed DISM GUI was not found")
@@ -143,16 +216,26 @@ Public NotInheritable Class UpdateManager
                 ' Already exited.
             End Try
 
-            Dim backupDir = Path.Combine(UpdatesRoot, "Backups")
-            Directory.CreateDirectory(backupDir)
-            Dim backup = Path.Combine(backupDir, "DISM GUI-before-update.exe")
-            File.Copy(destination, backup, True)
-            Try
-                File.Copy(stagedExe, destination, True)
-            Catch
-                If File.Exists(backup) Then File.Copy(backup, destination, True)
-                Throw
-            End Try
+            ' Hold the staged EXE open for read-only access through the final copy.
+            ' FileShare.Read denies concurrent writer and delete opens.
+            Using trustedExe As New FileStream(stagedExe, FileMode.Open, FileAccess.Read, FileShare.Read)
+                Dim finalHash = Convert.ToHexString(SHA256.HashData(trustedExe))
+                If Not String.Equals(finalHash, lines(3), StringComparison.OrdinalIgnoreCase) Then
+                    Throw New InvalidDataException("Staged EXE changed after verification")
+                End If
+                Dim backupDir = Path.Combine(UpdatesRoot, "Backups")
+                Dim backupInfo As New DirectoryInfo(backupDir)
+                If Not backupInfo.Exists Then backupInfo.Create(AdminOnlyDirectorySecurity())
+                AssertProtectedDirectory(backupDir)
+                Dim backup = Path.Combine(backupDir, "DISM GUI-before-update.exe")
+                File.Copy(destination, backup, True)
+                Try
+                    File.Copy(stagedExe, destination, True)
+                Catch
+                    If File.Exists(backup) Then File.Copy(backup, destination, True)
+                    Throw
+                End Try
+            End Using
 
             File.Delete(authorization)
             Process.Start(New ProcessStartInfo(destination) With {.UseShellExecute = True})
@@ -169,6 +252,7 @@ Public NotInheritable Class UpdateManager
     Private Shared Async Function StageAndLaunchAsync(assetUrl As String, expectedDigest As String,
                                                       expectedSize As Long,
                                                       report As IProgress(Of Integer)) As Task
+        RequireSignedUpdate()
         If Not expectedDigest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) Then
             Throw New InvalidDataException("GitHub has not provided an SHA-256 digest for this release asset")
         End If
@@ -187,8 +271,7 @@ Public NotInheritable Class UpdateManager
             Throw New InvalidOperationException("Only installed DISM GUI.exe can be updated automatically")
         End If
 
-        Dim stageDir = Path.Combine(UpdatesRoot, Guid.NewGuid().ToString("N"))
-        Directory.CreateDirectory(stageDir)
+        Dim stageDir = CreateProtectedStage()
         Dim zipPath = Path.Combine(stageDir, "update.zip")
         Dim stagedExe = Path.Combine(stageDir, "DISM GUI.exe")
         Try
@@ -219,44 +302,49 @@ Public NotInheritable Class UpdateManager
             If New FileInfo(zipPath).Length <> expectedSize Then
                 Throw New InvalidDataException("The downloaded asset is incomplete")
             End If
-            Dim actualHash As String
-            Using f = File.OpenRead(zipPath)
-                actualHash = Convert.ToHexString(SHA256.HashData(f))
-            End Using
-            Dim expectedHash = expectedDigest.Substring(7).Trim()
-            If expectedHash.Length <> 64 OrElse
-               Not String.Equals(actualHash, expectedHash, StringComparison.OrdinalIgnoreCase) Then
-                Throw New InvalidDataException("SHA-256 verification failed; the update was not installed")
-            End If
-
-            Using archive = ZipFile.OpenRead(zipPath)
-                Dim exeEntry = archive.Entries.SingleOrDefault(
-                    Function(entry) String.Equals(entry.FullName, "DISM GUI.exe",
-                                                  StringComparison.OrdinalIgnoreCase))
-                If exeEntry Is Nothing Then
-                    Throw New InvalidDataException("Release ZIP does not contain DISM GUI.exe at its root")
+            ' Keep the same ZIP handle from digest verification through extraction.
+            Using zipHandle As New FileStream(zipPath, FileMode.Open, FileAccess.Read, FileShare.Read)
+                Dim actualHash = Convert.ToHexString(SHA256.HashData(zipHandle))
+                Dim expectedHash = expectedDigest.Substring(7).Trim()
+                If expectedHash.Length <> 64 OrElse
+                   Not String.Equals(actualHash, expectedHash, StringComparison.OrdinalIgnoreCase) Then
+                    Throw New InvalidDataException("SHA-256 verification failed; the update was not installed")
                 End If
-                If exeEntry.Length < 10 * 1024 OrElse exeEntry.Length > 300L * 1024L * 1024L Then
-                    Throw New InvalidDataException("Invalid EXE size inside release")
-                End If
-                exeEntry.ExtractToFile(stagedExe)
+                zipHandle.Position = 0
+                Using archive As New ZipArchive(zipHandle, ZipArchiveMode.Read, True)
+                    Dim exeEntry = archive.Entries.SingleOrDefault(
+                        Function(entry) String.Equals(entry.FullName, "DISM GUI.exe",
+                                                      StringComparison.OrdinalIgnoreCase))
+                    If exeEntry Is Nothing Then
+                        Throw New InvalidDataException("Release ZIP does not contain DISM GUI.exe at its root")
+                    End If
+                    If exeEntry.Length < 10 * 1024 OrElse exeEntry.Length > 300L * 1024L * 1024L Then
+                        Throw New InvalidDataException("Invalid EXE size inside release")
+                    End If
+                    exeEntry.ExtractToFile(stagedExe)
+                End Using
             End Using
             report.Report(100)
 
-            Dim token = Guid.NewGuid().ToString("N")
-            Dim pid = Environment.ProcessId
-            File.WriteAllLines(Path.Combine(stageDir, "update-request.txt"),
-                               {existingExe, pid.ToString(), token})
-            Dim psi As New ProcessStartInfo(stagedExe) With {.UseShellExecute = True}
-            psi.ArgumentList.Add("--finish-update")
-            psi.ArgumentList.Add(existingExe)
-            psi.ArgumentList.Add(pid.ToString())
-            psi.ArgumentList.Add(token)
-            Process.Start(psi)
+            ' Keep the verified EXE read-locked until the helper is launched.
+            Using exeHandle As New FileStream(stagedExe, FileMode.Open, FileAccess.Read, FileShare.Read)
+                Dim exeHash = Convert.ToHexString(SHA256.HashData(exeHandle))
+                Dim token = Guid.NewGuid().ToString("N")
+                Dim pid = Environment.ProcessId
+                File.WriteAllLines(Path.Combine(stageDir, "update-request.txt"),
+                                   {existingExe, pid.ToString(), token, exeHash})
+                Dim psi As New ProcessStartInfo(stagedExe) With {.UseShellExecute = True}
+                psi.ArgumentList.Add("--finish-update")
+                psi.ArgumentList.Add(existingExe)
+                psi.ArgumentList.Add(pid.ToString())
+                psi.ArgumentList.Add(token)
+                Process.Start(psi)
+            End Using
         Catch
             Try
                 Directory.Delete(stageDir, True)
-            Catch
+            Catch cleanupError As Exception
+                RuntimeDiagnostics.Record("Updater staging cleanup failed: " & cleanupError.GetType().Name)
             End Try
             Throw
         End Try
@@ -371,7 +459,7 @@ Public NotInheritable Class UpdateManager
             heroText.RowStyles.Add(New RowStyle(SizeType.Percent, 40))
             header.Controls.Add(heroText, 1, 0)
             heroText.Controls.Add(MakeLabel("UPDATES", 18, True, Color.White), 0, 0)
-            heroText.Controls.Add(MakeLabel("Stable releases  ·  SHA-256 verified",
+            heroText.Controls.Add(MakeLabel("Stable releases  ·  manual installation",
                                            10, False, Color.FromArgb(231, 246, 255)), 0, 1)
 
             Dim info As New TableLayoutPanel With {
@@ -674,7 +762,12 @@ Public NotInheritable Class UpdateManager
                                           "ZIP, back up your current EXE and install " &
                                           DisplayVersion(remote) & ". DISM GUI will restart."
                         End If
-                        install.Enabled = True
+                        install.Enabled = False
+                        status.Text = "Manual update required — automated install disabled"
+                        status.ForeColor = ModernTheme.Muted
+                        detail.Text = "The ZIP hash does not authenticate its publisher. " &
+                                      "Automatic installation is blocked until signed releases are supported. " &
+                                      "Select View releases and verify the download manually."
                     End Using
                 End Using
             Catch ex As Exception
@@ -691,6 +784,11 @@ Public NotInheritable Class UpdateManager
         End Sub
 
         Private Async Sub InstallClicked(sender As Object, e As EventArgs)
+            If Not SignedUpdateVerificationReady Then
+                MessageBox.Show(Me, "Automatic installation is disabled until trusted release signing is configured.",
+                                "DISM GUI Update", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+                Return
+            End If
             If busy OrElse String.IsNullOrWhiteSpace(assetDownload) Then Return
             For Each openForm As Form In Application.OpenForms
                 Dim main = TryCast(openForm, frmMain)
