@@ -38,6 +38,9 @@ jobs:
       - name: Test DISM image command quoting
         if: matrix.rid == 'win-x64'
         run: python -m unittest discover -s tests -p test_dism_image_commands.py
+      - name: Validate updater security and release policy
+        if: matrix.rid == 'win-x64'
+        run: python -m unittest discover -s tests -p test_updater_security_policy.py
       - name: Prepare modernized DISM GUI source
         run: python tools/prepare_source.py
       - name: Check patch
