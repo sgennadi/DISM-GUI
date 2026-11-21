@@ -4091,7 +4091,7 @@ internal static class LayoutSmoke
                 }
                 var updatesTitle = FindLabel(updateForm, "UPDATES");
                 var updatesSub = FindLabel(updateForm,
-                    "Stable releases  ·  SHA-256 verified");
+                    "Stable releases  ·  manual installation");
                 Require(updatesTitle is not null && updatesSub is not null,
                         "Update Center heading labels missing");
                 NoOverlap(updatesTitle!, updatesSub!, "Update Center title and subtitle");
