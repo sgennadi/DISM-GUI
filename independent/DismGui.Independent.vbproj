@@ -5,7 +5,6 @@
     <UseWindowsForms>true</UseWindowsForms>
     <MyType>Empty</MyType>
     <StartupObject>IndependentDismGui.Program</StartupObject>
-    <RootNamespace>IndependentDismGui</RootNamespace>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>DISM GUI Independent</AssemblyName>
