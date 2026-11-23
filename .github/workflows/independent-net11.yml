@@ -1,0 +1,27 @@
+name: Independent DISM GUI .NET 11 (non-release)
+on:
+  push:
+    branches: [feature/independent-net11-reimplementation]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  independent:
+    runs-on: windows-2025
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [win-x86, win-x64, win-arm64]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '11.0.x'
+      - name: Build independent code only
+        shell: pwsh
+        run: dotnet publish independent/DismGui.Independent.vbproj -c Release -r ${{ matrix.rid }} --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=false -o "independent-out/${{ matrix.rid }}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: independent-net11-${{ matrix.rid }}
+          path: independent-out/${{ matrix.rid }}
+          if-no-files-found: error
